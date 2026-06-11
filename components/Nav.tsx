@@ -5,6 +5,7 @@ const ITEMS = [
   { href: "/inbox", label: "Inbox" },
   { href: "/meetings", label: "Meetings" },
   { href: "/quote", label: "Quote" },
+  { href: "/notifications", label: "Activity" },
 ];
 
 export default function Nav() {

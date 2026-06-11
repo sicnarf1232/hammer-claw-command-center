@@ -108,6 +108,15 @@ can read the vault.
 - [ ] Granola pull (Phase 4): the Granola API token/endpoint you want the cron to
       pull from. DECISION NEEDED. Stubbed behind `GRANOLA_API_KEY`; without it the
       pull cron is a no-op that logs "not configured".
+- [ ] VERCEL PLAN FOR CRON: the cron schedules in `vercel.json` run sub-daily
+      (sync every 10 min, briefs at fixed times, Granola every 4 hours). Vercel
+      Hobby only allows once-per-day cron; sub-daily needs Pro. Either upgrade to
+      Pro, or tell me and I will reduce the schedules to daily.
+- [ ] DAYLIGHT SAVING: Vercel Cron fires in UTC. The schedules are set for
+      Mountain Daylight Time (UTC-6, current). When MT switches to Standard Time
+      (UTC-7) in November, brief times shift an hour. The brief content is always
+      correct (dates computed in `America/Denver`); only the trigger clock drifts.
+      Tell me if you want me to add a DST-aware guard.
 
 ---
 

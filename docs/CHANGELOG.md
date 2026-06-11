@@ -36,3 +36,11 @@ One line per phase boundary: what shipped and any decisions made.
 - 24 parser tests pass (added price-list parser tests).
 - Decision: the price-list schema is not pinned in docs/02. The parser reads any markdown table and maps Part/Description/Cost columns by header name; if the real format differs, it is the one place to tighten. Flagged in PUNCHLIST.
 - Open question for Jordan: confirm the price-list file format and whether a Merit logo asset should be embedded in the PDF (PUNCHLIST).
+
+## Phase 4 — Cron + notifications
+
+- Vercel Cron (`vercel.json`): morning brief (12:30 UTC), notify (13:00 UTC), EOD recap (23:30 UTC), weekly review (Fri 22:00 UTC), Granola pull (every 4h), vault sync (every 10 min). Times target Mountain Daylight Time; brief content always uses `America/Denver` dates.
+- `lib/briefs.ts`: assembles a context blob from the live vault (due/overdue tasks, top open tasks, today's meetings), generates the brief via AI when `ANTHROPIC_API_KEY` is set, otherwise writes a deterministic vault-snapshot fallback so briefs still run. Writes to `100 Periodics/Daily|Weekly/` as a git commit and logs a notification. All cron routes are `CRON_SECRET`-gated.
+- `lib/notify.ts` + `/notifications` (Activity): every notification is logged to Postgres; the notify cron creates an idempotent daily "N tasks due today" and delivers unsent notifications (including the new-flagged-email ones logged on webhook) to `NOTIFY_WEBHOOK_URL` if set, else in-app only.
+- Granola pull is stubbed behind `GRANOLA_API_KEY` pending the endpoint contract: no-op when unset, logs a clear "not implemented" notice when set.
+- Stub/needs-Jordan: `NOTIFY_WEBHOOK_URL` (external push channel), `GRANOLA_API_KEY` + endpoint contract, Vercel plan for sub-daily cron, DST handling (PUNCHLIST 7).
