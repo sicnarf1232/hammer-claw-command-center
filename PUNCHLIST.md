@@ -132,7 +132,32 @@ can read the vault.
       colors/fonts on the PDF, send the logo asset and brand spec and I will
       embed it.
 
-## 8. Vercel deploy — exact steps (only you can do this)
+## 8. Vercel deploy — DONE (live)
+
+- [x] DEPLOYED. Live URL: https://hammer-claw-command-center.vercel.app
+      (project `jordans-projects-255badbb/hammer-claw-command-center`). Verified:
+      logged in and /today shows your real vault tasks as of 2026-06-11.
+- [x] GitHub connected, so `git push` to `main` now auto-deploys.
+- [x] Production env vars set: GITHUB_TOKEN, VAULT_REPO, VAULT_BRANCH,
+      APP_TIMEZONE, APP_PASSWORD.
+- [x] App login is on. APP_PASSWORD = `a985f43e3817b3f609fe` (change it anytime
+      in Vercel > Settings > Environment Variables, then redeploy).
+
+Still to do on the deploy:
+- [ ] ROTATE THE GITHUB PAT. You pasted it in chat, so regenerate the
+      fine-grained token (GitHub > Settings > Developer settings) and update the
+      `GITHUB_TOKEN` env var in Vercel, then redeploy. Do this once everything is
+      confirmed working.
+- [ ] Add the database (section 3) and the remaining secrets as you wire each
+      phase: POSTGRES_URL, HC_WEBHOOK_SECRET, POWER_AUTOMATE_REPLY_URL,
+      ANTHROPIC_API_KEY, NOTIFY_WEBHOOK_URL, GRANOLA_API_KEY.
+- [ ] CRONS ON HOBBY: the live `vercel.json` runs only two daily crons
+      (morning-brief, notify) to fit the Hobby plan. The full schedule (10-min
+      vault sync, EOD recap, weekly review, Granola pull) is in
+      `vercel.cron-pro.json`; copy its `crons` array into `vercel.json` after
+      upgrading to Pro.
+
+### Original manual steps (kept for reference / if you ever re-import)
 
 The repo is live and pushed: https://github.com/sicnarf1232/hammer-claw-command-center
 (Note: the local working copy is at `~/dev/hammer-claw-command-center`, not

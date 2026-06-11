@@ -51,3 +51,11 @@ One line per phase boundary: what shipped and any decisions made.
 - Verified the spine against the live vault (using a temporary read token): `/today` rendered Jordan's real open tasks from `100 Periodics/Daily/TASKS.md` dated 2026-06-11; `/meetings` parsed 30 meetings from `Meetings-Index.md`; `/quote` loaded 1144 parts from the price list; `POST /api/quote/pdf` returned a valid Merit OEM PDF.
 - Confirmed `VAULT_ROOT` is blank (vault markdown is at the repo root).
 - Fix: price-list header matching is now keyword-based so real headers (`Part#`, `High Price`) map correctly (was returning an empty catalog). 25 parser tests pass.
+
+## Deployed to production
+
+- Live at https://hammer-claw-command-center.vercel.app (Vercel project under "jordan's projects"), GitHub-connected so `git push` to main auto-deploys.
+- Verified live: logged in through the app password gate and `/today` rendered the real vault tasks as of 2026-06-11 (Phase 0 DoD met on the live URL).
+- Production env set: GITHUB_TOKEN, VAULT_REPO, VAULT_BRANCH, APP_TIMEZONE, APP_PASSWORD.
+- Two deploy-time fixes: upgraded Next.js to 15.5.19 (Vercel blocks the older version's security advisory; relevant to the auth middleware), and reduced `vercel.json` to two daily crons for the Hobby plan (full schedule preserved in `vercel.cron-pro.json`).
+- Follow-ups (PUNCHLIST 8): rotate the GitHub PAT (it was shared in chat), add the database + remaining secrets, restore full crons after a Pro upgrade.
