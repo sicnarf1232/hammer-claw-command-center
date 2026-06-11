@@ -17,9 +17,11 @@ export interface CatalogItem {
 
 const PRICE_LIST_PREFIX = "300 Merit/Price List/";
 
-const PART_HEADERS = ["part", "part #", "part number", "part no", "sku", "item", "item #"];
-const DESC_HEADERS = ["description", "desc", "name", "product"];
-const COST_HEADERS = ["cost", "price", "unit cost", "unit price", "list", "list price", "unit"];
+// Keyword matching (substring on a normalized header) so real-world headers
+// like "Part#", "High Price", "Unit Cost", "List Price" all map correctly.
+const PART_KEYWORDS = ["part", "sku", "item", "catalog", "model"];
+const DESC_KEYWORDS = ["desc", "name", "product"];
+const COST_KEYWORDS = ["price", "cost"];
 
 export async function getCatalog(): Promise<CatalogItem[]> {
   if (!isVaultConfigured()) return [];
@@ -87,13 +89,14 @@ function mapColumns(header: string[]): {
   desc: number;
   cost: number;
 } {
-  const norm = header.map((h) => h.trim().toLowerCase());
-  const find = (cands: string[]) =>
-    norm.findIndex((h) => cands.includes(h));
+  // Normalize: lowercase and strip non-alphanumerics so "Part#" -> "part".
+  const norm = header.map((h) => h.trim().toLowerCase().replace(/[^a-z0-9 ]/g, ""));
+  const find = (keywords: string[]) =>
+    norm.findIndex((h) => keywords.some((k) => h.includes(k)));
   return {
-    part: find(PART_HEADERS),
-    desc: find(DESC_HEADERS),
-    cost: find(COST_HEADERS),
+    part: find(PART_KEYWORDS),
+    desc: find(DESC_KEYWORDS),
+    cost: find(COST_KEYWORDS),
   };
 }
 

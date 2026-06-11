@@ -35,3 +35,21 @@ describe("price list parser", () => {
     expect(items[2].unitCost).toBeNull();
   });
 });
+
+// The real vault uses headers like "Part#" (no space) and "High Price".
+const REAL = `## MEDALLION SYRINGES
+
+| Part# | Description | High Price |
+|-------|-------------|------------|
+| K01-00786P | 10ml Dark Green Plunger Medication Printed | $3.93 |
+| K01-05717 | 30ml Light Green Syringe without Merit Logo | $3.93 |
+`;
+
+describe("price list parser, real-vault header shapes", () => {
+  it('maps "Part#" and "High Price" via keyword matching', () => {
+    const items = parsePriceTables(REAL, "300 Merit/Price List/chunk.md");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ partNumber: "K01-00786P", unitCost: 3.93 });
+    expect(items[1].description).toContain("30ml Light Green");
+  });
+});
