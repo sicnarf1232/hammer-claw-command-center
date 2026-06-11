@@ -76,3 +76,12 @@ export function classifyName(
 ): RosterEntry | undefined {
   return roster.get(name.trim()) ?? roster.get(basenameOf(name.trim()));
 }
+
+// Distinct customer account names known to the roster (for subject matching).
+export function rosterAccounts(roster: Roster): string[] {
+  const set = new Set<string>();
+  for (const entry of roster.values()) {
+    if (entry.account) set.add(entry.account);
+  }
+  return [...set];
+}

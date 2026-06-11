@@ -1,4 +1,5 @@
-import { getOpenDueTasks, vaultConfigured } from "@/lib/vault";
+import { vaultConfigured } from "@/lib/vault";
+import { getTodayTasks } from "@/lib/today";
 import type { Task } from "@/lib/vault/types";
 import TaskCard from "@/components/TaskCard";
 import SetupNotice from "@/components/SetupNotice";
@@ -20,7 +21,7 @@ export default async function TodayPage() {
   let tasks: Task[] = [];
   let error: string | null = null;
   try {
-    const res = await getOpenDueTasks();
+    const res = await getTodayTasks();
     today = res.today;
     tasks = res.tasks;
   } catch (e) {
