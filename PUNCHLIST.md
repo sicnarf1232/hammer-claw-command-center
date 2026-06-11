@@ -111,6 +111,19 @@ can read the vault.
 
 ---
 
+## 7b. Meetings + quotes (Phase 3) — two questions
+
+- [ ] PRICE LIST FORMAT: the quote builder parses any markdown table under
+      `300 Merit/Price List/` and maps columns named like Part / Description /
+      Cost. If your price list is not markdown tables (e.g. a CSV, a different
+      column layout, or one file per part), tell me the real format and I will
+      tighten `lib/priceList.ts`. Until then the catalog may be empty and you
+      build quotes with manual line items (which works fully).
+- [ ] QUOTE BRANDING: the PDF uses a clean typographic "Merit Medical OEM"
+      header, no logo image. If you want the real Merit OEM logo and exact brand
+      colors/fonts on the PDF, send the logo asset and brand spec and I will
+      embed it.
+
 ## 8. Vercel deploy (walkthrough below in the final summary)
 
 - [ ] Create the Vercel project from the `sicnarf1232/hammer-claw-command-center`

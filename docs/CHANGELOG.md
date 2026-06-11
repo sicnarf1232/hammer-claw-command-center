@@ -28,3 +28,11 @@ One line per phase boundary: what shipped and any decisions made.
 - `/inbox` Reply panel: optional AI instructions, Draft with AI, editable body, Create Outlook draft. Signature block built per workstream identity.
 - Decision: per the claude-api guidance, defaulted the model to `claude-opus-4-8` (was sonnet in the first env template).
 - Stub/needs-Jordan: `ANTHROPIC_API_KEY`, Power Automate Flow B + `POWER_AUTOMATE_REPLY_URL`, Sloan from-address (PUNCHLIST 5 and 6).
+
+## Phase 3 — Meetings + quotes
+
+- `/meetings`: reads `100 Periodics/Meetings-Index.md` (the single source of truth), resolves each `[[basename]]` to a file under the Meetings folders, and renders a meeting with attendees colored Merit vs customer from the roster, plus dual-capture action items (Jordan's items show priority/customer/due; others render as tracking only). Live from the vault, no snapshot.
+- `/quote`: parses the Merit price list (`300 Merit/Price List/`) into a catalog (tolerant markdown-table parser, unit-tested), lets Jordan assemble line items with part-number autocomplete and manual entry, and downloads a Merit OEM branded PDF rendered server-side with `pdf-lib` (`POST /api/quote/pdf`). No em dashes in the PDF text.
+- 24 parser tests pass (added price-list parser tests).
+- Decision: the price-list schema is not pinned in docs/02. The parser reads any markdown table and maps Part/Description/Cost columns by header name; if the real format differs, it is the one place to tighten. Flagged in PUNCHLIST.
+- Open question for Jordan: confirm the price-list file format and whether a Merit logo asset should be embedded in the PDF (PUNCHLIST).
