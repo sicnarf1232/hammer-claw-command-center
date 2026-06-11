@@ -1,0 +1,11 @@
+{
+  "_comment": "Full cron schedule for when the Vercel project is on the Pro plan. Hobby allows only daily cron (and a small job count), so the live vercel.json keeps just morning-brief and notify. On Pro, copy this crons array into vercel.json to restore vault sync (10 min), EOD recap, weekly review, and the Granola pull. Schedules target Mountain Daylight Time (UTC-6); see PUNCHLIST for the DST note.",
+  "crons": [
+    { "path": "/api/cron/sync-vault", "schedule": "*/10 * * * *" },
+    { "path": "/api/cron/morning-brief", "schedule": "30 12 * * *" },
+    { "path": "/api/cron/notify", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/eod-recap", "schedule": "30 23 * * *" },
+    { "path": "/api/cron/weekly-review", "schedule": "0 22 * * 5" },
+    { "path": "/api/cron/granola-pull", "schedule": "0 */4 * * *" }
+  ]
+}
