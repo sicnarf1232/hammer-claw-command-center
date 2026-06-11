@@ -20,3 +20,11 @@ One line per phase boundary: what shipped and any decisions made.
 - Vault index sync: `GET /api/cron/sync-vault` (CRON_SECRET-gated) rebuilds the `vault_tasks` snapshot from the live vault; `/today` reads the snapshot when present, else live GitHub. `vercel.json` schedules it every 10 minutes.
 - The app degrades gracefully without `POSTGRES_URL`: pages show a setup notice instead of crashing.
 - Stub/needs-Jordan: `POSTGRES_URL`, `HC_WEBHOOK_SECRET`, Power Automate Flow A, M365 HTTP-action license check, `ToHC` folder confirm (PUNCHLIST 3 and 4). Every-10-min cron needs a Vercel plan that allows sub-daily cron.
+
+## Phase 2 — Reply + draft
+
+- `lib/ai.ts`: Anthropic SDK (`@anthropic-ai/sdk`), default model `claude-opus-4-8` (override via `ANTHROPIC_MODEL`). Drafts reply bodies and (Phase 4) briefs. House-style guarded: prompt forbids em dashes and inventing facts, plus a post-process that strips any em dash. Optional: without `ANTHROPIC_API_KEY` the app skips AI and Jordan writes the body.
+- `lib/powerAutomate.ts` + `POST /api/reply`: two modes. `generate` returns an AI draft for Jordan to edit; `draft` posts a `create_draft` intent to Flow B (`POWER_AUTOMATE_REPLY_URL`) to create an Outlook draft as Jordan. Auto-send is not exposed: the app only ever creates drafts. From-identity comes from the chosen workstream; sloan/personal/shared have no sending address so drafting refuses and asks (rule 5).
+- `/inbox` Reply panel: optional AI instructions, Draft with AI, editable body, Create Outlook draft. Signature block built per workstream identity.
+- Decision: per the claude-api guidance, defaulted the model to `claude-opus-4-8` (was sonnet in the first env template).
+- Stub/needs-Jordan: `ANTHROPIC_API_KEY`, Power Automate Flow B + `POWER_AUTOMATE_REPLY_URL`, Sloan from-address (PUNCHLIST 5 and 6).
