@@ -28,11 +28,11 @@ can read the vault.
       `hammer-claw-vault`, Permissions: Contents = Read and write, Metadata =
       Read. (docs/05 section 4.)
 - [ ] Confirm `VAULT_REPO=sicnarf1232/hammer-claw-vault` and `VAULT_BRANCH=main`.
-- [ ] If your markdown lives under a subfolder inside the repo (e.g. the repo
-      root contains a `The Hammer Claw/` folder), set `VAULT_ROOT` to that folder
-      name. If markdown is at the repo root, leave `VAULT_ROOT` blank.
-      ACTION: tell me whether the vault repo has the notes at its root or nested
-      under a folder, so /today reads the right path.
+- [x] VAULT_ROOT: confirmed. The vault markdown lives at the repo root (folders
+      `100 Periodics`, `300 Merit`, `memory/`, etc. are directly at the root), so
+      leave `VAULT_ROOT` blank. Verified live: /today rendered your real tasks
+      from `100 Periodics/Daily/TASKS.md`, /meetings parsed 30 meetings from the
+      index, /quote loaded 1144 parts from the price list.
 
 ---
 
@@ -122,12 +122,11 @@ can read the vault.
 
 ## 7b. Meetings + quotes (Phase 3) — two questions
 
-- [ ] PRICE LIST FORMAT: the quote builder parses any markdown table under
-      `300 Merit/Price List/` and maps columns named like Part / Description /
-      Cost. If your price list is not markdown tables (e.g. a CSV, a different
-      column layout, or one file per part), tell me the real format and I will
-      tighten `lib/priceList.ts`. Until then the catalog may be empty and you
-      build quotes with manual line items (which works fully).
+- [x] PRICE LIST FORMAT: confirmed and working. Your price list is markdown
+      tables (`| Part# | Description | High Price |`) across the chunk files. The
+      parser now keyword-matches those headers and loads 1144 parts live. No
+      action needed unless you change the format. Note: it reads the "High Price"
+      column as unit cost; if you want a different price column, tell me.
 - [ ] QUOTE BRANDING: the PDF uses a clean typographic "Merit Medical OEM"
       header, no logo image. If you want the real Merit OEM logo and exact brand
       colors/fonts on the PDF, send the logo asset and brand spec and I will

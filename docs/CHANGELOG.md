@@ -44,3 +44,10 @@ One line per phase boundary: what shipped and any decisions made.
 - `lib/notify.ts` + `/notifications` (Activity): every notification is logged to Postgres; the notify cron creates an idempotent daily "N tasks due today" and delivers unsent notifications (including the new-flagged-email ones logged on webhook) to `NOTIFY_WEBHOOK_URL` if set, else in-app only.
 - Granola pull is stubbed behind `GRANOLA_API_KEY` pending the endpoint contract: no-op when unset, logs a clear "not implemented" notice when set.
 - Stub/needs-Jordan: `NOTIFY_WEBHOOK_URL` (external push channel), `GRANOLA_API_KEY` + endpoint contract, Vercel plan for sub-daily cron, DST handling (PUNCHLIST 7).
+
+## Live verification + repo
+
+- Created and pushed `sicnarf1232/hammer-claw-command-center` (private).
+- Verified the spine against the live vault (using a temporary read token): `/today` rendered Jordan's real open tasks from `100 Periodics/Daily/TASKS.md` dated 2026-06-11; `/meetings` parsed 30 meetings from `Meetings-Index.md`; `/quote` loaded 1144 parts from the price list; `POST /api/quote/pdf` returned a valid Merit OEM PDF.
+- Confirmed `VAULT_ROOT` is blank (vault markdown is at the repo root).
+- Fix: price-list header matching is now keyword-based so real headers (`Part#`, `High Price`) map correctly (was returning an empty catalog). 25 parser tests pass.
