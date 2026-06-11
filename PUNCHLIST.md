@@ -133,7 +133,46 @@ can read the vault.
       colors/fonts on the PDF, send the logo asset and brand spec and I will
       embed it.
 
-## 8. Vercel deploy (walkthrough below in the final summary)
+## 8. Vercel deploy — exact steps (only you can do this)
 
-- [ ] Create the Vercel project from the `sicnarf1232/hammer-claw-command-center`
-      repo, set the env vars above, deploy. Exact steps in the final summary.
+The repo is live and pushed: https://github.com/sicnarf1232/hammer-claw-command-center
+(Note: the local working copy is at `~/dev/hammer-claw-command-center`, not
+`~/Documents`, see section 0.)
+
+1. Go to https://vercel.com/new, log in (use the GitHub login as sicnarf1232 if
+   prompted), and "Import" the `hammer-claw-command-center` repo. Framework
+   preset auto-detects Next.js. Do not change build settings.
+
+2. Before the first deploy, add Environment Variables (Settings > Environment
+   Variables). Minimum to light up `/today`:
+   - `GITHUB_TOKEN`   = your fine-grained PAT (Contents read+write on the vault)
+   - `VAULT_REPO`     = sicnarf1232/hammer-claw-vault
+   - `VAULT_BRANCH`   = main
+   - `VAULT_ROOT`     = (blank if markdown is at the repo root; otherwise the
+     folder name, e.g. `The Hammer Claw`) <-- tell me which; see section 1.
+   - `APP_PASSWORD`   = a password you choose (or skip and use Vercel password
+     protection instead)
+   Add the rest as you wire each phase: `POSTGRES_URL`, `HC_WEBHOOK_SECRET`,
+   `POWER_AUTOMATE_REPLY_URL`, `ANTHROPIC_API_KEY`, `NOTIFY_WEBHOOK_URL`,
+   `GRANOLA_API_KEY`. `CRON_SECRET` is set automatically by Vercel when crons run.
+
+3. Add the database: Vercel dashboard > Storage > Create Database > Postgres
+   (Neon). It auto-injects `POSTGRES_URL`. Then, locally:
+   ```
+   cd ~/dev/hammer-claw-command-center
+   echo 'POSTGRES_URL=<paste the pooled URL from Vercel>' >> .env.local
+   npm run db:push      # creates the tables from drizzle/0000_*.sql
+   ```
+
+4. Deploy: click Deploy (or `git push` triggers it). You get a live URL like
+   `https://hammer-claw-command-center.vercel.app`.
+
+5. Turn on auth: either keep `APP_PASSWORD` set (app-level login is built in), or
+   Vercel > Settings > Deployment Protection > enable password protection.
+
+6. Crons: confirmed automatically from `vercel.json` on Pro. On Hobby, reduce to
+   daily or upgrade (see section 7). Test a cron now by visiting, e.g.,
+   `https://<app>.vercel.app/api/cron/sync-vault?secret=<CRON_SECRET>`.
+
+7. Wire Power Automate Flow A to `https://<app>.vercel.app/api/webhooks/email`
+   with header `X-HC-Signature: <HC_WEBHOOK_SECRET>` (sections 4 and 5).
