@@ -59,3 +59,11 @@ One line per phase boundary: what shipped and any decisions made.
 - Production env set: GITHUB_TOKEN, VAULT_REPO, VAULT_BRANCH, APP_TIMEZONE, APP_PASSWORD.
 - Two deploy-time fixes: upgraded Next.js to 15.5.19 (Vercel blocks the older version's security advisory; relevant to the auth middleware), and reduced `vercel.json` to two daily crons for the Hobby plan (full schedule preserved in `vercel.cron-pro.json`).
 - Follow-ups (PUNCHLIST 8): rotate the GitHub PAT (it was shared in chat), add the database + remaining secrets, restore full crons after a Pro upgrade.
+
+## Phase 1 wiring — webhook keystone live (2026-06-12)
+
+- Neon Postgres store confirmed attached in Vercel (all `POSTGRES_*` vars present; URLs are marked sensitive so they do not pull locally).
+- Set `HC_WEBHOOK_SECRET` in production env and redeployed so the webhook stops returning 503.
+- Verified the live `POST /api/webhooks/email` end-to-end (docs/03 test plan steps 1-2): 401 on bad signature, 400 on missing messageId, 200 `{ok:true,deduped:false}` on a full payload (the successful insert proves `email_queue` + `webhook_events` + `notifications` tables exist), 200 `{ok:true,deduped:true}` on a repeat (unique-index dedupe). One synthetic test row left in the queue for Jordan to dismiss.
+- Confirmed with Jordan: the generic HTTP action is available on his M365 plan, so Flow A uses HTTP (no relay fallback).
+- Remaining for a fully lit inbox: Jordan builds Power Automate Flow A (trigger + HTTP POST with the secret) and flags one real email to confirm it lands in `/inbox`.

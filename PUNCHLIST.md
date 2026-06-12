@@ -55,19 +55,27 @@ can read the vault.
 
 ## 4. Email inbound — Power Automate Flow A (Phase 1)
 
-- [ ] Set `HC_WEBHOOK_SECRET` to a long random string in Vercel env.
-- [ ] In Power Automate, build Flow A:
-      Trigger: "When a new email arrives in a folder" (or "When an email is
-      flagged"), scoped to the Outlook folder `ToHC`.
-      Action: HTTP POST to `https://<app>.vercel.app/api/webhooks/email` with
-      header `X-HC-Signature: <HC_WEBHOOK_SECRET>` and the JSON body mapped to
-      the contract in docs/03 (messageId, receivedAt, from, to, cc, subject,
-      bodyPreview, bodyHtml, bodyText, hasAttachments, webLink).
-- [ ] LICENSE CHECK (do before building Flow A): confirm your M365 plan exposes
-      the generic HTTP action in Power Automate. It is premium-gated on some
-      plans. If gated, use a fallback from docs/03 (Office Scripts/webhook relay,
-      or write to OneDrive and pull). Tell me which path so I can adjust.
-- [ ] DECISION: confirm the flag-trigger folder name is `ToHC` (assumed).
+- [x] Set `HC_WEBHOOK_SECRET` in Vercel production env (2026-06-12) and redeployed.
+      Verified live end-to-end against the production webhook: wrong signature
+      returns 401, valid secret with no messageId returns 400, a full payload
+      returns `{ok:true,deduped:false}` (proves the Neon tables exist and the
+      insert path works), and a repeat returns `{ok:true,deduped:true}` (unique
+      index dedupe works). One synthetic test row (`TEST-phase1-verify-001`,
+      subject `[TEST] Phase 1 webhook verification`) sits in the queue; dismiss
+      it in /inbox to clear.
+- [x] LICENSE CHECK: Jordan confirmed the generic HTTP action IS available on
+      his M365 plan (2026-06-12). No fallback needed; build Flow A with HTTP.
+- [ ] In Power Automate, build Flow A (HTTP action confirmed available):
+      Trigger: "When an email is flagged (V4)" (or "When a new email arrives in
+      a folder (V3)" scoped to the Outlook folder `ToHC`).
+      Action: HTTP POST to
+      `https://hammer-claw-command-center.vercel.app/api/webhooks/email` with
+      header `X-HC-Signature: e1745b385e1bb09ad53ac1573affd8760e814eebb05d162218b4e956b6e1db9a`
+      and the JSON body mapped to the contract in docs/03 (messageId, receivedAt,
+      from, to, cc, subject, bodyPreview, bodyHtml, bodyText, hasAttachments,
+      webLink). Field-by-field mapping is in the Phase 1 wiring notes.
+- [ ] DECISION: confirm the flag-trigger folder name is `ToHC` (assumed), or pick
+      the flagged-email trigger instead (no folder needed).
 
 ---
 
