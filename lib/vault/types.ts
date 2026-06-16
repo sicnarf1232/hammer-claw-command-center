@@ -97,6 +97,29 @@ export interface MeetingsIndexRow {
   noteBasename: string; // resolved from [[basename]]
 }
 
+// A Merit customer account, parsed from 300 Merit/Customers/<Name>.md.
+export interface AccountContact {
+  name: string;
+  detail?: string; // role / company / free text after the name
+  email?: string;
+}
+
+export interface Account {
+  slug: string; // url-safe id derived from the name
+  name: string; // display name
+  path: string; // vault-relative source path
+  workstream: string;
+  type?: string; // "OEM Account", "customer", etc. (tolerate freeform)
+  region?: string;
+  stage?: string;
+  status?: string;
+  accountNumber?: string; // NEW field, written back to frontmatter (account_number)
+  overview?: string;
+  situations: string[]; // titles/summaries under "## Active Situations"
+  contacts: AccountContact[];
+  links: string[]; // wikilink basenames under "## Links"
+}
+
 export type RosterClass = "merit" | "customer";
 
 export interface RosterEntry {

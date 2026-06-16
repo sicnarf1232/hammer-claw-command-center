@@ -81,3 +81,49 @@ export const ClockIcon = (p: IconProps) => (
     <path d="M12 7v5l3 2" />
   </Svg>
 );
+
+export const AccountsIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2" y="7" width="20" height="14" rx="2" />
+    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+  </Svg>
+);
+
+export const TasksIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m3 17 2 2 4-4M3 7l2 2 4-4" />
+    <path d="M13 6h8M13 12h8M13 18h8" />
+  </Svg>
+);
+
+export const CheckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 6 9 17l-5-5" />
+  </Svg>
+);
+
+export const CircleIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+  </Svg>
+);
+
+export const ChevronDownIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </Svg>
+);
+
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="8" />
+    <path d="m21 21-4.3-4.3" />
+  </Svg>
+);
+
+export const LinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />
+    <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
+  </Svg>
+);

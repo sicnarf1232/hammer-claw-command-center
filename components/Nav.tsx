@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
 import {
   TodayIcon,
+  TasksIcon,
   InboxIcon,
+  AccountsIcon,
   MeetingsIcon,
   QuoteIcon,
   ActivityIcon,
@@ -16,7 +18,9 @@ import ThemeToggle from "./ThemeToggle";
 const ITEMS: { href: string; label: string; Icon: ComponentType<IconProps> }[] =
   [
     { href: "/today", label: "Today", Icon: TodayIcon },
+    { href: "/tasks", label: "Tasks", Icon: TasksIcon },
     { href: "/inbox", label: "Inbox", Icon: InboxIcon },
+    { href: "/accounts", label: "Accounts", Icon: AccountsIcon },
     { href: "/meetings", label: "Meetings", Icon: MeetingsIcon },
     { href: "/quote", label: "Quote", Icon: QuoteIcon },
     { href: "/notifications", label: "Activity", Icon: ActivityIcon },

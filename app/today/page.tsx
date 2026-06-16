@@ -1,7 +1,9 @@
 import { vaultConfigured } from "@/lib/vault";
 import { getTodayTasks } from "@/lib/today";
+import { listAccounts } from "@/lib/accounts";
+import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
 import type { Task } from "@/lib/vault/types";
-import TaskCard from "@/components/TaskCard";
+import TaskList from "@/components/TaskList";
 import SetupNotice from "@/components/SetupNotice";
 
 // Always read fresh from the vault; never statically cache the task list.
@@ -28,27 +30,33 @@ export default async function TodayPage() {
     error = e instanceof Error ? e.message : "Failed to read the vault.";
   }
 
+  // Resolve accounts for task -> account links (best-effort; never block).
+  let views: TaskView[] = [];
+  if (!error) {
+    let lookup;
+    try {
+      lookup = buildAccountLookup(await listAccounts());
+    } catch {
+      lookup = undefined;
+    }
+    views = tasks.map((t) => toTaskView(t, lookup));
+  }
+
   return (
     <Page today={today}>
       {error ? (
         <div className="card max-w-2xl border-danger/30 p-5 text-sm text-danger">
           Could not read the vault: {error}
         </div>
-      ) : tasks.length === 0 ? (
+      ) : views.length === 0 ? (
         <div className="card max-w-2xl p-8 text-center">
-          <div className="text-sm font-medium text-fg">Nothing due today or overdue</div>
+          <div className="text-sm font-medium text-fg">
+            Nothing due today or overdue
+          </div>
           <p className="mt-1 text-sm text-muted">You are clear for now.</p>
         </div>
       ) : (
-        <div className="grid gap-3">
-          {tasks.map((t) => (
-            <TaskCard
-              key={`${t.sourceFile}:${t.sourceLine}`}
-              task={t}
-              today={today}
-            />
-          ))}
-        </div>
+        <TaskList tasks={views} today={today} defaultGroup="due" />
       )}
     </Page>
   );
@@ -73,7 +81,7 @@ function Page({
               as of <span className="font-mono text-fg/70">{today}</span>
             </>
           ) : null}
-          . Read-only, live from the vault.
+          . Check one off to complete it in the vault.
         </p>
       </header>
       {children}
