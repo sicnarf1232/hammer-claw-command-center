@@ -31,12 +31,13 @@ export default async function TodayPage() {
   return (
     <Page today={today}>
       {error ? (
-        <div className="card max-w-2xl p-5 text-sm text-red-700">
+        <div className="card max-w-2xl border-danger/30 p-5 text-sm text-danger">
           Could not read the vault: {error}
         </div>
       ) : tasks.length === 0 ? (
-        <div className="card max-w-2xl p-5 text-sm text-slate-600">
-          Nothing due today or overdue. Clear for now.
+        <div className="card max-w-2xl p-8 text-center">
+          <div className="text-sm font-medium text-fg">Nothing due today or overdue</div>
+          <p className="mt-1 text-sm text-muted">You are clear for now.</p>
         </div>
       ) : (
         <div className="grid gap-3">
@@ -62,13 +63,17 @@ function Page({
 }) {
   return (
     <div>
-      <header className="mb-5">
-        <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-          Today
-        </h1>
-        <p className="text-sm text-slate-500">
-          Open tasks due today or overdue{today ? `, as of ${today}` : ""}.
-          Read-only, live from the vault.
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Today</h1>
+        <p className="mt-1 text-sm text-muted">
+          Open tasks due today or overdue
+          {today ? (
+            <>
+              {" "}
+              as of <span className="font-mono text-fg/70">{today}</span>
+            </>
+          ) : null}
+          . Read-only, live from the vault.
         </p>
       </header>
       {children}

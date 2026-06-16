@@ -160,26 +160,35 @@ export default function InboxItem({
   }
 
   return (
-    <div className="card p-4">
+    <div className="card p-4 transition-shadow hover:shadow-elevated">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-slate-900">
+          <div className="truncate text-sm font-medium text-fg">
             {email.subject || "(no subject)"}
           </div>
-          <div className="mt-0.5 truncate text-xs text-slate-500">
+          <div className="mt-0.5 truncate text-xs text-muted">
             {email.fromName || email.fromEmail || "Unknown"}
-            {email.fromEmail && email.fromName ? ` · ${email.fromEmail}` : ""}
-            {email.receivedAt
-              ? ` · ${new Date(email.receivedAt).toLocaleString()}`
-              : ""}
+            {email.fromEmail && email.fromName ? (
+              <span className="font-mono"> · {email.fromEmail}</span>
+            ) : (
+              ""
+            )}
+            {email.receivedAt ? (
+              <span className="tabular-nums">
+                {" "}
+                · {new Date(email.receivedAt).toLocaleString()}
+              </span>
+            ) : (
+              ""
+            )}
             {email.hasAttachments ? " · has attachments" : ""}
           </div>
         </div>
         <span
           className={`chip shrink-0 ${
             filed
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-slate-200 bg-slate-50 text-slate-500"
+              ? "border-success/30 bg-success/10 text-success"
+              : "border-border bg-surface2 text-muted"
           }`}
         >
           {email.status}
@@ -187,25 +196,25 @@ export default function InboxItem({
       </div>
 
       {email.bodyPreview && (
-        <p className="mt-2 line-clamp-3 text-sm text-slate-600">
+        <p className="mt-2 line-clamp-3 text-sm text-fg/75">
           {email.bodyPreview}
         </p>
       )}
 
       {filed ? (
-        <div className="mt-3 text-xs text-emerald-700">
-          Filed to <code className="text-xs">{email.filedPath}</code>
+        <div className="mt-3 text-xs text-success">
+          Filed to <code className="font-mono text-xs">{email.filedPath}</code>
         </div>
       ) : (
         <>
-          <div className="mt-2 text-xs text-slate-400">
+          <div className="mt-2 text-xs text-muted">
             Suggestion: {suggestion.reason}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <select
               value={workstream}
               onChange={(e) => setWorkstream(e.target.value)}
-              className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+              className="input"
             >
               <option value="">workstream…</option>
               {WORKSTREAM_OPTIONS.map((w) => (
@@ -218,19 +227,19 @@ export default function InboxItem({
               value={account}
               onChange={(e) => setAccount(e.target.value)}
               placeholder="account (optional)"
-              className="w-44 rounded-md border border-slate-300 px-2 py-1 text-sm"
+              className="input w-44"
             />
             <button
               onClick={file}
               disabled={busy}
-              className="rounded-md bg-slate-900 px-3 py-1 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              className="btn btn-primary disabled:opacity-50"
             >
               {busy ? "Filing…" : "File to vault"}
             </button>
             <button
               onClick={archive}
               disabled={busy}
-              className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              className="btn btn-outline disabled:opacity-50"
             >
               Dismiss
             </button>
@@ -239,7 +248,7 @@ export default function InboxItem({
                 href={email.webLink}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm text-slate-500 underline"
+                className="text-sm text-muted underline"
               >
                 Open in Outlook
               </a>
@@ -248,13 +257,13 @@ export default function InboxItem({
         </>
       )}
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-      {message && <p className="mt-2 text-xs text-emerald-700">{message}</p>}
+      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      {message && <p className="mt-2 text-xs text-success">{message}</p>}
 
-      <div className="mt-3 border-t border-slate-100 pt-3">
+      <div className="mt-3 border-t border-border pt-3">
         <button
           onClick={() => setShowReply((v) => !v)}
-          className="text-sm font-medium text-slate-700 hover:underline"
+          className="text-sm font-medium text-muted hover:underline"
         >
           {showReply ? "Hide reply" : "Reply"}
         </button>
@@ -264,17 +273,17 @@ export default function InboxItem({
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="Optional: how should the AI draft this? (e.g. confirm dates, decline politely)"
-              className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+              className="input"
             />
             <div className="flex items-center gap-2">
               <button
                 onClick={generateDraft}
                 disabled={replyBusy}
-                className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                className="btn btn-outline disabled:opacity-50"
               >
                 {replyBusy ? "Working…" : "Draft with AI"}
               </button>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-muted">
                 from-identity: {workstream || "pick a workstream above"}
               </span>
             </div>
@@ -283,22 +292,22 @@ export default function InboxItem({
               onChange={(e) => setReplyBody(e.target.value)}
               placeholder="Reply body. Edit freely before creating the Outlook draft."
               rows={8}
-              className="rounded-md border border-slate-300 px-2 py-1 font-mono text-sm"
+              className="input font-mono"
             />
             <div className="flex items-center gap-2">
               <button
                 onClick={sendReply}
                 disabled={replyBusy}
-                className="rounded-md bg-slate-900 px-3 py-1 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                className="btn btn-primary disabled:opacity-50"
               >
                 {replyBusy ? "Sending…" : "Send reply"}
               </button>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-muted">
                 Sends the reply directly from your Merit mailbox.
               </span>
             </div>
-            {replyErr && <p className="text-xs text-red-600">{replyErr}</p>}
-            {replyMsg && <p className="text-xs text-emerald-700">{replyMsg}</p>}
+            {replyErr && <p className="text-xs text-danger">{replyErr}</p>}
+            {replyMsg && <p className="text-xs text-success">{replyMsg}</p>}
           </div>
         )}
       </div>

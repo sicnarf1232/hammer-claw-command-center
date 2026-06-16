@@ -110,110 +110,121 @@ export default function QuoteBuilder({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
-          <span className="text-slate-500">Quote title</span>
+          <span className="text-muted">Quote title</span>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1"
+            className="input mt-1 w-full"
           />
         </label>
         <label className="text-sm">
-          <span className="text-slate-500">Customer</span>
+          <span className="text-muted">Customer</span>
           <input
             value={customer}
             onChange={(e) => setCustomer(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1"
+            className="input mt-1 w-full"
           />
         </label>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
+      <div className="card mt-4 overflow-x-auto p-0">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-              <th className="py-1 pr-2">Part #</th>
-              <th className="py-1 pr-2">Description</th>
-              <th className="py-1 pr-2 text-right">Qty</th>
-              <th className="py-1 pr-2 text-right">Unit cost</th>
-              <th className="py-1 pr-2 text-right">Line total</th>
-              <th></th>
+            <tr className="border-b border-border bg-surface2 text-left text-2xs uppercase tracking-wide text-muted">
+              <th className="px-3 py-2 font-medium">Part #</th>
+              <th className="px-3 py-2 font-medium">Description</th>
+              <th className="px-3 py-2 text-right font-medium">Qty</th>
+              <th className="px-3 py-2 text-right font-medium">Unit cost</th>
+              <th className="px-3 py-2 text-right font-medium">Line total</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {items.map((it, idx) => (
-              <tr key={idx} className="border-t border-slate-100">
-                <td className="py-1 pr-2">
-                  <input
-                    list="catalog-parts"
-                    value={it.partNumber}
-                    onChange={(e) => onPartChange(idx, e.target.value)}
-                    className="w-28 rounded-md border border-slate-300 px-2 py-1"
-                  />
-                </td>
-                <td className="py-1 pr-2">
-                  <input
-                    value={it.description}
-                    onChange={(e) => update(idx, { description: e.target.value })}
-                    className="w-full min-w-48 rounded-md border border-slate-300 px-2 py-1"
-                  />
-                </td>
-                <td className="py-1 pr-2 text-right">
-                  <input
-                    type="number"
-                    min={0}
-                    value={it.qty}
-                    onChange={(e) => update(idx, { qty: Number(e.target.value) })}
-                    className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right"
-                  />
-                </td>
-                <td className="py-1 pr-2 text-right">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={it.unitCost}
-                    onChange={(e) =>
-                      update(idx, { unitCost: Number(e.target.value) })
-                    }
-                    className="w-24 rounded-md border border-slate-300 px-2 py-1 text-right"
-                  />
-                </td>
-                <td className="py-1 pr-2 text-right tabular-nums">
-                  {money(it.qty * it.unitCost)}
-                </td>
-                <td className="py-1 text-right">
-                  <button
-                    onClick={() => removeRow(idx)}
-                    className="text-xs text-slate-400 hover:text-red-600"
-                  >
-                    remove
-                  </button>
+            {items.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted">
+                  No line items yet. Add a line to start building the quote.
                 </td>
               </tr>
-            ))}
+            ) : (
+              items.map((it, idx) => (
+                <tr
+                  key={idx}
+                  className="border-b border-border last:border-b-0 hover:bg-surface2"
+                >
+                  <td className="px-3 py-2">
+                    <input
+                      list="catalog-parts"
+                      value={it.partNumber}
+                      onChange={(e) => onPartChange(idx, e.target.value)}
+                      className="input w-28 font-mono tabular-nums"
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <input
+                      value={it.description}
+                      onChange={(e) => update(idx, { description: e.target.value })}
+                      className="input w-full min-w-48"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      value={it.qty}
+                      onChange={(e) => update(idx, { qty: Number(e.target.value) })}
+                      className="input w-16 text-right font-mono tabular-nums"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={it.unitCost}
+                      onChange={(e) =>
+                        update(idx, { unitCost: Number(e.target.value) })
+                      }
+                      className="input w-24 text-right font-mono tabular-nums"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-fg">
+                    {money(it.qty * it.unitCost)}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => removeRow(idx)}
+                      className="cursor-pointer text-xs text-muted transition-colors hover:text-danger"
+                    >
+                      remove
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      <div className="mt-2 flex items-center justify-between">
-        <button
-          onClick={addRow}
-          className="rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-100"
-        >
+      <div className="mt-3 flex items-center justify-between">
+        <button onClick={addRow} className="btn-outline">
           Add line
         </button>
-        <div className="text-sm font-medium text-slate-900">
-          Total: {money(total)}
+        <div className="text-sm text-muted">
+          Total:{" "}
+          <span className="font-mono tabular-nums font-semibold text-fg">
+            {money(total)}
+          </span>
         </div>
       </div>
 
       <label className="mt-4 block text-sm">
-        <span className="text-slate-500">Notes</span>
+        <span className="text-muted">Notes</span>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
-          className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1"
+          className="input mt-1 w-full"
         />
       </label>
 
@@ -221,11 +232,11 @@ export default function QuoteBuilder({
         <button
           onClick={downloadPdf}
           disabled={busy}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          className="btn-primary disabled:opacity-50"
         >
           {busy ? "Generating…" : "Download Merit OEM PDF"}
         </button>
-        {error && <span className="text-xs text-red-600">{error}</span>}
+        {error && <span className="text-xs text-danger">{error}</span>}
       </div>
     </div>
   );

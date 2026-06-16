@@ -31,17 +31,17 @@ export default async function QuotePage() {
 
   return (
     <div>
-      <header className="mb-5">
-        <h1 className="text-lg font-semibold tracking-tight text-slate-900">
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">
           Quote
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="mt-1 text-sm text-muted">
           Assemble line items and download a Merit OEM branded PDF, rendered
           server-side. {catalog.length > 0 ? `${catalog.length} catalog parts loaded.` : ""}
         </p>
       </header>
       {note && (
-        <div className="card mb-4 max-w-3xl p-3 text-xs text-slate-500">{note}</div>
+        <div className="card mb-4 max-w-3xl p-3 text-xs text-muted">{note}</div>
       )}
       <QuoteBuilder catalog={catalog} />
     </div>

@@ -18,7 +18,7 @@ export default async function InboxPage() {
     return (
       <Page>
         <SetupNotice missing={missing} />
-        <p className="mt-3 max-w-2xl text-sm text-slate-500">
+        <p className="mt-3 max-w-2xl text-sm text-muted">
           The inbox needs the database (to hold the email queue) and vault access
           (to file notes back). Until Power Automate Flow A is wired up, the queue
           will be empty. See PUNCHLIST.md sections 3 and 4.
@@ -72,9 +72,13 @@ export default async function InboxPage() {
   return (
     <Page subtitle={`${newCount} new, ${rows.length} in view`}>
       {items.length === 0 ? (
-        <div className="card max-w-2xl p-5 text-sm text-slate-600">
-          Inbox is empty. Flag an email into the <code>ToHC</code> folder in
-          Outlook and it will appear here within a minute (once Flow A is wired).
+        <div className="card max-w-2xl p-8 text-center">
+          <div className="text-sm font-medium text-fg">Inbox is empty</div>
+          <p className="mt-1 text-sm text-muted">
+            Flag an email into the{" "}
+            <code className="font-mono text-fg/75">ToHC</code> folder in Outlook
+            and it will appear here within a minute, once Flow A is wired.
+          </p>
         </div>
       ) : (
         <div className="grid max-w-3xl gap-3">
@@ -96,13 +100,19 @@ function Page({
 }) {
   return (
     <div>
-      <header className="mb-5">
-        <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-          Inbox
-        </h1>
-        <p className="text-sm text-slate-500">
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Inbox</h1>
+        <p className="mt-1 text-sm text-muted">
           Flagged emails from Outlook. Classify, then file into the right
-          workstream Inbox. {subtitle}
+          workstream Inbox.
+          {subtitle ? (
+            <>
+              {" "}
+              <span className="font-mono tabular-nums text-fg/70">
+                {subtitle}
+              </span>
+            </>
+          ) : null}
         </p>
       </header>
       {children}

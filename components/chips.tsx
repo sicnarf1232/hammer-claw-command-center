@@ -1,30 +1,38 @@
 import type { Priority, Workstream } from "@/lib/vault/types";
 import { WORKSTREAMS } from "@/lib/workstreams";
+import { AlertIcon, ClockIcon } from "./icons";
 
 const WS_STYLES: Record<Workstream, string> = {
-  merit: "border-blue-200 bg-blue-50 text-blue-700",
-  sloan: "border-teal-200 bg-teal-50 text-teal-700",
-  personal: "border-slate-200 bg-slate-50 text-slate-600",
-  shared: "border-slate-200 bg-slate-50 text-slate-500",
+  merit: "border-merit/25 bg-merit/10 text-merit",
+  sloan: "border-sloan/25 bg-sloan/10 text-sloan",
+  personal: "border-personal/25 bg-personal/10 text-personal",
+  shared: "border-shared/25 bg-shared/10 text-shared",
 };
 
 export function WorkstreamChip({ ws }: { ws?: string }) {
   if (!ws) return null;
   const known = ws in WORKSTREAMS ? (ws as Workstream) : undefined;
-  const style = known ? WS_STYLES[known] : "border-slate-200 bg-slate-50 text-slate-500";
+  const style = known
+    ? WS_STYLES[known]
+    : "border-border bg-surface2 text-muted";
   const label = known ? WORKSTREAMS[known].label : ws;
   return <span className={`chip ${style}`}>{label}</span>;
 }
 
 const PRIORITY_STYLES: Record<Priority, string> = {
-  high: "border-red-200 bg-red-50 text-red-700",
-  med: "border-amber-200 bg-amber-50 text-amber-700",
-  low: "border-slate-200 bg-slate-50 text-slate-600",
+  high: "border-danger/25 bg-danger/10 text-danger",
+  med: "border-warning/25 bg-warning/10 text-warning",
+  low: "border-border bg-surface2 text-muted",
 };
 
 export function PriorityChip({ priority }: { priority?: Priority }) {
   if (!priority) return null;
-  return <span className={`chip ${PRIORITY_STYLES[priority]}`}>{priority}</span>;
+  return (
+    <span className={`chip ${PRIORITY_STYLES[priority]}`}>
+      {priority === "high" && <AlertIcon className="h-3 w-3" />}
+      {priority}
+    </span>
+  );
 }
 
 export function DueChip({ due, today }: { due?: string; today: string }) {
@@ -32,15 +40,21 @@ export function DueChip({ due, today }: { due?: string; today: string }) {
   const overdue = due < today;
   const isToday = due === today;
   const style = overdue
-    ? "border-red-200 bg-red-50 text-red-700"
+    ? "border-danger/30 bg-danger/10 text-danger"
     : isToday
-      ? "border-amber-200 bg-amber-50 text-amber-700"
-      : "border-slate-200 bg-slate-50 text-slate-600";
+      ? "border-warning/30 bg-warning/10 text-warning"
+      : "border-border bg-surface2 text-muted";
   const label = overdue ? `overdue ${due}` : isToday ? "due today" : `due ${due}`;
-  return <span className={`chip ${style}`}>{label}</span>;
+  return (
+    <span className={`chip ${style}`}>
+      {overdue && <AlertIcon className="h-3 w-3" />}
+      {isToday && <ClockIcon className="h-3 w-3" />}
+      {label}
+    </span>
+  );
 }
 
-// Generic gray chip for roster classification etc.
+// Generic chip for roster classification etc.
 export function Chip({
   children,
   tone = "gray",
@@ -49,9 +63,9 @@ export function Chip({
   tone?: "gray" | "merit" | "customer";
 }) {
   const styles: Record<string, string> = {
-    gray: "border-slate-200 bg-slate-50 text-slate-500",
-    merit: "border-blue-200 bg-blue-50 text-blue-700",
-    customer: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    gray: "border-border bg-surface2 text-muted",
+    merit: "border-merit/25 bg-merit/10 text-merit",
+    customer: "border-success/25 bg-success/10 text-success",
   };
   return <span className={`chip ${styles[tone]}`}>{children}</span>;
 }

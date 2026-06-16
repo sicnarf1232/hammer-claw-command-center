@@ -2,19 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens. Light is the default; `.dark` on <html> swaps the palette.
+   Values are space-separated RGB channels so Tailwind alpha modifiers work. */
 :root {
+  --c-page: 248 250 252; /* slate-50 */
+  --c-surface: 255 255 255;
+  --c-surface-2: 241 245 249; /* slate-100 */
+  --c-fg: 15 23 42; /* slate-900 */
+  --c-muted: 100 116 139; /* slate-500 */
+  --c-border: 226 232 240; /* slate-200 */
+  --c-primary: 29 78 216; /* blue-700 */
+  --c-primary-fg: 255 255 255;
+  --c-accent: 217 119 6; /* amber-600 */
+  --c-ring: 37 99 235; /* blue-600 */
+  --c-danger: 220 38 38; /* red-600 */
+  --c-warning: 217 119 6; /* amber-600 */
+  --c-success: 5 150 105; /* emerald-600 */
+  --c-info: 37 99 235; /* blue-600 */
+  --c-merit: 37 99 235;
+  --c-sloan: 13 148 136;
+  --c-personal: 100 116 139;
+  --c-shared: 124 58 237;
   color-scheme: light;
 }
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+.dark {
+  --c-page: 9 14 26; /* deep midnight */
+  --c-surface: 17 24 39; /* slate-900 */
+  --c-surface-2: 30 41 59; /* slate-800 */
+  --c-fg: 226 232 240; /* slate-200 */
+  --c-muted: 148 163 184; /* slate-400 */
+  --c-border: 30 41 59; /* slate-800 */
+  --c-primary: 59 130 246; /* blue-500 */
+  --c-primary-fg: 255 255 255;
+  --c-accent: 245 158 11; /* amber-500 */
+  --c-ring: 96 165 250; /* blue-400 */
+  --c-danger: 248 113 113; /* red-400 */
+  --c-warning: 251 191 36; /* amber-400 */
+  --c-success: 52 211 153; /* emerald-400 */
+  --c-info: 96 165 250; /* blue-400 */
+  --c-merit: 96 165 250;
+  --c-sloan: 45 212 191;
+  --c-personal: 148 163 184;
+  --c-shared: 167 139 250;
+  color-scheme: dark;
 }
 
-/* Flat, quiet surfaces for the command center. */
-.card {
-  @apply rounded-lg border border-slate-200 bg-white;
+@layer base {
+  body {
+    @apply bg-page text-fg antialiased;
+  }
+  /* Visible focus rings for keyboard users on interactive elements. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-page;
+  }
 }
 
-.chip {
-  @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium;
+@layer components {
+  .card {
+    @apply rounded-xl border border-border bg-surface shadow-card;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums;
+  }
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-primary text-primary-fg hover:opacity-90;
+  }
+  .btn-outline {
+    @apply btn border border-border bg-surface text-fg hover:bg-surface2;
+  }
+  .btn-ghost {
+    @apply btn text-fg hover:bg-surface2;
+  }
+  .input {
+    @apply rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-fg transition-colors placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
