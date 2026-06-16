@@ -29,15 +29,6 @@ export const WORKSTREAMS: Record<Workstream, WorkstreamIdentity> = {
     accent: "text-merit",
     inboxFolder: "300 Merit/Inbox",
   },
-  nextech: {
-    workstream: "nextech",
-    label: "Nextech",
-    folder: "400 Nextech",
-    email: "jordan@nextechadv.ai",
-    brand: "Nextech AI",
-    accent: "text-nextech",
-    inboxFolder: "400 Nextech/Inbox",
-  },
   sloan: {
     workstream: "sloan",
     label: "Sloan",

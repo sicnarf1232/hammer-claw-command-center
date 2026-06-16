@@ -3,7 +3,6 @@ import { WORKSTREAMS } from "@/lib/workstreams";
 
 const WS_STYLES: Record<Workstream, string> = {
   merit: "border-blue-200 bg-blue-50 text-blue-700",
-  nextech: "border-violet-200 bg-violet-50 text-violet-700",
   sloan: "border-teal-200 bg-teal-50 text-teal-700",
   personal: "border-slate-200 bg-slate-50 text-slate-600",
   shared: "border-slate-200 bg-slate-50 text-slate-500",

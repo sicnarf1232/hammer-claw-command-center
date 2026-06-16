@@ -18,7 +18,7 @@ export interface InboxEmail {
   workstream: string | null;
 }
 
-const WORKSTREAM_OPTIONS = ["merit", "nextech", "sloan", "personal"];
+const WORKSTREAM_OPTIONS = ["merit", "sloan", "personal"];
 
 export default function InboxItem({
   email,

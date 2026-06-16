@@ -3,14 +3,12 @@
 
 export type Workstream =
   | "merit"
-  | "nextech"
   | "sloan"
   | "personal"
   | "shared";
 
 export const WORKSTREAMS: Workstream[] = [
   "merit",
-  "nextech",
   "sloan",
   "personal",
   "shared",

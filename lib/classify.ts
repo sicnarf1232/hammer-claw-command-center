@@ -41,9 +41,6 @@ export function classifyEmail(
     if (senderDomain.endsWith("merit.com")) {
       workstream = "merit";
       reasons.push(`sender domain ${senderDomain}`);
-    } else if (senderDomain.endsWith("nextechadv.ai")) {
-      workstream = "nextech";
-      reasons.push(`sender domain ${senderDomain}`);
     }
   }
 
