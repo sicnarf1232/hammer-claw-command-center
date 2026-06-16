@@ -77,7 +77,7 @@ export default function InboxItem({
     }
   }
 
-  async function createOutlookDraft() {
+  async function sendReply() {
     setReplyErr(null);
     setReplyMsg(null);
     if (!workstream) {
@@ -101,9 +101,9 @@ export default function InboxItem({
         }),
       });
       const data = await res.json();
-      if (!res.ok) setReplyErr(data.error ?? "Could not create draft.");
+      if (!res.ok) setReplyErr(data.error ?? "Could not send reply.");
       else {
-        setReplyMsg("Draft created in Outlook. Review and send it there.");
+        setReplyMsg("Reply sent.");
         router.refresh();
       }
     } catch {
@@ -287,14 +287,14 @@ export default function InboxItem({
             />
             <div className="flex items-center gap-2">
               <button
-                onClick={createOutlookDraft}
+                onClick={sendReply}
                 disabled={replyBusy}
                 className="rounded-md bg-slate-900 px-3 py-1 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
               >
-                Create Outlook draft
+                {replyBusy ? "Sending…" : "Send reply"}
               </button>
               <span className="text-xs text-slate-400">
-                Creates a draft only. You send it from Outlook.
+                Sends the reply directly from your Merit mailbox.
               </span>
             </div>
             {replyErr && <p className="text-xs text-red-600">{replyErr}</p>}
