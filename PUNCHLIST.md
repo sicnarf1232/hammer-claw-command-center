@@ -79,27 +79,35 @@ can read the vault.
 
 ---
 
-## 5. Reply / draft — Power Automate Flow B (Phase 2)
+## 5. Reply — Power Automate Flow B (Phase 2) — DONE (live, 2026-06-16)
 
-- [ ] Build Flow B: "When an HTTP request is received" trigger. Action: Outlook
-      "Create draft" as you. Map the request body from docs/03 (action,
-      inReplyTo, to, cc, subject, bodyHtml, fromIdentity).
-- [ ] Set `POWER_AUTOMATE_REPLY_URL` to that flow's HTTP-trigger URL (it contains
-      a SAS token; treat the whole URL as a secret).
-- [ ] Default action is `create_draft`. Auto-send stays off until you explicitly
-      ask to enable it.
-- [ ] DECISION NEEDED: Sloan's sending email address is marked "TBD (ask)" in
-      docs/01. Until you give it, the app refuses to draft as the `sloan`
-      identity (it will not guess an identity). Provide the Sloan from-address,
-      or confirm Sloan email is out of scope.
+- [x] DECISION CHANGED: Jordan wants the app to SEND directly, not create a
+      draft. The standard Outlook connector has no "create draft" action anyway.
+      Flow B is now a direct send.
+- [x] Built Flow B = "When an HTTP request is received" trigger -> "Send an email
+      (V2)" on the Merit connection (Jordan.Francis@merit.com). To/Subject/Body
+      mapped from the request (`join(to)`, `subject`, `bodyHtml`). No lookup, no
+      condition (an earlier threaded build had empty branches and silently sent
+      nothing; simplified to one send step). Not in-thread: replies go as a fresh
+      "RE:" email. Verified end-to-end: app Send reply -> email delivered to the
+      Merit inbox.
+- [x] Trigger auth: the new Power Platform trigger defaulted to OAuth-required
+      (`DirectApiAuthorizationRequired`). Switched it to the SAS/URL scheme so
+      the app can call it with no token. (Merit tenant allowed the switch.)
+- [x] `POWER_AUTOMATE_REPLY_URL` set in Vercel production (Sensitive) and live.
+- [x] App UI relabeled: "Send reply" / "Reply sent" (was "Create Outlook draft").
+- [ ] DECISION NEEDED: Sloan's sending email address is "TBD (ask)" in docs/01.
+      The app refuses to send as `sloan` until provided. (Nextech was removed
+      entirely per Jordan, 2026-06-16.)
 
 ---
 
 ## 6. AI drafting + briefs (Phase 2 drafting, Phase 4 briefs)
 
-- [ ] Set `ANTHROPIC_API_KEY`. Optional `ANTHROPIC_MODEL` (defaults to
-      `claude-sonnet-4-6`). Without it, AI drafting is skipped and you write the
-      reply body yourself; briefs log a clear "no API key" notice.
+- [x] `ANTHROPIC_API_KEY` set in Vercel production and live (2026-06-16). First
+      attempt was mis-cased as `Anthropic_API_Key` (env names are case-sensitive)
+      and returned 503; re-added as `ANTHROPIC_API_KEY` and verified: "Draft with
+      AI" returns a generated reply body. Model defaults to `claude-opus-4-8`.
 
 ---
 

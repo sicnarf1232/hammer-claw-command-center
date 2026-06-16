@@ -67,3 +67,12 @@ One line per phase boundary: what shipped and any decisions made.
 - Verified the live `POST /api/webhooks/email` end-to-end (docs/03 test plan steps 1-2): 401 on bad signature, 400 on missing messageId, 200 `{ok:true,deduped:false}` on a full payload (the successful insert proves `email_queue` + `webhook_events` + `notifications` tables exist), 200 `{ok:true,deduped:true}` on a repeat (unique-index dedupe). One synthetic test row left in the queue for Jordan to dismiss.
 - Confirmed with Jordan: the generic HTTP action is available on his M365 plan, so Flow A uses HTTP (no relay fallback).
 - Remaining for a fully lit inbox: Jordan builds Power Automate Flow A (trigger + HTTP POST with the secret) and flags one real email to confirm it lands in `/inbox`.
+
+## Phase 2 wiring — reply send path live (2026-06-16)
+
+- `ANTHROPIC_API_KEY` set in production; "Draft with AI" verified live. (First save was mis-cased `Anthropic_API_Key` and 503'd; env var names are case-sensitive.)
+- Decision change: Jordan wants the app to SEND replies directly, not create a draft (the standard Outlook connector has no create-draft action anyway). Flow B is now trigger -> "Send an email (V2)" on the Merit connection, mapping `to`/`subject`/`bodyHtml`. An earlier threaded build (Get emails -> Condition -> Reply/Send) had empty branches and silently sent nothing; simplified to a single send step. Replies go as a fresh "RE:" email, not in-thread.
+- Flow B trigger auth: the new Power Platform request trigger defaulted to OAuth-required (`DirectApiAuthorizationRequired`, 401). Switched to the SAS/URL scheme so the app calls it tokenless; `POWER_AUTOMATE_REPLY_URL` set in production.
+- UI relabeled to match reality: "Send reply" / "Reply sent" (was "Create Outlook draft").
+- Removed the nextech workstream from the app entirely (type, identity table, classification, inbox picker, chip/accent). App now knows merit, sloan, personal, shared. Vault-contract docs still describe the `400 Nextech/` folder; scrubbing those is a separate decision.
+- Verified end-to-end: a self-addressed test email -> app "Send reply" -> delivered to the Merit inbox.
