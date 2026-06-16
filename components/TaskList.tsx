@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { TaskView } from "@/lib/taskView";
 import TaskRow from "./TaskRow";
-import { SearchIcon } from "./icons";
+import { SearchIcon, ChevronDownIcon } from "./icons";
 
 type GroupBy = "account" | "due" | "priority" | "none";
 
@@ -21,6 +21,8 @@ export default function TaskList({
   const [group, setGroup] = useState<GroupBy>(defaultGroup);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [q, setQ] = useState("");
+  // Per-group open overrides; default openness is computed (see isOpen).
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -39,6 +41,23 @@ export default function TaskList({
     [filtered, group, today],
   );
 
+  // Open by default when searching, when grouping is off, or for groups that
+  // have overdue work or are among the first few. Heavy lists stay collapsed.
+  const searching = q.trim().length > 0;
+  function isOpen(key: string, overdue: number, index: number): boolean {
+    if (key in overrides) return overrides[key];
+    if (group === "none" || searching) return true;
+    return overdue > 0 || index < 3;
+  }
+  function toggle(key: string, current: boolean) {
+    setOverrides((o) => ({ ...o, [key]: !current }));
+  }
+  function setAll(open: boolean) {
+    const next: Record<string, boolean> = {};
+    for (const g of groups) next[g.key] = open;
+    setOverrides(next);
+  }
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -51,7 +70,32 @@ export default function TaskList({
             className="input w-52 pl-8"
           />
         </div>
+        <span className="text-xs text-muted">
+          <span className="font-mono tabular-nums text-fg/70">
+            {filtered.length}
+          </span>{" "}
+          task{filtered.length === 1 ? "" : "s"}
+        </span>
         <div className="ml-auto flex items-center gap-2">
+          {group !== "none" && (
+            <div className="hidden items-center gap-1 text-xs text-muted sm:flex">
+              <button
+                onClick={() => setAll(true)}
+                className="hover:text-fg"
+                type="button"
+              >
+                Expand
+              </button>
+              <span>/</span>
+              <button
+                onClick={() => setAll(false)}
+                className="hover:text-fg"
+                type="button"
+              >
+                Collapse
+              </button>
+            </div>
+          )}
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted">
             <input
               type="checkbox"
@@ -84,12 +128,28 @@ export default function TaskList({
             Try clearing the search or the overdue filter.
           </p>
         </div>
+      ) : group === "none" ? (
+        <div className="space-y-2">
+          {groups[0].tasks.map((t) => (
+            <TaskRow key={t.id} task={t} today={today} />
+          ))}
+        </div>
       ) : (
-        <div className="space-y-6">
-          {groups.map((g) => (
-            <section key={g.key}>
-              {group !== "none" && (
-                <div className="mb-2 flex items-center gap-2">
+        <div className="space-y-3">
+          {groups.map((g, i) => {
+            const open = isOpen(g.key, g.overdue, i);
+            return (
+              <section key={g.key}>
+                <button
+                  type="button"
+                  onClick={() => toggle(g.key, open)}
+                  className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left hover:bg-surface2"
+                >
+                  <ChevronDownIcon
+                    className={`h-4 w-4 shrink-0 text-muted transition-transform ${
+                      open ? "" : "-rotate-90"
+                    }`}
+                  />
                   <h2 className="text-sm font-semibold tracking-tight text-fg">
                     {g.label}
                   </h2>
@@ -101,20 +161,22 @@ export default function TaskList({
                       {g.overdue} overdue
                     </span>
                   )}
-                </div>
-              )}
-              <div className="space-y-2">
-                {g.tasks.map((t) => (
-                  <TaskRow
-                    key={t.id}
-                    task={t}
-                    today={today}
-                    showAccount={group !== "account"}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
+                </button>
+                {open && (
+                  <div className="mt-2 space-y-2 pl-1">
+                    {g.tasks.map((t) => (
+                      <TaskRow
+                        key={t.id}
+                        task={t}
+                        today={today}
+                        showAccount={group !== "account"}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
     </div>
@@ -161,7 +223,6 @@ function groupTasks(tasks: TaskView[], by: GroupBy, today: string): Group[] {
       const p = t.priority ?? "none";
       put(p, p === "none" ? "No priority" : p[0].toUpperCase() + p.slice(1), t);
     } else {
-      // due
       const b = dueBucket(t.due, today);
       put(b.key, b.label, t);
     }
@@ -179,7 +240,10 @@ function groupTasks(tasks: TaskView[], by: GroupBy, today: string): Group[] {
 
   if (by === "account") {
     groups = groups.sort(
-      (a, b) => b.overdue - a.overdue || b.tasks.length - a.tasks.length || a.label.localeCompare(b.label),
+      (a, b) =>
+        b.overdue - a.overdue ||
+        b.tasks.length - a.tasks.length ||
+        a.label.localeCompare(b.label),
     );
   } else if (by === "due") {
     const rank: Record<string, number> = { overdue: 0, today: 1, soon: 2, later: 3, none: 4 };
