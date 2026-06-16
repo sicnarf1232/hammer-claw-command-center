@@ -1,7 +1,22 @@
 import { Octokit } from "@octokit/rest";
+import { unstable_cache, revalidateTag } from "next/cache";
 
 // Single GitHub client for all vault access (CLAUDE.md convention).
 // Reads via the Git Trees + Contents API, writes via commits. No filesystem.
+//
+// Caching (rate-limit safety): the vault is Jordan's whole Obsidian repo
+// (~1000 markdown files), and getAllTasks scans nearly all of them. Without
+// caching, one /today or /tasks render was ~980 GitHub calls, exhausting the
+// 5,000/hour authenticated limit in ~5 page loads. Two caches fix this:
+//   - getBlob is keyed by blob SHA, which is content-addressed and immutable,
+//     so it caches indefinitely. A file that changes gets a new SHA and is
+//     fetched fresh under the new key; the old entry simply goes unused.
+//   - the markdown tree (branch + recursive tree = 2 calls) caches for 60s
+//     under VAULT_TREE_TAG, which write-backs bust so commits show at once.
+// After warm-up a full-vault render costs ~2 calls (the tree), not ~980.
+
+const VAULT_TREE_TAG = "vault-tree";
+const VAULT_BLOB_TAG = "vault-blob";
 
 export interface RepoRef {
   owner: string;
@@ -51,54 +66,74 @@ export interface TreeEntry {
   size?: number;
 }
 
-// List every markdown file in the repo (optionally under a prefix), using one
-// recursive tree call. Returns repo-relative paths and blob SHAs.
+// The full markdown tree (every .md blob with its SHA), behind one branch +
+// recursive-tree call. Cached 60s and busted by write-backs (VAULT_TREE_TAG).
+// Returns full repo paths; callers strip the root prefix.
+const getMarkdownTreeCached = unstable_cache(
+  async (owner: string, repo: string, branch: string): Promise<TreeEntry[]> => {
+    const octokit = getOctokit();
+    const br = await octokit.repos.getBranch({ owner, repo, branch });
+    const treeSha = br.data.commit.commit.tree.sha;
+    const tree = await octokit.git.getTree({
+      owner,
+      repo,
+      tree_sha: treeSha,
+      recursive: "1",
+    });
+    return (tree.data.tree ?? [])
+      .filter(
+        (e) =>
+          e.type === "blob" &&
+          typeof e.path === "string" &&
+          (e.path as string).endsWith(".md"),
+      )
+      .map((e) => ({
+        path: e.path as string,
+        sha: e.sha as string,
+        size: e.size,
+      }));
+  },
+  ["vault-md-tree"],
+  { revalidate: 60, tags: [VAULT_TREE_TAG] },
+);
+
+// List every markdown file in the repo (optionally under a prefix). Served
+// from the cached tree; filters by prefix and strips the root in memory.
 export async function listMarkdownFiles(prefix = ""): Promise<TreeEntry[]> {
   const ref = getRepoRef();
-  const octokit = getOctokit();
-
-  const branch = await octokit.repos.getBranch({
-    owner: ref.owner,
-    repo: ref.repo,
-    branch: ref.branch,
-  });
-  const treeSha = branch.data.commit.commit.tree.sha;
-
-  const tree = await octokit.git.getTree({
-    owner: ref.owner,
-    repo: ref.repo,
-    tree_sha: treeSha,
-    recursive: "1",
-  });
-
+  const all = await getMarkdownTreeCached(ref.owner, ref.repo, ref.branch);
   const fullPrefix = joinPath(ref.root, prefix);
-  return (tree.data.tree ?? [])
-    .filter(
-      (e) =>
-        e.type === "blob" &&
-        typeof e.path === "string" &&
-        e.path.endsWith(".md") &&
-        (fullPrefix === "" || e.path.startsWith(fullPrefix)),
-    )
+  return all
+    .filter((e) => fullPrefix === "" || e.path.startsWith(fullPrefix))
     .map((e) => ({
       // Return vault-relative paths (root stripped). lib/github owns the root
       // prefix; everything above this layer speaks in vault-relative paths.
-      path: stripRoot(e.path as string, ref.root),
-      sha: e.sha as string,
+      path: stripRoot(e.path, ref.root),
+      sha: e.sha,
       size: e.size,
     }));
 }
 
-// Fetch and decode a blob by SHA (efficient for tree-driven reads).
+// Fetch and decode a blob by SHA. SHA is content-addressed and immutable, so
+// this caches indefinitely (revalidate: false); changed files arrive under a
+// new SHA and miss the cache naturally. This is the main rate-limit win.
+const getBlobCached = unstable_cache(
+  async (sha: string, owner: string, repo: string): Promise<string> => {
+    const octokit = getOctokit();
+    const blob = await octokit.git.getBlob({
+      owner,
+      repo,
+      file_sha: sha,
+    });
+    return decodeContent(blob.data.content, blob.data.encoding);
+  },
+  ["vault-blob"],
+  { revalidate: false, tags: [VAULT_BLOB_TAG] },
+);
+
 export async function getBlob(sha: string): Promise<string> {
   const ref = getRepoRef();
-  const octokit = getOctokit();
-  const blob = await octokit.git.getBlob({
-    owner: ref.owner,
-    repo: ref.repo,
-    file_sha: sha,
-  });
-  return decodeContent(blob.data.content, blob.data.encoding);
+  return getBlobCached(sha, ref.owner, ref.repo);
 }
 
 export interface FileContent {
@@ -181,6 +216,17 @@ export async function writeFile(args: {
     content: Buffer.from(args.content, "utf8").toString("base64"),
     sha,
   });
+
+  // The commit changed the tree (and gave the file a new blob SHA). Bust the
+  // tree cache so the next read sees the new SHAs immediately. (The old blob
+  // stays cached under its old SHA, harmlessly unused.) Guard for non-request
+  // contexts where revalidateTag is a no-op or unavailable.
+  try {
+    revalidateTag(VAULT_TREE_TAG);
+  } catch {
+    // outside a request/render scope (e.g. a script); cache TTL handles it
+  }
+
   return {
     commitSha: res.data.commit.sha ?? "",
     path: fullPath,

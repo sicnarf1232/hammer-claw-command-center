@@ -76,3 +76,9 @@ One line per phase boundary: what shipped and any decisions made.
 - UI relabeled to match reality: "Send reply" / "Reply sent" (was "Create Outlook draft").
 - Removed the nextech workstream from the app entirely (type, identity table, classification, inbox picker, chip/accent). App now knows merit, sloan, personal, shared. Vault-contract docs still describe the `400 Nextech/` folder; scrubbing those is a separate decision.
 - Verified end-to-end: a self-addressed test email -> app "Send reply" -> delivered to the Merit inbox.
+
+## Fix — GitHub rate-limit blowout (2026-06-16)
+
+- Symptom: the live app returned "API rate limit exceeded for user ID ..." (the authenticated 5,000/hour GitHub limit). Root cause: `getAllTasks` reads every markdown file in the vault as an individual blob call (~979 of 1058 files), and every page had `revalidate = 0`, so each `/today` or `/tasks` view cost ~981 GitHub calls. Roughly five page loads exhausted the hourly budget.
+- Fix in `lib/github.ts`: cache blob reads by SHA (content-addressed, so immutable) in the Next Data Cache with `revalidate: false`; a changed file arrives under a new SHA and misses naturally. The branch+recursive-tree listing is cached 60s behind `vault-tree`, and `writeFile` calls `revalidateTag('vault-tree')` so commits (task complete, account number) show immediately. After warm-up a full-vault render costs ~2 GitHub calls instead of ~981. `getFile` (read-by-path, used before write-back) stays uncached for write correctness.
+- Verified: typecheck clean, 28 parser tests pass, production `next build` clean.
