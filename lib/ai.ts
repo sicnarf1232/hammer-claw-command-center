@@ -1,6 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { identityFor } from "@/lib/workstreams";
-import type { Workstream } from "@/lib/vault/types";
+import {
+  isWorkstream,
+  type Priority,
+  type Workstream,
+} from "@/lib/vault/types";
 
 // AI drafting for email replies (Phase 2) and briefs (Phase 4). Optional:
 // without ANTHROPIC_API_KEY the app skips AI and Jordan writes the body himself.
@@ -86,6 +90,155 @@ export async function draftReply(input: DraftReplyInput): Promise<string> {
     .trim();
 
   return noEmDash(text);
+}
+
+// ---- Meeting triage (Granola pull) ----
+
+export interface TriagedActionItem {
+  owner: string | null; // "Jordan" for Jordan's items, the person's name otherwise
+  text: string; // action text, owner prefix stripped
+  isJordans: boolean; // true => render with a field row, surfaces as a real task
+  priority?: Priority;
+  due?: string; // YYYY-MM-DD if the meeting set one
+}
+
+export interface TriagedMeeting {
+  workstream: Workstream; // merit | sloan | personal | shared
+  account: string | null; // customer/account display name, e.g. "MicroVention Terumo"
+  bucket: string; // Meetings-Index bucket, e.g. "Terumo" or "Internal"
+  series: string | null; // recurring series name if evident, else null
+  title: string; // clean meeting title (no date, no customer prefix)
+  tldr: string; // 2-4 sentence summary
+  notes: string; // markdown body of substance
+  decisions: string[]; // key decisions, each a short line
+  actionItems: TriagedActionItem[];
+}
+
+export interface TriageInput {
+  title: string | null;
+  folderNames: string[]; // Granola folder names the note belongs to
+  attendees: string[]; // "Name <email> [merit|customer:Account|unknown]"
+  summaryMarkdown: string | null;
+  knownAccounts: string[]; // account display names that already exist in the vault
+  date: string; // YYYY-MM-DD of the meeting
+}
+
+// Classify a Granola meeting into the vault's workstream/account model AND shape
+// its body into the meeting-note contract (TL;DR, Notes, Decisions, dual-capture
+// action items) in one call. Jordan reviews everything in /meetings afterward.
+export async function triageMeeting(
+  input: TriageInput,
+): Promise<TriagedMeeting> {
+  const system = [
+    "You triage and structure meeting notes for Jordan Francis, who works mainly on Merit Medical OEM accounts.",
+    "Given a Granola meeting (title, attendees, summary), do two jobs:",
+    "1) FILE it: pick the workstream and, when it is a customer meeting, the account.",
+    "   - workstream is one of: merit, sloan, personal, shared. Default to merit unless the signal clearly points elsewhere.",
+    "   - account is the customer/company display name (e.g. 'MicroVention Terumo'). Prefer an exact match from the known-accounts list when the meeting is with that customer. Use null for internal/1:1/non-customer meetings.",
+    "   - bucket is a short label for the meetings index: the customer short name (e.g. 'Terumo', 'Stryker') for customer meetings, or 'Internal' for internal ones.",
+    "   - series: the recurring-series name if the title/summary clearly indicates a recurring meeting, else null.",
+    "2) STRUCTURE it: a 2-4 sentence tldr; a 'notes' markdown body capturing the substance; a list of key decisions; and action items.",
+    "   - Action items: mark isJordans true ONLY for items Jordan himself owns. Set owner to the person's name ('Jordan' for his own). For Jordan's items, set priority (high|med|low) and a due date (YYYY-MM-DD) only if the meeting stated one.",
+    "House style, follow exactly: never use em dashes (use commas, colons, or periods). Do not invent facts, names, dates, prices, or commitments. If something is unknown, leave it out rather than guessing.",
+    "Output ONLY a single JSON object, no markdown fence, no commentary. Schema:",
+    '{"workstream":"merit","account":null,"bucket":"Internal","series":null,"title":"...","tldr":"...","notes":"...","decisions":["..."],"actionItems":[{"owner":"Jordan","text":"...","isJordans":true,"priority":"high","due":"2026-06-20"}]}',
+  ].join("\n");
+
+  const parts = [
+    `Meeting date: ${input.date}`,
+    `Title: ${input.title ?? "(untitled)"}`,
+    input.folderNames.length
+      ? `Granola folders: ${input.folderNames.join(", ")}`
+      : "Granola folders: (none)",
+    "",
+    "Attendees:",
+    ...(input.attendees.length ? input.attendees.map((a) => `- ${a}`) : ["- (none captured)"]),
+    "",
+    `Known accounts in the vault: ${input.knownAccounts.join(", ") || "(none provided)"}`,
+    "",
+    "Granola summary (markdown):",
+    (input.summaryMarkdown ?? "(no summary)").slice(0, 8000),
+    "",
+    "Return the JSON object now.",
+  ];
+
+  const res = await client().messages.create({
+    model: model(),
+    max_tokens: 2500,
+    system,
+    messages: [{ role: "user", content: parts.join("\n") }],
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  return normalizeTriage(parseJsonObject(text), input);
+}
+
+// Pull the first balanced JSON object out of a model response (tolerates a
+// stray fence or prose around it).
+function parseJsonObject(text: string): Record<string, unknown> {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) {
+    throw new Error("Triage did not return JSON.");
+  }
+  return JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+}
+
+function normalizeTriage(
+  raw: Record<string, unknown>,
+  input: TriageInput,
+): TriagedMeeting {
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  const strOrNull = (v: unknown): string | null => {
+    const s = str(v).trim();
+    return s ? s : null;
+  };
+  const ws = isWorkstream(raw.workstream) ? raw.workstream : "merit";
+
+  const decisions = Array.isArray(raw.decisions)
+    ? raw.decisions.map((d) => noEmDash(str(d).trim())).filter(Boolean)
+    : [];
+
+  const prio = (v: unknown): Priority | undefined =>
+    v === "high" || v === "med" || v === "low" ? v : undefined;
+
+  const actionItems: TriagedActionItem[] = Array.isArray(raw.actionItems)
+    ? raw.actionItems
+        .map((item): TriagedActionItem | null => {
+          const o = (item ?? {}) as Record<string, unknown>;
+          const textVal = noEmDash(str(o.text).trim());
+          if (!textVal) return null;
+          const due =
+            typeof o.due === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.due)
+              ? o.due
+              : undefined;
+          return {
+            owner: strOrNull(o.owner),
+            text: textVal,
+            isJordans: o.isJordans === true,
+            priority: prio(o.priority),
+            due,
+          };
+        })
+        .filter((x): x is TriagedActionItem => x !== null)
+    : [];
+
+  return {
+    workstream: ws,
+    account: strOrNull(raw.account),
+    bucket: strOrNull(raw.bucket) ?? (ws === "merit" ? "Merit" : "Internal"),
+    series: strOrNull(raw.series),
+    title: noEmDash(strOrNull(raw.title) ?? input.title ?? "Untitled meeting"),
+    tldr: noEmDash(str(raw.tldr).trim()),
+    notes: noEmDash(str(raw.notes).trim()),
+    decisions,
+    actionItems,
+  };
 }
 
 // Generate a brief (morning brief, EOD recap, weekly review) from a context

@@ -9,6 +9,8 @@ import type { Roster, ActionItem } from "@/lib/vault/types";
 import { Attendee } from "@/components/Attendee";
 import { PriorityChip } from "@/components/chips";
 import SetupNotice from "@/components/SetupNotice";
+import PullFromGranola from "@/components/PullFromGranola";
+import { granolaConfigured } from "@/lib/granola";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -41,6 +43,11 @@ export default async function MeetingsPage({
 
   return (
     <Shell subtitle={`${rows.length} meetings in the index`}>
+      {granolaConfigured() && (
+        <div className="mb-4 flex justify-end">
+          <PullFromGranola />
+        </div>
+      )}
       {error ? (
         <div className="card max-w-2xl border-danger/30 p-5 text-sm text-danger">
           {error}

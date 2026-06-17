@@ -121,9 +121,19 @@ can read the vault.
       phone/email, tell me the channel you want (e.g. a Power Automate "push
       notification" flow URL, or an email-to-self). DECISION NEEDED; until then
       notifications are logged in-app only, not pushed externally.
-- [ ] Granola pull (Phase 4): the Granola API token/endpoint you want the cron to
-      pull from. DECISION NEEDED. Stubbed behind `GRANOLA_API_KEY`; without it the
-      pull cron is a no-op that logs "not configured".
+- [x] Granola pull (Phase 4): BUILT (2026-06-17). Contract obtained: Granola
+      public API at `https://public-api.granola.ai/v1/notes` (Bearer
+      `GRANOLA_API_KEY`, key form `grn_...`). The `/meetings` "Pull from Granola"
+      button and the `granola-pull` cron share `lib/meetingsPull.ts`: pull notes
+      created after the newest index date, AI-triage each into
+      `<workstream>/Meetings/<Account>/`, refresh `Meetings-Index.md`. Requires
+      `ANTHROPIC_API_KEY` (set) for triage. `GRANOLA_API_KEY` set in Vercel
+      production (2026-06-17).
+      - [ ] VERIFY LIVE: after deploy, press "Pull from Granola" on /meetings and
+            spot-check that meetings file into the right account folders. Triage
+            is best-effort; correct any misfiles in the vault (they are editable).
+      - [ ] Unknown-account meetings stage under `300 Merit/Meetings/_Unfiled`.
+            Tell me if you want a different staging location or default workstream.
 - [ ] VERCEL PLAN FOR CRON: the cron schedules in `vercel.json` run sub-daily
       (sync every 10 min, briefs at fixed times, Granola every 4 hours). Vercel
       Hobby only allows once-per-day cron; sub-daily needs Pro. Either upgrade to
