@@ -26,10 +26,10 @@ export default function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-      className="btn-ghost w-full justify-start gap-2.5 text-muted hover:text-fg"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border text-ink2 transition-colors hover:text-[color:var(--accent)]"
+      style={{ borderColor: "var(--line-2)" }}
     >
       {dark ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
-      <span>{dark ? "Light mode" : "Dark mode"}</span>
     </button>
   );
 }

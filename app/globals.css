@@ -2,49 +2,142 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens. Light is the default; `.dark` on <html> swaps the palette.
-   Values are space-separated RGB channels so Tailwind alpha modifiers work. */
+/* ============================================================
+   Film Room — local variable font (SN Pro, weights 100–900).
+   Drop SNPro.ttf and SNPro-Italic.ttf into /public/fonts/.
+   Falls back to the system sans cleanly if absent.
+   ============================================================ */
+@font-face {
+  font-family: "SN Pro";
+  src: url("/fonts/SNPro.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SN Pro";
+  src: url("/fonts/SNPro-Italic.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ============================================================
+   Design tokens. Named vars (hex) are the Film Room source of
+   truth, used directly in bespoke styling. The --c-* channel
+   vars mirror them as "R G B" so Tailwind alpha modifiers and
+   every existing utility class re-skin automatically.
+   `.dark` on <html> overrides both sets.
+   ============================================================ */
 :root {
-  --c-page: 248 250 252; /* slate-50 */
+  /* Named (hex) — for custom CSS, inline styles, gradients, shadows */
+  --canvas: #f4f4f9;
+  --surface: #ffffff;
+  --surface-2: #f2f2f8;
+  --ink: #16162a;
+  --ink-2: #4a4a63;
+  --ink-3: #8b8ba3;
+  --line: #e7e7f0;
+  --line-2: #d6d6e4;
+  --accent: #5145e6;
+  --accent-2: #4a3fd0;
+  --accent-ink: #ffffff;
+  --accent-soft: #ecebfd;
+  --warm: #f59e0b;
+  --warm-soft: #fef4e3;
+  --due: #e4584a;
+  --due-soft: #fceae7;
+  --due-ink: #be3b2e;
+  --ok: #12a150;
+  --ok-soft: #e5f5ec;
+
+  /* Channel mirrors (R G B) — power Tailwind + existing classes */
+  --c-page: 244 244 249;
   --c-surface: 255 255 255;
-  --c-surface-2: 241 245 249; /* slate-100 */
-  --c-fg: 15 23 42; /* slate-900 */
-  --c-muted: 100 116 139; /* slate-500 */
-  --c-border: 226 232 240; /* slate-200 */
-  --c-primary: 29 78 216; /* blue-700 */
+  --c-surface-2: 242 242 248;
+  --c-fg: 22 22 42;
+  --c-ink-2: 74 74 99;
+  --c-muted: 139 139 163;
+  --c-border: 231 231 240;
+  --c-line-2: 214 214 228;
+  --c-primary: 81 69 230;
   --c-primary-fg: 255 255 255;
-  --c-accent: 217 119 6; /* amber-600 */
-  --c-ring: 37 99 235; /* blue-600 */
-  --c-danger: 220 38 38; /* red-600 */
-  --c-warning: 217 119 6; /* amber-600 */
-  --c-success: 5 150 105; /* emerald-600 */
-  --c-info: 37 99 235; /* blue-600 */
-  --c-merit: 37 99 235;
-  --c-sloan: 13 148 136;
-  --c-personal: 100 116 139;
-  --c-shared: 124 58 237;
+  --c-accent-2: 74 63 208;
+  --c-accent-soft: 236 235 253;
+  --c-accent: 245 158 11; /* legacy "accent" slot = warm amber */
+  --c-warm: 245 158 11;
+  --c-warm-soft: 254 244 227;
+  --c-ring: 81 69 230;
+  --c-danger: 228 88 74;
+  --c-due: 228 88 74;
+  --c-due-soft: 252 234 231;
+  --c-due-ink: 190 59 46;
+  --c-warning: 245 158 11;
+  --c-success: 18 161 80;
+  --c-ok: 18 161 80;
+  --c-ok-soft: 229 245 236;
+  --c-info: 81 69 230;
+  /* Workstream accents repurposed onto the Film Room palette */
+  --c-merit: 81 69 230;
+  --c-sloan: 14 159 142;
+  --c-personal: 139 139 163;
+  --c-shared: 74 63 208;
+
+  --font-sans: "SN Pro", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "SN Pro", ui-monospace, monospace;
   color-scheme: light;
 }
 
 .dark {
-  --c-page: 9 14 26; /* deep midnight */
-  --c-surface: 17 24 39; /* slate-900 */
-  --c-surface-2: 30 41 59; /* slate-800 */
-  --c-fg: 226 232 240; /* slate-200 */
-  --c-muted: 148 163 184; /* slate-400 */
-  --c-border: 30 41 59; /* slate-800 */
-  --c-primary: 59 130 246; /* blue-500 */
+  --canvas: #0e0e18;
+  --surface: #181826;
+  --surface-2: #202032;
+  --ink: #f3f3f9;
+  --ink-2: #b4b4cb;
+  --ink-3: #7b7b96;
+  --line: #2a2a3c;
+  --line-2: #373749;
+  --accent: #7c72ff;
+  --accent-2: #9d95ff;
+  --accent-ink: #ffffff;
+  --accent-soft: #222138;
+  --warm: #f6b23d;
+  --warm-soft: #2e2718;
+  --due: #ff7565;
+  --due-soft: #37231f;
+  --due-ink: #ff9686;
+  --ok: #34d399;
+  --ok-soft: #16271f;
+
+  --c-page: 14 14 24;
+  --c-surface: 24 24 38;
+  --c-surface-2: 32 32 50;
+  --c-fg: 243 243 249;
+  --c-ink-2: 180 180 203;
+  --c-muted: 123 123 150;
+  --c-border: 42 42 60;
+  --c-line-2: 55 55 73;
+  --c-primary: 124 114 255;
   --c-primary-fg: 255 255 255;
-  --c-accent: 245 158 11; /* amber-500 */
-  --c-ring: 96 165 250; /* blue-400 */
-  --c-danger: 248 113 113; /* red-400 */
-  --c-warning: 251 191 36; /* amber-400 */
-  --c-success: 52 211 153; /* emerald-400 */
-  --c-info: 96 165 250; /* blue-400 */
-  --c-merit: 96 165 250;
+  --c-accent-2: 157 149 255;
+  --c-accent-soft: 34 33 56;
+  --c-accent: 246 178 61;
+  --c-warm: 246 178 61;
+  --c-warm-soft: 46 39 24;
+  --c-ring: 124 114 255;
+  --c-danger: 255 117 101;
+  --c-due: 255 117 101;
+  --c-due-soft: 55 35 31;
+  --c-due-ink: 255 150 134;
+  --c-warning: 246 178 61;
+  --c-success: 52 211 153;
+  --c-ok: 52 211 153;
+  --c-ok-soft: 22 39 31;
+  --c-info: 124 114 255;
+  --c-merit: 124 114 255;
   --c-sloan: 45 212 191;
-  --c-personal: 148 163 184;
-  --c-shared: 167 139 250;
+  --c-personal: 123 123 150;
+  --c-shared: 157 149 255;
   color-scheme: dark;
 }
 
@@ -52,7 +145,11 @@
   body {
     @apply bg-page text-fg antialiased;
   }
-  /* Visible focus rings for keyboard users on interactive elements. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
   a:focus-visible,
   button:focus-visible,
   input:focus-visible,
@@ -65,25 +162,89 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-border bg-surface shadow-card;
+    @apply rounded-[14px] border border-border bg-surface;
+    box-shadow: 0 2px 14px rgb(81 69 230 / 0.05);
+  }
+  .panel {
+    @apply rounded-[22px] border border-border bg-surface;
+    box-shadow: 0 2px 14px rgb(81 69 230 / 0.05);
   }
   .chip {
     @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums;
   }
+  /* Eyebrow / kicker / section label */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase;
+    letter-spacing: 0.12em;
+  }
   .btn {
-    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-[11px] px-3.5 py-2 text-sm font-semibold transition-all duration-150 disabled:pointer-events-none disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-primary text-primary-fg hover:opacity-90;
+    @apply btn;
+    color: var(--accent-ink);
+    background: var(--accent);
+    box-shadow: 0 6px 16px rgb(81 69 230 / 0.28);
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgb(81 69 230 / 0.34);
   }
   .btn-outline {
-    @apply btn border border-border bg-surface text-fg hover:bg-surface2;
+    @apply btn border bg-surface text-fg;
+    border-color: var(--line-2);
+  }
+  .btn-outline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .btn-ghost {
     @apply btn text-fg hover:bg-surface2;
   }
   .input {
-    @apply rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-fg transition-colors placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply rounded-[11px] border bg-surface px-3.5 py-2 text-sm text-fg transition-colors placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    border-color: var(--line-2);
+  }
+  /* Faint dot-grid + corner glow for hero / hub panels */
+  .texture {
+    position: relative;
+    isolation: isolate;
+  }
+  .texture::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      var(--line-2) 1px,
+      transparent 0
+    );
+    background-size: 22px 22px;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .texture::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: radial-gradient(
+      closest-side at 100% 0,
+      var(--accent-soft),
+      transparent 70%
+    );
+    pointer-events: none;
+  }
+  .lift {
+    transition: transform 0.18s ease, box-shadow 0.18s ease,
+      border-color 0.18s ease;
+  }
+  .lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgb(81 69 230 / 0.12);
   }
 }
 

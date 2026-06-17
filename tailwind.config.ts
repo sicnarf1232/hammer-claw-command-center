@@ -28,6 +28,18 @@ const config: Config = {
         warning: t("--c-warning"),
         success: t("--c-success"),
         info: t("--c-info"),
+        // Film Room palette
+        ink2: t("--c-ink-2"),
+        line2: t("--c-line-2"),
+        accent2: t("--c-accent-2"),
+        accentSoft: t("--c-accent-soft"),
+        warm: t("--c-warm"),
+        warmSoft: t("--c-warm-soft"),
+        due: t("--c-due"),
+        dueSoft: t("--c-due-soft"),
+        dueInk: t("--c-due-ink"),
+        ok: t("--c-ok"),
+        okSoft: t("--c-ok-soft"),
         // Workstream identity accents (merit, sloan, personal, shared)
         merit: t("--c-merit"),
         sloan: t("--c-sloan"),
@@ -44,16 +56,16 @@ const config: Config = {
         "2xs": ["0.6875rem", { lineHeight: "1rem" }], // 11px
       },
       boxShadow: {
-        card: "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.05)",
-        elevated: "0 6px 20px -4px rgb(15 23 42 / 0.12)",
+        card: "0 2px 14px rgb(81 69 230 / 0.05)",
+        elevated: "0 10px 24px rgb(81 69 230 / 0.12)",
       },
       keyframes: {
         "fade-in": {
-          from: { opacity: "0", transform: "translateY(2px)" },
+          from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
       },
-      animation: { "fade-in": "fade-in 200ms ease-out" },
+      animation: { "fade-in": "fade-in 320ms cubic-bezier(0.22,1,0.36,1)" },
     },
   },
   plugins: [],
