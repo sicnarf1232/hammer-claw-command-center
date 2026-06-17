@@ -1,5 +1,22 @@
 # Connectivity Roadmap — meetings ↔ tasks ↔ accounts ↔ contacts
 
+## ▶ PICKUP — start here next session: Phase C (editable meeting notes)
+
+Done so far: the **Film Room redesign** (whole app, sidebar shell, SN Pro,
+3 meeting screens — see `docs/design/Film Room Preview.dc.html`) and **Phase A**
+(meetings carry real tasks: owner class me/team/customer, Jordan's items become
+tasks dated to the meeting, vague/missing dues flagged `⚑ needs due date`).
+Working tree clean and pushed at commit `f910606`.
+
+Phase C goal: an **in-app editor for a meeting note that writes back to the
+vault** as a commit. It is the surface that (a) clears the Phase-A
+`[due:: TBD]` flags by setting a real date, (b) reassigns attendees/owners,
+and (c) edits the account, sections, and action items.
+Key files to touch: `app/meetings/page.tsx` (MeetingDetail → add edit mode),
+a new client editor component, `lib/writeback.ts` (add a meeting-note writer,
+mirror `completeTask`), and `lib/vault/meetings.ts` (the parser is the contract).
+Writes go through `lib/github.writeFile` (already busts the SHA/tree cache).
+
 Status: PLANNING (2026-06-17). Captures the connected-system vision: meetings
 flow Granola → app → vault, carry real tasks, tie to accounts + contacts, are
 editable in-app, and export to a shareable PDF. Sequenced; nothing built yet
