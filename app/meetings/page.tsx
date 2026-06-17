@@ -4,6 +4,8 @@ import {
   getMeetingsIndex,
   getMeetingNoteByPath,
   getRoster,
+  getSeriesList,
+  getSeriesByPath,
 } from "@/lib/vault";
 import type { Roster, ActionItem } from "@/lib/vault/types";
 import { Attendee } from "@/components/Attendee";
@@ -18,7 +20,7 @@ export const revalidate = 0;
 export default async function MeetingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ note?: string }>;
+  searchParams: Promise<{ note?: string; series?: string }>;
 }) {
   if (!vaultConfigured()) {
     return (
@@ -32,6 +34,9 @@ export default async function MeetingsPage({
   if (sp.note) {
     return <MeetingDetail path={sp.note} />;
   }
+  if (sp.series) {
+    return <SeriesDetail path={sp.series} />;
+  }
 
   let rows: Awaited<ReturnType<typeof getMeetingsIndex>> = [];
   let error: string | null = null;
@@ -40,12 +45,38 @@ export default async function MeetingsPage({
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to read the meetings index.";
   }
+  const seriesList = await getSeriesList().catch(() => []);
 
   return (
     <Shell subtitle={`${rows.length} meetings in the index`}>
       {granolaConfigured() && (
         <div className="mb-4 flex justify-end">
           <PullFromGranola />
+        </div>
+      )}
+      {seriesList.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+            Rolling series
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {seriesList.map((s) => (
+              <Link
+                key={s.path}
+                href={`/meetings?series=${encodeURIComponent(s.path)}`}
+                className="card flex items-center gap-2 px-3 py-2 text-sm transition-shadow hover:shadow-elevated"
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: s.color || "var(--color-muted)" }}
+                />
+                <span className="font-medium text-fg">{s.name}</span>
+                {s.cadence && (
+                  <span className="text-xs text-muted">· {s.cadence}</span>
+                )}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
       {error ? (
@@ -240,6 +271,90 @@ function FullNotesSection({ body }: { body: string }) {
         ))}
       </div>
     </div>
+  );
+}
+
+async function SeriesDetail({ path }: { path: string }) {
+  let series: Awaited<ReturnType<typeof getSeriesByPath>> = null;
+  let error: string | null = null;
+  try {
+    series = await getSeriesByPath(path);
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to read the series.";
+  }
+
+  if (error) {
+    return (
+      <Shell>
+        <BackLink />
+        <div className="card mt-3 max-w-2xl border-danger/30 p-5 text-sm text-danger">
+          {error}
+        </div>
+      </Shell>
+    );
+  }
+  if (!series) {
+    return (
+      <Shell>
+        <BackLink />
+        <div className="card mt-3 max-w-2xl p-5 text-sm text-muted">
+          Series not found at <code className="font-mono">{path}</code>.
+        </div>
+      </Shell>
+    );
+  }
+
+  const meta = [
+    series.cadence,
+    series.updated ? `updated ${series.updated}` : null,
+    series.participants.length ? series.participants.join(", ") : null,
+  ].filter(Boolean);
+
+  return (
+    <Shell>
+      <BackLink />
+      <div className="mt-3 max-w-3xl">
+        <div className="flex items-center gap-2">
+          <span
+            className="h-2.5 w-2.5 rounded-full"
+            style={{ background: series.color || "var(--color-muted)" }}
+          />
+          <h2 className="text-2xl font-semibold tracking-tight text-fg">
+            {series.name}
+          </h2>
+        </div>
+        <div className="mt-1 text-sm text-muted">{meta.join(" · ")}</div>
+
+        <div className="mt-5">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+            Current State
+          </div>
+          <div className="card whitespace-pre-wrap p-4 text-sm leading-relaxed text-fg/85">
+            {series.currentState || "(none yet)"}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+            Meeting Log
+          </div>
+          {series.log.length === 0 ? (
+            <div className="text-sm text-muted">No entries yet.</div>
+          ) : (
+            <div className="grid gap-2">
+              {series.log.map((e, i) => (
+                <div key={i} className="card p-3">
+                  <div className="text-sm font-medium text-fg">{e.heading}</div>
+                  <div className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-fg/70">
+                    {e.text.trim()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Shell>
   );
 }
 

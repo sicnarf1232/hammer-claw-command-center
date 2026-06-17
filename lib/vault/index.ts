@@ -11,6 +11,7 @@ import {
 import { parseTasks } from "./tasks";
 import { parseRoster } from "./roster";
 import { parseMeetingNote, parseMeetingsIndex } from "./meetings";
+import { parseSeriesDoc, SERIES_DIR_MARKER, type Series } from "./series";
 import { splitFrontmatter } from "./frontmatter";
 import { todayISO, isISODate, isOnOrBefore } from "@/lib/dates";
 import type {
@@ -153,4 +154,29 @@ export async function getFrontmatter(path: string) {
   const file = await getFile(path);
   if (!file) return null;
   return splitFrontmatter(file.content).frontmatter;
+}
+
+// ---- Rolling-series notes ----
+
+export type { Series } from "./series";
+
+// All rolling-series docs (under */Meetings/_Series/), newest activity first.
+export async function getSeriesList(): Promise<Series[]> {
+  if (!isVaultConfigured()) return [];
+  const files = (await listMarkdownFiles()).filter((f) =>
+    f.path.includes(SERIES_DIR_MARKER),
+  );
+  if (!files.length) return [];
+  const contents = await readFiles(files);
+  return contents
+    .filter(Boolean)
+    .map((f) => parseSeriesDoc(f.content, f.path))
+    .sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""));
+}
+
+export async function getSeriesByPath(path: string): Promise<Series | null> {
+  if (!isVaultConfigured()) return null;
+  const file = await getFile(path);
+  if (!file) return null;
+  return parseSeriesDoc(file.content, path);
 }

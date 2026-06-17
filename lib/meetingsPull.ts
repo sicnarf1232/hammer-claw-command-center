@@ -8,13 +8,22 @@ import {
 import {
   getFile,
   listMarkdownFiles,
+  readFiles,
   writeFile,
 } from "@/lib/github";
 import { vaultConfigured, parseMeetingsIndex, getRoster } from "@/lib/vault";
 import { classifyName } from "@/lib/vault/roster";
 import type { Roster } from "@/lib/vault/types";
+import {
+  parseSeriesDoc,
+  matchesSeries,
+  applyMeetingToSeries,
+  mmdd,
+  SERIES_DIR_MARKER,
+  type Series,
+} from "@/lib/vault/series";
 import { listAccounts } from "@/lib/accounts";
-import { triageMeeting } from "@/lib/ai";
+import { triageMeeting, updateSeries, type TriagedMeeting } from "@/lib/ai";
 import {
   meetingBasename,
   meetingFolder,
@@ -42,6 +51,10 @@ export interface PullError {
   title: string;
   error: string;
 }
+export interface PullSeriesUpdate {
+  series: string;
+  date: string;
+}
 export interface PullResult {
   createdAfter: string;
   considered: number;
@@ -49,6 +62,7 @@ export interface PullResult {
   filed: PullFiled[];
   skipped: PullSkipped[];
   errors: PullError[];
+  seriesUpdated: PullSeriesUpdate[];
 }
 
 // Pull recent Granola meetings into the vault: triage each into the right
@@ -87,14 +101,20 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   const knownAccounts = accounts.map((a) => a.name);
   const existingBasenames = new Set(
     allFiles
-      .filter((f) => f.path.includes("/Meetings/"))
+      .filter(
+        (f) =>
+          f.path.includes("/Meetings/") &&
+          !f.path.includes(SERIES_DIR_MARKER),
+      )
       .map((f) => basenameOfPath(f.path).toLowerCase()),
   );
+  const series = await loadSeries(allFiles);
 
   const filed: PullFiled[] = [];
   const skipped: PullSkipped[] = [];
   const errors: PullError[] = [];
   const newRows: MeetingRow[] = [];
+  const seriesUpdated: PullSeriesUpdate[] = [];
 
   // 4) One note at a time (respects Granola + Anthropic rate limits).
   for (const summary of candidates) {
@@ -128,6 +148,11 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
         continue;
       }
 
+      // Series membership: a clear match links the note to the series and lets
+      // us refresh the rolling doc after the note is filed.
+      const matched = findSeries(series, triaged, attendees);
+      if (matched) triaged.series = matched.name;
+
       const folder = meetingFolder(triaged.workstream, triaged.account);
       const path = `${folder}/${finalBasename}.md`;
       const content = renderMeetingNote({
@@ -159,6 +184,44 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
         title: triaged.title,
         basename: finalBasename,
       });
+
+      // Update the rolling-series doc if this meeting belongs to one.
+      if (matched) {
+        try {
+          const upd = await updateSeries({
+            seriesName: matched.name,
+            cadence: matched.cadence,
+            currentState: matched.currentState,
+            meetingTitle: triaged.title,
+            meetingDate: date,
+            meetingSummary: seriesSummary(triaged),
+          });
+          const newContent = applyMeetingToSeries(
+            matched,
+            {
+              date,
+              title: triaged.title,
+              bullets: upd.logBullets,
+              meetingBasename: finalBasename,
+            },
+            upd.currentState,
+            mmdd(date),
+          );
+          await writeFile({
+            path: matched.path,
+            content: newContent,
+            message: `app: update series ${matched.name} ${date}`,
+          });
+          // Refresh in memory so a second meeting in the same pull stacks on it.
+          Object.assign(matched, parseSeriesDoc(newContent, matched.path));
+          seriesUpdated.push({ series: matched.name, date });
+        } catch (e) {
+          errors.push({
+            title: `series: ${matched.name}`,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
     } catch (err) {
       errors.push({
         title: label,
@@ -187,10 +250,62 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
     filed,
     skipped,
     errors,
+    seriesUpdated,
   };
 }
 
 // ---- helpers ----
+
+async function loadSeries(
+  allFiles: { path: string; sha: string; size?: number }[],
+): Promise<Series[]> {
+  const seriesFiles = allFiles.filter((f) =>
+    f.path.includes(SERIES_DIR_MARKER),
+  );
+  if (!seriesFiles.length) return [];
+  const contents = await readFiles(seriesFiles);
+  return contents
+    .filter(Boolean)
+    .map((f) => parseSeriesDoc(f.content, f.path));
+}
+
+function findSeries(
+  all: Series[],
+  t: TriagedMeeting,
+  attendees: string[],
+): Series | null {
+  for (const s of all) {
+    if (s.status?.toLowerCase() === "archived") continue;
+    if (
+      matchesSeries(s, {
+        title: t.title,
+        attendees,
+        topicText: `${t.topic ?? ""} ${t.tldr}`,
+      })
+    ) {
+      return s;
+    }
+  }
+  return null;
+}
+
+function seriesSummary(t: TriagedMeeting): string {
+  const parts: string[] = [t.tldr];
+  const jordans = t.actionItems
+    .filter((a) => a.isJordans)
+    .map((a) => `- ${a.text}${a.due ? ` (due ${a.due})` : ""}`);
+  if (jordans.length) parts.push(`Jordan's open items:\n${jordans.join("\n")}`);
+  if (t.decisions.length) {
+    parts.push(`Decisions:\n${t.decisions.map((d) => `- ${d}`).join("\n")}`);
+  }
+  if (t.numbers.length) {
+    parts.push(`Numbers:\n${t.numbers.map((d) => `- ${d}`).join("\n")}`);
+  }
+  if (t.watchouts.length) {
+    parts.push(`Watch-outs:\n${t.watchouts.map((d) => `- ${d}`).join("\n")}`);
+  }
+  return parts.join("\n\n");
+}
 
 function meetingStartISO(note: GranolaNote): string {
   return note.calendar_event?.scheduled_start_time ?? note.created_at;

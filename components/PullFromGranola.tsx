@@ -14,6 +14,7 @@ interface PullResult {
   filed: PullFiled[];
   skipped: { title: string; reason: string }[];
   errors: { title: string; error: string }[];
+  seriesUpdated: { series: string; date: string }[];
   truncated: boolean;
 }
 
@@ -76,6 +77,16 @@ export default function PullFromGranola() {
                 </li>
               ))}
             </ul>
+          )}
+          {result.seriesUpdated?.length > 0 && (
+            <div className="mt-1.5 text-muted">
+              Updated {result.seriesUpdated.length} rolling series:{" "}
+              <span className="text-fg">
+                {Array.from(
+                  new Set(result.seriesUpdated.map((s) => s.series)),
+                ).join(", ")}
+              </span>
+            </div>
           )}
           {result.skipped.length > 0 && (
             <div className="mt-1.5 text-muted">

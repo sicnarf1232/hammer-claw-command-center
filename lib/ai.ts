@@ -271,6 +271,73 @@ function normalizeTriage(
   };
 }
 
+// ---- Rolling-series update (Granola pull) ----
+
+export interface SeriesUpdateInput {
+  seriesName: string;
+  cadence?: string;
+  currentState: string; // the existing Current State markdown (may be empty)
+  meetingTitle: string;
+  meetingDate: string; // YYYY-MM-DD
+  meetingSummary: string; // tldr + key points for this meeting
+}
+
+export interface SeriesUpdate {
+  logBullets: string[]; // 3-5 concise bullets for this meeting's log entry
+  currentState: string; // rewritten Current State markdown
+}
+
+// Maintain a rolling-series note when a matching meeting is filed: produce a
+// short log entry and rewrite Current State (carry forward open threads, retire
+// resolved ones, update numbers/dates/status). Does not restate action items.
+export async function updateSeries(
+  input: SeriesUpdateInput,
+): Promise<SeriesUpdate> {
+  const system = [
+    `You maintain the rolling-series note "${input.seriesName}"${input.cadence ? ` (${input.cadence})` : ""} for Jordan Francis.`,
+    "A new meeting in this series was just filed. Do two things:",
+    "1) logBullets: 3-5 concise bullets summarizing THIS meeting for the reverse-chronological log. Capture what moved, asks, and status. Do not restate the full action-item list.",
+    "2) currentState: rewrite the pinned Current State markdown. Carry forward still-open threads, retire resolved ones, update numbers, dates, and status. Keep it tight and current; it is the single source of truth for where this stands. Use short markdown (bold lead-ins, bullets) like the existing one.",
+    "House style: never use em dashes (use commas, colons, or periods). Do not invent facts. Work only from the existing Current State and the new meeting.",
+    'Output ONLY a single JSON object: {"logBullets":["..."],"currentState":"..."}',
+  ].join("\n");
+
+  const parts = [
+    `Existing Current State:\n${input.currentState.trim() || "(none yet, this may be the first entry)"}`,
+    "",
+    `New meeting: ${input.meetingTitle} (${input.meetingDate})`,
+    "",
+    `Meeting summary:\n${input.meetingSummary.slice(0, 6000)}`,
+    "",
+    "Return the JSON object now.",
+  ];
+
+  const res = await client().messages.create({
+    model: model(),
+    max_tokens: 2000,
+    system,
+    messages: [{ role: "user", content: parts.join("\n") }],
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  const raw = parseJsonObject(text);
+  const bullets = Array.isArray(raw.logBullets)
+    ? raw.logBullets
+        .map((b) => noEmDash(String(b).trim()))
+        .filter(Boolean)
+        .slice(0, 5)
+    : [];
+  const currentState = noEmDash(
+    typeof raw.currentState === "string" ? raw.currentState.trim() : "",
+  );
+  return { logBullets: bullets, currentState };
+}
+
 // Generate a brief (morning brief, EOD recap, weekly review) from a context
 // blob the caller assembles. Returns markdown body (no frontmatter).
 export async function generateBrief(args: {
