@@ -115,3 +115,9 @@ One line per phase boundary: what shipped and any decisions made.
 - Meeting render: title `Title -- Account`, a `**Bucket:** <bucket> · <topic>` meta line, plain action items with `🗓️ Due:`, and frontmatter trimmed to the vault's set (no `topic`/`source`/`granola_url`). The meeting parser now reads the topic from the Bucket/Topic body line. Dedup stays by date+title basename, which bridges the old UUID `granola_id` and the new `not_` API ids.
 - 52 tests pass (incl. a real-vault-shape series doc with derived matchRules), typecheck + build clean.
 - Operational (Jordan): to avoid two writers on the same files, retire the Cowork Granola-triage scheduler once the app pull is trusted (PUNCHLIST). The app and Cowork both write meeting notes, `Meetings-Index.md`, and the rolling docs.
+
+## Feature — meetings Hub + dedup hardening (2026-06-17)
+
+- Pull window is now exclusive of the newest indexed day (`isoStartOfDayAfter`, with a Mountain-Time cushion), so re-pulls can never re-fetch a day already filed and cannot recreate duplicates even when an existing note carries a different title or id (the transition-from-Cowork failure mode). Trade-off: no intra-day incremental pull, which fits the daily EOD workflow.
+- `/meetings` is now a Hub (`components/MeetingsHub.tsx`): a view toggle (By date / By month / By customer), client-side search across title/bucket/date, a freshness line (count + newest date), and meeting-type labels (Customer · <Account> vs Internal). Runs entirely off the index rows, no extra vault reads. Rolling-series chips and the meeting/series detail views are unchanged.
+- Not yet built from the handoff Hub spec (need per-note reads): attendee bubbles colored by team and the cross-meeting action-item rollup.

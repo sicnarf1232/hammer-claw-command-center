@@ -12,6 +12,7 @@ import { Attendee } from "@/components/Attendee";
 import { PriorityChip } from "@/components/chips";
 import SetupNotice from "@/components/SetupNotice";
 import PullFromGranola from "@/components/PullFromGranola";
+import MeetingsHub from "@/components/MeetingsHub";
 import { granolaConfigured } from "@/lib/granola";
 
 export const dynamic = "force-dynamic";
@@ -92,35 +93,14 @@ export default async function MeetingsPage({
           </p>
         </div>
       ) : (
-        <div className="grid max-w-3xl gap-2">
-          {rows.map((r, i) => (
-            <div
-              key={`${r.date}-${i}`}
-              className="card flex items-center justify-between gap-3 p-3 transition-shadow hover:shadow-elevated"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-fg">
-                  {r.title}
-                </div>
-                <div className="mt-0.5 text-xs text-muted">
-                  <span className="font-mono tabular-nums">{r.date}</span> ·{" "}
-                  {r.bucket}
-                  {!r.notePath && " · note not found"}
-                </div>
-              </div>
-              {r.notePath ? (
-                <Link
-                  href={`/meetings?note=${encodeURIComponent(r.notePath)}`}
-                  className="btn btn-outline shrink-0 cursor-pointer"
-                >
-                  Open
-                </Link>
-              ) : (
-                <span className="shrink-0 text-xs text-muted">missing</span>
-              )}
-            </div>
-          ))}
-        </div>
+        <MeetingsHub
+          rows={rows.map((r) => ({
+            date: r.date,
+            bucket: r.bucket,
+            title: r.title,
+            notePath: r.notePath,
+          }))}
+        />
       )}
     </Shell>
   );
