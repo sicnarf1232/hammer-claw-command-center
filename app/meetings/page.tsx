@@ -49,35 +49,10 @@ export default async function MeetingsPage({
   const seriesList = await getSeriesList().catch(() => []);
 
   return (
-    <Shell subtitle={`${rows.length} meetings in the index`}>
+    <div>
       {granolaConfigured() && (
         <div className="mb-4 flex justify-end">
           <PullFromGranola />
-        </div>
-      )}
-      {seriesList.length > 0 && (
-        <div className="mb-6">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
-            Rolling series
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {seriesList.map((s) => (
-              <Link
-                key={s.path}
-                href={`/meetings?series=${encodeURIComponent(s.path)}`}
-                className="card flex items-center gap-2 px-3 py-2 text-sm transition-shadow hover:shadow-elevated"
-              >
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: s.color || "var(--color-muted)" }}
-                />
-                <span className="font-medium text-fg">{s.name}</span>
-                {s.cadence && (
-                  <span className="text-xs text-muted">· {s.cadence}</span>
-                )}
-              </Link>
-            ))}
-          </div>
         </div>
       )}
       {error ? (
@@ -100,9 +75,16 @@ export default async function MeetingsPage({
             title: r.title,
             notePath: r.notePath,
           }))}
+          series={seriesList.map((s) => ({
+            name: s.name,
+            path: s.path,
+            cadence: s.cadence,
+            sessions: s.log.length,
+            latest: s.updated,
+          }))}
         />
       )}
-    </Shell>
+    </div>
   );
 }
 
