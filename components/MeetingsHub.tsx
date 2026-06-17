@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { customerHue, initials, isInternalBucket } from "@/lib/customerHues";
 
@@ -40,7 +39,6 @@ export default function MeetingsHub({
   rows: HubRow[];
   series?: HubSeries[];
 }) {
-  const router = useRouter();
   const [view, setView] = useState<View>("customers");
   const [query, setQuery] = useState("");
   const [tile, setTile] = useState<string>("all"); // active tile key
@@ -88,14 +86,6 @@ export default function MeetingsHub({
               Every conversation across customers and rolling series, grouped,
               deduped, and ready to brief in seconds.
             </p>
-          </div>
-          <div className="flex gap-2">
-            <button className="btn-primary" onClick={() => router.refresh()}>
-              Refresh from Vault
-            </button>
-            <Link href="/meetings" className="btn-outline">
-              Edit
-            </Link>
           </div>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
