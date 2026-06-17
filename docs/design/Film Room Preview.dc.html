@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  @font-face{font-family:'SN Pro';src:url('fonts/SNPro.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap;}
+  @font-face{font-family:'SN Pro';src:url('fonts/SNPro-Italic.ttf') format('truetype');font-weight:100 900;font-style:italic;font-display:swap;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  @keyframes tl-fadeup{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+  ::selection{background:#5145E6;color:#fff;}
+  *::-webkit-scrollbar{height:9px;width:9px;}
+  *::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;}
+  .ico{width:18px;height:18px;flex:none;}
+</style>
+</helmet>
+
+<div ref="{{ rootRef }}" style="--canvas:#F4F4F9;--surface:#FFFFFF;--surface-2:#F2F2F8;--ink:#16162A;--ink-2:#4A4A63;--ink-3:#8B8BA3;--line:#E7E7F0;--line-2:#D6D6E4;--accent:#5145E6;--accent-2:#4A3FD0;--accent-ink:#FFFFFF;--accent-soft:#ECEBFD;--warm:#F59E0B;--warm-soft:#FEF4E3;--due:#E4584A;--due-soft:#FCEAE7;--due-ink:#BE3B2E;--ok:#12A150;--ok-soft:#E5F5EC;--font-display:'SN Pro',system-ui,sans-serif;--font-body:'SN Pro',system-ui,sans-serif;display:flex;min-height:100vh;background:var(--canvas);color:var(--ink);font-family:var(--font-body);-webkit-font-smoothing:antialiased;">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside style="width:236px;flex:none;background:var(--surface);border-right:1px solid var(--line);height:100vh;position:sticky;top:0;display:flex;flex-direction:column;padding:18px 14px;">
+    <div style="display:flex;align-items:center;gap:12px;padding:6px 10px 20px;">
+      <div style="width:38px;height:38px;border-radius:11px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 4px 12px rgba(81,69,230,.32);">
+        <div style="display:flex;gap:3px;align-items:flex-end;">
+          <span style="width:4px;height:15px;background:var(--accent-ink);border-radius:2px;transform:skewX(-12deg);"></span>
+          <span style="width:4px;height:10px;background:var(--accent-ink);border-radius:2px;transform:skewX(-12deg);opacity:.7;"></span>
+        </div>
+      </div>
+      <div style="line-height:1;">
+        <div style="font-family:var(--font-display);font-weight:700;font-size:17px;letter-spacing:-.02em;color:var(--ink);">{{ productName }}</div>
+        <div style="font-weight:600;font-size:8px;letter-spacing:.22em;color:var(--ink-3);margin-top:4px;">{{ tagline }}</div>
+      </div>
+    </div>
+
+    <nav style="display:flex;flex-direction:column;gap:2px;">
+      <div onClick="{{ goToday }}" style="{{ navToday }}">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m9 15 2 2 4-4"/></svg>
+        <span>Today</span>
+      </div>
+      <div onClick="{{ goTasks }}" style="{{ navTasks }}">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7 2 2 3-3M3 16l2 2 3-3"/><path d="M13 7h8M13 17h8"/></svg>
+        <span>Tasks</span>
+      </div>
+      <div onClick="{{ goInbox }}" style="{{ navInbox }}">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        <span>Inbox</span>
+        <span style="margin-left:auto;font-size:10.5px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 7px;">4</span>
+      </div>
+      <div onClick="{{ goAccounts }}" style="{{ navAccounts }}">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></svg>
+        <span>Accounts</span>
+      </div>
+      <div onClick="{{ goMeetings }}" style="{{ navMeetings }}">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Film Room</span>
+      </div>
+      <div onClick="{{ goQuote }}" style="{{ navQuote }}">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        <span>Quote</span>
+      </div>
+      <div onClick="{{ goActivity }}" style="{{ navActivity }}">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span>Activity</span>
+      </div>
+    </nav>
+
+    <button onClick="{{ toggleDark }}" style="margin-top:auto;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;border:none;background:none;color:var(--ink-2);font-family:var(--font-body);font-weight:600;font-size:14px;cursor:pointer;transition:all .15s ease;" style-hover="background:var(--surface-2);">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+      <span>{{ darkLabel }}</span>
+    </button>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div style="flex:1;min-width:0;height:100vh;overflow-y:auto;">
+
+  <!-- ===== TODAY ===== -->
+  <sc-if value="{{ isToday }}" hint-placeholder-val="{{ true }}">
+  <div style="max-width:1180px;margin:0 auto;padding:32px 36px 90px;animation:tl-fadeup .35s ease both;">
+    <div style="position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:30px 34px;margin-bottom:22px;box-shadow:0 2px 14px rgba(81,69,230,.05);">
+      <div style="position:absolute;inset:0;background-image:radial-gradient(circle at 1px 1px,var(--line-2) 1px,transparent 0);background-size:22px 22px;opacity:.5;pointer-events:none;"></div>
+      <div style="position:absolute;top:-150px;right:-110px;width:360px;height:360px;border-radius:50%;background:radial-gradient(closest-side,var(--accent-soft),transparent);pointer-events:none;"></div>
+      <div style="position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+        <div>
+          <div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:12px;background:var(--ok-soft);border-radius:999px;padding:5px 12px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(18,161,80,.18);"></span>
+            <span style="font-weight:600;font-size:10.5px;letter-spacing:.1em;color:var(--ok);text-transform:uppercase;">Synced · just now</span>
+          </div>
+          <h1 style="font-family:var(--font-display);font-weight:700;font-size:32px;letter-spacing:-.025em;margin:0 0 6px;">Good morning, Jordan</h1>
+          <p style="margin:0;font-size:15px;color:var(--ink-2);">Tuesday, June 17 · here's what needs you today.</p>
+        </div>
+        <button style="display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:var(--accent-ink);border:none;border-radius:11px;padding:12px 18px;font-family:var(--font-display);font-weight:600;font-size:13.5px;cursor:pointer;box-shadow:0 6px 16px rgba(81,69,230,.28);transition:all .18s ease;" style-hover="transform:translateY(-1px);box-shadow:0 10px 22px rgba(81,69,230,.36);">↻ Refresh from Vault</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:26px;">
+      <sc-for list="{{ todayKpis }}" as="k" hint-placeholder-count="5">
+        <div style="{{ k.cardStyle }}" style-hover="transform:translateY(-2px);box-shadow:0 10px 22px rgba(81,69,230,.1);border-color:var(--accent);">
+          <div style="font-family:var(--font-display);font-weight:700;font-size:28px;line-height:1;letter-spacing:-.02em;color:{{ k.color }};">{{ k.value }}</div>
+          <div style="font-weight:600;font-size:10px;letter-spacing:.1em;color:var(--ink-3);margin-top:9px;text-transform:uppercase;">{{ k.label }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start;">
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 24px;box-shadow:0 2px 14px rgba(81,69,230,.04);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <span style="font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;">Top of mind · due today</span>
+            <span style="font-weight:700;font-size:11.5px;color:var(--due-ink);background:var(--due-soft);border-radius:999px;padding:3px 10px;">4 urgent</span>
+          </div>
+          <sc-for list="{{ topOfMind }}" as="t" hint-placeholder-count="4">
+            <div style="display:flex;align-items:flex-start;gap:14px;padding:13px 12px;margin:0 -12px;border-radius:11px;transition:background .15s ease;cursor:pointer;" style-hover="background:var(--surface-2);">
+              <span style="width:18px;height:18px;border:2px solid var(--line-2);border-radius:6px;flex:none;margin-top:1px;"></span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:14.5px;color:var(--ink);line-height:1.4;">{{ t.text }}</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:7px;">
+                  <span style="{{ t.acctStyle }}">{{ t.acct }}</span>
+                  <span style="font-weight:600;font-size:10px;letter-spacing:.04em;color:var(--due-ink);background:var(--due-soft);border-radius:999px;padding:3px 9px;">{{ t.due }}</span>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 24px;box-shadow:0 2px 14px rgba(81,69,230,.04);">
+          <div style="font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px;">Today's meetings</div>
+          <sc-for list="{{ todayMeetings }}" as="m" hint-placeholder-count="3">
+            <div onClick="{{ m.open }}" style="display:flex;align-items:center;gap:16px;padding:13px 12px;margin:0 -12px;border-radius:11px;border-left:3px solid {{ m.hue }};transition:all .15s ease;cursor:pointer;" style-hover="background:var(--surface-2);transform:translateX(3px);">
+              <span style="font-family:var(--font-display);font-weight:700;font-size:13px;color:{{ m.hue }};width:52px;flex:none;">{{ m.time }}</span>
+              <span style="flex:1;min-width:0;font-size:14.5px;font-weight:500;color:var(--ink);">{{ m.title }}</span>
+              <span style="{{ m.tagStyle }}">{{ m.tag }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 24px;box-shadow:0 2px 14px rgba(81,69,230,.04);">
+          <div style="font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px;">Recent activity</div>
+          <sc-for list="{{ recentActivity }}" as="a" hint-placeholder-count="4">
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);">
+              <span style="width:9px;height:9px;border-radius:50%;flex:none;margin-top:5px;background:{{ a.hue }};"></span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13.5px;font-weight:600;color:var(--ink);">{{ a.title }}</div>
+                <div style="font-size:12.5px;color:var(--ink-3);margin-top:2px;line-height:1.4;">{{ a.detail }}</div>
+                <div style="font-size:11px;color:var(--ink-3);margin-top:3px;">{{ a.time }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 24px;box-shadow:0 2px 14px rgba(81,69,230,.04);">
+          <div style="font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px;">Quick actions</div>
+          <div style="display:flex;flex-direction:column;gap:9px;">
+            <button onClick="{{ goQuote }}" style="display:flex;align-items:center;gap:11px;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;font-family:var(--font-body);font-weight:600;font-size:13.5px;color:var(--ink);cursor:pointer;transition:all .15s ease;" style-hover="border-color:var(--accent);color:var(--accent);">+ New quote</button>
+            <button onClick="{{ goInbox }}" style="display:flex;align-items:center;gap:11px;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;font-family:var(--font-body);font-weight:600;font-size:13.5px;color:var(--ink);cursor:pointer;transition:all .15s ease;" style-hover="border-color:var(--accent);color:var(--accent);">⌅ File inbox · 4 new</button>
+            <button onClick="{{ goMeetings }}" style="display:flex;align-items:center;gap:11px;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;font-family:var(--font-body);font-weight:600;font-size:13.5px;color:var(--ink);cursor:pointer;transition:all .15s ease;" style-hover="border-color:var(--accent);color:var(--accent);">→ Open meetings</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== TASKS ===== -->
+  <sc-if value="{{ isTasks }}" hint-placeholder-val="{{ false }}">
+  <div style="max-width:1180px;margin:0 auto;padding:32px 36px 90px;animation:tl-fadeup .35s ease both;">
+    <h1 style="font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.025em;margin:0 0 6px;">Tasks</h1>
+    <p style="margin:0 0 24px;font-size:14.5px;color:var(--ink-2);">Every open action across meetings and accounts, deduped and prioritized.</p>
+    <div style="display:flex;gap:14px;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;">
+      <div style="display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:3px;gap:2px;">
+        <button style="{{ segOnA }}">All</button><button style="{{ segOnB }}">Mine</button><button style="{{ segOnB }}">By account</button>
+      </div>
+      <div style="flex:1;min-width:240px;max-width:360px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line-2);border-radius:11px;padding:11px 16px;">
+        <span style="color:var(--ink-3);font-size:15px;">⌕</span><span style="color:var(--ink-3);font-size:14px;">Search tasks…</span>
+      </div>
+    </div>
+    <sc-for list="{{ taskGroups }}" as="g" hint-placeholder-count="3">
+      <div style="margin-bottom:26px;">
+        <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">
+          <span style="{{ g.dotStyle }}"></span>
+          <span style="font-family:var(--font-display);font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);">{{ g.label }}</span>
+          <span style="font-weight:700;font-size:11.5px;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">{{ g.count }}</span>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:6px 18px;box-shadow:0 2px 14px rgba(81,69,230,.04);">
+          <sc-for list="{{ g.items }}" as="t" hint-placeholder-count="2">
+            <div style="display:flex;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);">
+              <span style="width:18px;height:18px;border:2px solid var(--line-2);border-radius:6px;flex:none;margin-top:1px;"></span>
+              <div style="width:150px;flex:none;">
+                <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.08em;color:var(--accent-2);margin-bottom:7px;">{{ t.owner }}</div>
+                <span style="{{ t.dueStyle }}">{{ t.due }}</span>
+              </div>
+              <div style="flex:1;min-width:0;font-size:14.5px;color:var(--ink);line-height:1.45;">{{ t.text }}</div>
+              <span style="{{ t.acctStyle }}">{{ t.acct }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <!-- ===== INBOX ===== -->
+  <sc-if value="{{ isInbox }}" hint-placeholder-val="{{ false }}">
+  <div style="max-width:1000px;margin:0 auto;padding:32px 36px 90px;animation:tl-fadeup .35s ease both;">
+    <h1 style="font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.025em;margin:0 0 6px;">Inbox</h1>
+    <p style="margin:0 0 24px;font-size:14.5px;color:var(--ink-2);">Flagged emails from Outlook. Classify, then file into the right workstream. 4 new, 8 in view.</p>
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <sc-for list="{{ inboxEmails }}" as="e" hint-placeholder-count="3">
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:0 2px 14px rgba(81,69,230,.04);transition:box-shadow .16s ease;" style-hover="box-shadow:0 10px 24px rgba(81,69,230,.1);">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
+            <div style="min-width:0;">
+              <div style="font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--ink);letter-spacing:-.01em;">{{ e.subject }}</div>
+              <div style="font-size:12.5px;color:var(--ink-3);margin-top:4px;">{{ e.sender }}</div>
+            </div>
+            <span style="{{ e.statusStyle }}">{{ e.status }}</span>
+          </div>
+          <p style="margin:12px 0 0;font-size:14px;color:var(--ink-2);line-height:1.55;">{{ e.snippet }}</p>
+          <div style="font-size:12.5px;color:var(--ink-3);margin-top:12px;font-style:italic;">{{ e.suggestion }}</div>
+          <sc-if value="{{ e.actionable }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap;">
+              <select style="background:var(--surface);border:1px solid var(--line-2);border-radius:9px;padding:9px 12px;font-family:var(--font-body);font-size:13px;color:var(--ink);cursor:pointer;">
+                <option>{{ e.ws }}</option>
+              </select>
+              <input placeholder="{{ e.acctPlaceholder }}" style="background:var(--surface);border:1px solid var(--line-2);border-radius:9px;padding:9px 12px;font-family:var(--font-body);font-size:13px;color:var(--ink);width:160px;" />
+              <button style="background:var(--accent);color:var(--accent-ink);border:none;border-radius:9px;padding:9px 16px;font-family:var(--font-display);font-weight:600;font-size:12.5px;cursor:pointer;box-shadow:0 4px 12px rgba(81,69,230,.25);transition:all .16s ease;" style-hover="transform:translateY(-1px);">File to vault</button>
+              <button style="background:var(--surface);color:var(--ink-2);border:1px solid var(--line-2);border-radius:9px;padding:9px 14px;font-family:var(--font-display);font-weight:600;font-size:12.5px;cursor:pointer;transition:all .16s ease;" style-hover="border-color:var(--due);color:var(--due);">Dismiss</button>
+              <span style="font-family:var(--font-display);font-weight:600;font-size:12.5px;color:var(--accent);cursor:pointer;margin-left:4px;">Reply</span>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== ACCOUNTS (master-detail) ===== -->
+  <sc-if value="{{ isAccounts }}" hint-placeholder-val="{{ false }}">
+  <div style="max-width:1260px;margin:0 auto;padding:32px 36px 50px;animation:tl-fadeup .35s ease both;">
+    <h1 style="font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.025em;margin:0 0 6px;">Accounts</h1>
+    <p style="margin:0 0 22px;font-size:14.5px;color:var(--ink-2);">50 customer accounts · select one to see contacts, pricing, meetings, and open work.</p>
+
+    <div style="display:flex;gap:18px;align-items:flex-start;">
+      <!-- LIST -->
+      <div style="width:312px;flex:none;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:0 2px 14px rgba(81,69,230,.04);">
+        <div style="display:flex;align-items:center;gap:9px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px;">
+          <span style="color:var(--ink-3);font-size:14px;">⌕</span><span style="color:var(--ink-3);font-size:13px;">Search 50 accounts…</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 4px 10px;">
+          <span style="font-weight:600;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:4px 11px;cursor:pointer;">All</span>
+          <span style="font-weight:600;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);cursor:pointer;">Open tasks</span>
+          <span style="font-weight:600;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);cursor:pointer;">Overdue</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;max-height:600px;overflow-y:auto;">
+          <sc-for list="{{ acctRows }}" as="a" hint-placeholder-count="8">
+            <div onClick="{{ a.select }}" style="{{ a.rowStyle }}" style-hover="background:var(--surface-2);">
+              <span style="{{ a.avatarStyle }}">{{ a.initials }}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ a.name }}</div>
+                <div style="font-size:11.5px;font-weight:500;margin-top:2px;color:{{ a.metaColor }};">{{ a.meta }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- DETAIL -->
+      <div style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 2px 14px rgba(81,69,230,.05);">
+        <div style="position:relative;overflow:hidden;padding:26px 30px 22px;border-bottom:1px solid var(--line);">
+          <div style="position:absolute;top:-120px;right:-90px;width:300px;height:300px;border-radius:50%;background:radial-gradient(closest-side,var(--accent-soft),transparent);pointer-events:none;"></div>
+          <div style="position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:16px;">
+              <span style="{{ acctHeaderAvatar }}">{{ acctSelInit }}</span>
+              <div>
+                <h2 style="font-family:var(--font-display);font-weight:700;font-size:23px;letter-spacing:-.02em;margin:0 0 5px;">{{ acctSelName }}</h2>
+                <div style="font-size:12.5px;color:var(--ink-3);">{{ acctSelType }}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="{{ acctSelNumStyle }}">{{ acctSelNum }}</span>
+              <button style="background:var(--accent);color:var(--accent-ink);border:none;border-radius:10px;padding:9px 15px;font-family:var(--font-display);font-weight:600;font-size:12.5px;cursor:pointer;box-shadow:0 4px 12px rgba(81,69,230,.25);transition:all .16s ease;" style-hover="transform:translateY(-1px);">+ Log activity</button>
+            </div>
+          </div>
+          <div style="position:relative;display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
+            <sc-for list="{{ acctStatTiles }}" as="s" hint-placeholder-count="4">
+              <div style="display:flex;align-items:baseline;gap:7px;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:9px 14px;">
+                <span style="font-family:var(--font-display);font-weight:700;font-size:17px;color:{{ s.c }};">{{ s.v }}</span>
+                <span style="font-size:11.5px;color:var(--ink-3);font-weight:500;">{{ s.l }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:flex;padding:0 30px;border-bottom:1px solid var(--line);overflow-x:auto;">
+          <sc-for list="{{ acctTabs }}" as="t" hint-placeholder-count="5">
+            <button onClick="{{ t.open }}" style="{{ t.style }}">{{ t.label }}</button>
+          </sc-for>
+        </div>
+
+        <div style="padding:24px 30px 30px;">
+          <!-- OVERVIEW -->
+          <sc-if value="{{ acctTabOverview }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:28px;align-items:start;">
+            <div>
+              <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px;">Open tasks</div>
+              <sc-for list="{{ acctTasks }}" as="t" hint-placeholder-count="3">
+                <div style="display:flex;align-items:flex-start;gap:13px;padding:12px 0;border-bottom:1px solid var(--line);">
+                  <span style="width:17px;height:17px;border:2px solid var(--line-2);border-radius:5px;flex:none;margin-top:1px;"></span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:14px;color:var(--ink);line-height:1.4;">{{ t.text }}</div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;"><span style="font-family:var(--font-display);font-weight:700;font-size:10px;letter-spacing:.06em;color:var(--accent-2);">{{ t.owner }}</span><span style="{{ t.dueStyle }}">{{ t.due }}</span></div>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:24px 0 10px;">Recent meetings</div>
+              <div style="display:flex;flex-direction:column;gap:9px;">
+                <sc-for list="{{ acctMeetings }}" as="m" hint-placeholder-count="2">
+                  <div onClick="{{ m.open }}" style="{{ m.rowStyle }}" style-hover="transform:translateX(3px);box-shadow:0 8px 20px rgba(81,69,230,.1);">
+                    <span style="{{ m.dateStyle }}">{{ m.date }}</span>
+                    <div style="flex:1;min-width:0;"><div style="{{ m.kickerStyle }}">{{ m.kicker }}</div><div style="font-size:14px;font-weight:500;color:var(--ink);">{{ m.title }}</div></div>
+                    <span style="font-weight:600;font-size:12px;color:var(--ink-3);">Open →</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;">Primary contacts</div>
+              <sc-for list="{{ acctPrimary }}" as="c" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:11px;padding:9px 0;">
+                  <span style="{{ c.avatarStyle }}">{{ c.initials }}</span>
+                  <div style="min-width:0;"><div style="font-size:13.5px;font-weight:600;color:var(--ink);">{{ c.name }}</div><div style="font-size:11.5px;color:var(--ink-3);">{{ c.role }}</div></div>
+                </div>
+              </sc-for>
+              <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:22px 0 6px;">Snapshot</div>
+              <sc-for list="{{ acctSnapshot }}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);">
+                  <span style="font-size:12.5px;color:var(--ink-3);">{{ s.label }}</span>
+                  <span style="font-size:13px;font-weight:600;color:var(--ink);">{{ s.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          </sc-if>
+
+          <!-- CONTACTS -->
+          <sc-if value="{{ acctTabContacts }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ acctContacts }}" as="c" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);">
+              <span style="{{ c.avatarStyle }}">{{ c.initials }}</span>
+              <div style="width:210px;flex:none;"><div style="font-size:14px;font-weight:600;color:var(--ink);">{{ c.name }}</div><div style="font-size:12px;color:var(--ink-3);margin-top:2px;">{{ c.role }}</div></div>
+              <div style="flex:1;min-width:0;font-size:13px;color:var(--accent-2);">{{ c.email }}</div>
+              <div style="font-size:13px;color:var(--ink-2);white-space:nowrap;">{{ c.phone }}</div>
+            </div>
+          </sc-for>
+          </sc-if>
+
+          <!-- PRICING -->
+          <sc-if value="{{ acctTabPricing }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid var(--line);border-radius:13px;overflow:hidden;">
+            <div style="display:grid;grid-template-columns:120px 1fr 90px 80px 90px;background:var(--surface-2);padding:11px 16px;font-weight:700;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);">
+              <span>Part #</span><span>Description</span><span>Your price</span><span>List</span><span>Lead</span>
+            </div>
+            <sc-for list="{{ acctPricing }}" as="q" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:120px 1fr 90px 80px 90px;align-items:center;padding:13px 16px;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink);">
+                <span style="font-family:var(--font-display);font-weight:600;">{{ q.part }}</span>
+                <span>{{ q.desc }}</span>
+                <span style="font-weight:700;color:var(--accent-2);">{{ q.your }}</span>
+                <span style="color:var(--ink-3);text-decoration:line-through;">{{ q.list }}</span>
+                <span style="color:var(--ink-2);">{{ q.lead }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:12.5px;color:var(--ink-3);margin-top:12px;">Negotiated account pricing · 1,144 catalog parts available to add.</div>
+          </sc-if>
+
+          <!-- MEETINGS -->
+          <sc-if value="{{ acctTabMeetings }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <sc-for list="{{ acctMeetings }}" as="m" hint-placeholder-count="2">
+              <div onClick="{{ m.open }}" style="{{ m.rowStyle }}" style-hover="transform:translateX(3px);box-shadow:0 8px 20px rgba(81,69,230,.1);">
+                <span style="{{ m.dateStyle }}">{{ m.date }}</span>
+                <div style="flex:1;min-width:0;"><div style="{{ m.kickerStyle }}">{{ m.kicker }}</div><div style="font-size:14.5px;font-weight:500;color:var(--ink);">{{ m.title }}</div></div>
+                <span style="font-weight:600;font-size:12.5px;color:var(--ink-3);">Open →</span>
+              </div>
+            </sc-for>
+          </div>
+          </sc-if>
+
+          <!-- TASKS -->
+          <sc-if value="{{ acctTabTasks }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ acctTasks }}" as="t" hint-placeholder-count="3">
+            <div style="display:flex;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);">
+              <span style="width:18px;height:18px;border:2px solid var(--line-2);border-radius:6px;flex:none;margin-top:1px;"></span>
+              <div style="width:140px;flex:none;"><div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.08em;color:var(--accent-2);margin-bottom:7px;">{{ t.owner }}</div><span style="{{ t.dueStyle }}">{{ t.due }}</span></div>
+              <div style="flex:1;min-width:0;font-size:14.5px;color:var(--ink);line-height:1.45;">{{ t.text }}</div>
+            </div>
+          </sc-for>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== QUOTE ===== -->
+  <sc-if value="{{ isQuote }}" hint-placeholder-val="{{ false }}">
+  <div style="max-width:1000px;margin:0 auto;padding:32px 36px 90px;animation:tl-fadeup .35s ease both;">
+    <h1 style="font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.025em;margin:0 0 6px;">Quote</h1>
+    <p style="margin:0 0 24px;font-size:14.5px;color:var(--ink-2);">Assemble line items and download a branded PDF, rendered server-side. 1,144 catalog parts loaded.</p>
+
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px 28px;box-shadow:0 2px 14px rgba(81,69,230,.04);">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px;">
+        <div>
+          <label style="display:block;font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px;">Quote title</label>
+          <input value="ISI_06.17.26_TD" style="width:100%;background:var(--surface);border:1px solid var(--line-2);border-radius:11px;padding:12px 14px;font-family:var(--font-body);font-size:14px;color:var(--ink);" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px;">Customer</label>
+          <div style="position:relative;">
+            <select style="width:100%;appearance:none;background:var(--surface);border:1px solid var(--accent);border-radius:11px;padding:12px 38px 12px 14px;font-family:var(--font-body);font-size:14px;color:var(--ink);cursor:pointer;box-shadow:0 0 0 3px rgba(81,69,230,.12);">
+              <option>Select a customer…</option>
+              <sc-for list="{{ customerOptions }}" as="c" hint-placeholder-count="5">
+                <option>{{ c.name }}</option>
+              </sc-for>
+            </select>
+            <span style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--accent);pointer-events:none;font-size:12px;">▾</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--line);border-radius:13px;overflow:hidden;">
+        <div style="display:grid;grid-template-columns:1fr 2fr 70px 100px 100px 60px;gap:0;background:var(--surface-2);padding:11px 16px;font-weight:700;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);">
+          <span>Part #</span><span>Description</span><span>Qty</span><span>Unit cost</span><span>Line total</span><span></span>
+        </div>
+        <sc-for list="{{ quoteLines }}" as="q" hint-placeholder-count="1">
+          <div style="display:grid;grid-template-columns:1fr 2fr 70px 100px 100px 60px;gap:8px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);">
+            <input value="{{ q.part }}" style="background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;font-size:13px;color:var(--ink);font-family:var(--font-body);min-width:0;" />
+            <input value="{{ q.desc }}" style="background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;font-size:13px;color:var(--ink);font-family:var(--font-body);min-width:0;" />
+            <input value="{{ q.qty }}" style="background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;font-size:13px;color:var(--ink);font-family:var(--font-body);min-width:0;" />
+            <input value="{{ q.cost }}" style="background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;font-size:13px;color:var(--ink);font-family:var(--font-body);min-width:0;" />
+            <span style="font-weight:700;font-size:14px;color:var(--ink);">{{ q.total }}</span>
+            <span style="font-size:12.5px;color:var(--ink-3);cursor:pointer;text-align:right;">remove</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;">
+        <button style="background:var(--surface);color:var(--ink-2);border:1px solid var(--line-2);border-radius:10px;padding:10px 16px;font-family:var(--font-display);font-weight:600;font-size:13px;cursor:pointer;transition:all .16s ease;" style-hover="border-color:var(--accent);color:var(--accent);">+ Add line</button>
+        <span style="font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--ink);">Total: <span style="color:var(--accent-2);">$866.00</span></span>
+      </div>
+
+      <label style="display:block;font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:24px 0 8px;">Notes</label>
+      <textarea placeholder="Lead time, sterility, terms…" style="width:100%;min-height:100px;background:var(--surface);border:1px solid var(--line-2);border-radius:11px;padding:12px 14px;font-family:var(--font-body);font-size:14px;color:var(--ink);resize:vertical;"></textarea>
+
+      <button style="margin-top:20px;display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:var(--accent-ink);border:none;border-radius:11px;padding:13px 22px;font-family:var(--font-display);font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 6px 16px rgba(81,69,230,.28);transition:all .18s ease;" style-hover="transform:translateY(-1px);box-shadow:0 10px 22px rgba(81,69,230,.36);">↓ Download PDF</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== ACTIVITY ===== -->
+  <sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
+  <div style="max-width:920px;margin:0 auto;padding:32px 36px 90px;animation:tl-fadeup .35s ease both;">
+    <h1 style="font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.025em;margin:0 0 6px;">Activity</h1>
+    <p style="margin:0 0 26px;font-size:14.5px;color:var(--ink-2);">Notification log: due-today, new flagged email, briefs. In-app only.</p>
+    <div style="position:relative;padding-left:28px;">
+      <div style="position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--line);"></div>
+      <sc-for list="{{ recentActivity }}" as="a" hint-placeholder-count="5">
+        <div style="position:relative;margin-bottom:14px;">
+          <span style="position:absolute;left:-28px;top:20px;width:16px;height:16px;border-radius:50%;border:3px solid var(--canvas);background:{{ a.hue }};"></span>
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 20px;box-shadow:0 1px 3px rgba(22,22,42,.04);transition:box-shadow .16s ease;" style-hover="box-shadow:0 8px 20px rgba(81,69,230,.1);">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+              <div style="min-width:0;">
+                <div style="font-family:var(--font-display);font-weight:700;font-size:14.5px;color:var(--ink);">{{ a.title }}</div>
+                <div style="font-size:13px;color:var(--ink-2);margin-top:3px;line-height:1.45;">{{ a.detail }}</div>
+                <div style="font-size:11.5px;color:var(--ink-3);margin-top:6px;">{{ a.time }} · in-app</div>
+              </div>
+              <span style="{{ a.tagStyle }}">{{ a.type }}</span>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== MEETINGS (3 views) ===== -->
+  <sc-if value="{{ isMIndex }}" hint-placeholder-val="{{ false }}">
+  <div style="max-width:1180px;margin:0 auto;padding:32px 36px 90px;animation:tl-fadeup .35s ease both;">
+    <div style="position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:32px 36px;margin-bottom:24px;box-shadow:0 2px 14px rgba(81,69,230,.05);">
+      <div style="position:absolute;inset:0;background-image:radial-gradient(circle at 1px 1px,var(--line-2) 1px,transparent 0);background-size:22px 22px;opacity:.5;pointer-events:none;"></div>
+      <div style="position:absolute;top:-150px;right:-110px;width:380px;height:380px;border-radius:50%;background:radial-gradient(closest-side,var(--accent-soft),transparent);pointer-events:none;"></div>
+      <div style="position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;">
+        <div style="max-width:580px;">
+          <div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:14px;background:var(--ok-soft);border-radius:999px;padding:5px 12px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(18,161,80,.18);"></span>
+            <span style="font-weight:600;font-size:10.5px;letter-spacing:.1em;color:var(--ok);text-transform:uppercase;">Synced from vault · just now</span>
+          </div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.18em;color:var(--accent);text-transform:uppercase;margin-bottom:10px;">✦ Film Room</div>
+          <h1 style="font-family:var(--font-display);font-weight:700;font-size:36px;letter-spacing:-.025em;margin:0 0 10px;line-height:1.02;">All Meetings</h1>
+          <p style="margin:0;font-size:15px;color:var(--ink-2);line-height:1.55;">Every conversation across customers and rolling series — grouped, deduped, and ready to brief in seconds.</p>
+        </div>
+        <button style="display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:var(--accent-ink);border:none;border-radius:11px;padding:12px 18px;font-family:var(--font-display);font-weight:600;font-size:13.5px;cursor:pointer;box-shadow:0 6px 16px rgba(81,69,230,.28);transition:all .18s ease;" style-hover="transform:translateY(-1px);box-shadow:0 10px 22px rgba(81,69,230,.36);">↻ Refresh from Vault</button>
+      </div>
+      <div style="position:relative;display:flex;gap:10px;flex-wrap:wrap;margin-top:26px;">
+        <sc-for list="{{ heroStats }}" as="s" hint-placeholder-count="4">
+          <div style="display:flex;align-items:baseline;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:11px 16px;">
+            <span style="font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:-.01em;">{{ s.value }}</span>
+            <span style="font-size:12.5px;color:var(--ink-3);font-weight:500;">{{ s.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-weight:600;font-size:11px;letter-spacing:.13em;color:var(--ink-3);text-transform:uppercase;">Group by</span>
+        <div style="display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:3px;gap:2px;">
+          <button onClick="{{ setCustomers }}" style="{{ grpCustomers }}">Customers</button>
+          <button onClick="{{ setSeries }}" style="{{ grpSeries }}">Series</button>
+          <button onClick="{{ setMonth }}" style="{{ grpMonth }}">Month</button>
+          <button onClick="{{ setAll }}" style="{{ grpAll }}">All</button>
+        </div>
+      </div>
+      <div style="flex:1;min-width:240px;max-width:380px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line-2);border-radius:11px;padding:11px 16px;">
+        <span style="color:var(--ink-3);font-size:15px;">⌕</span><span style="color:var(--ink-3);font-size:14px;">Search 120 meetings…</span>
+      </div>
+    </div>
+
+    <sc-if value="{{ showRail }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <span style="font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.13em;color:var(--ink-3);text-transform:uppercase;">{{ railLabel }}</span>
+      <span style="font-size:12px;color:var(--ink-3);">tap to filter ↓</span>
+    </div>
+    <div style="display:flex;gap:14px;overflow-x:auto;padding:2px 2px 18px;">
+      <sc-for list="{{ groupTiles }}" as="t" hint-placeholder-count="5">
+        <div onClick="{{ t.open }}" style="{{ t.style }}" style-hover="transform:translateY(-3px);box-shadow:0 14px 30px rgba(81,69,230,.15);">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="{{ t.avatarStyle }}">{{ t.initials }}</span>
+            <sc-if value="{{ t.showOpen }}" hint-placeholder-val="{{ true }}">
+              <span style="font-weight:600;font-size:10.5px;color:var(--due-ink);background:var(--due-soft);border-radius:999px;padding:4px 10px;white-space:nowrap;">{{ t.openLabel }}</span>
+            </sc-if>
+          </div>
+          <div style="font-family:var(--font-display);font-weight:600;font-size:15.5px;color:var(--ink);margin-top:15px;letter-spacing:-.01em;">{{ t.name }}</div>
+          <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;">{{ t.meta }}</div>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+
+    <div style="font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.13em;color:var(--ink-3);text-transform:uppercase;margin:16px 0 16px;">{{ feedLabel }}</div>
+    <sc-for list="{{ feedSections }}" as="g" hint-placeholder-count="3">
+      <div style="margin-bottom:30px;">
+        <sc-if value="{{ g.showHeader }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+            <span style="{{ g.dotStyle }}"></span>
+            <span style="font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--ink);letter-spacing:-.01em;">{{ g.name }}</span>
+            <span style="font-weight:600;font-size:11.5px;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;">{{ g.count }}</span>
+            <span style="font-size:12.5px;color:var(--ink-3);margin-left:auto;">last met {{ g.last }}</span>
+          </div>
+        </sc-if>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <sc-for list="{{ g.meetings }}" as="m" hint-placeholder-count="4">
+            <div onClick="{{ m.open }}" style="{{ m.rowStyle }}" style-hover="box-shadow:0 10px 24px rgba(81,69,230,.12);transform:translateX(3px);">
+              <div style="display:flex;flex-direction:column;align-items:flex-start;width:62px;flex:none;line-height:1.1;">
+                <span style="{{ m.dateStyle }}">{{ m.date }}</span>
+                <span style="font-size:11px;color:var(--ink-3);letter-spacing:.05em;margin-top:3px;">2026</span>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="{{ m.kickerStyle }}">{{ m.kicker }}</div>
+                <div style="font-size:15px;font-weight:500;color:var(--ink);line-height:1.35;">{{ m.title }}</div>
+              </div>
+              <sc-if value="{{ m.hasTag }}" hint-placeholder-val="{{ false }}">
+                <span style="flex:none;align-self:center;font-weight:600;font-size:10px;letter-spacing:.06em;color:var(--accent-2);background:var(--accent-soft);border-radius:999px;padding:6px 12px;white-space:nowrap;">{{ m.tag }}</span>
+              </sc-if>
+              <span style="flex:none;align-self:center;font-weight:600;font-size:12.5px;color:var(--ink-3);white-space:nowrap;">Open →</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isMHub }}" hint-placeholder-val="{{ false }}">
+  <div style="max-width:1180px;margin:0 auto;padding:32px 36px 90px;animation:tl-fadeup .35s ease both;">
+    <div style="position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:36px 40px;box-shadow:0 2px 14px rgba(81,69,230,.05);">
+      <div style="position:absolute;top:-150px;right:-110px;width:360px;height:360px;border-radius:50%;background:radial-gradient(closest-side,var(--accent-soft),transparent);pointer-events:none;"></div>
+      <div style="position:relative;">
+        <button onClick="{{ goMIndex }}" style="background:none;border:none;color:var(--ink-3);font-size:13px;font-weight:500;cursor:pointer;padding:0;margin-bottom:18px;font-family:var(--font-body);transition:color .16s ease;" style-hover="color:var(--accent);">← All meetings</button>
+        <h1 style="font-family:var(--font-display);font-weight:700;font-size:32px;letter-spacing:-.025em;margin:0 0 8px;">Mike | Jordan Weekly 1:1</h1>
+        <div style="font-weight:600;font-size:11.5px;letter-spacing:.14em;color:var(--ink-3);margin-bottom:24px;text-transform:uppercase;">Rolling notes · 10 sessions · latest 06 / 16 / 26</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:28px;">
+          <span style="font-weight:600;font-size:11px;letter-spacing:.13em;color:var(--ink-3);text-transform:uppercase;">People involved</span>
+          <sc-for list="{{ people }}" as="p" hint-placeholder-count="3">
+            <div style="display:inline-flex;align-items:center;gap:9px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:5px 13px 5px 5px;">
+              <span style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-family:var(--font-display);font-weight:700;font-size:10px;display:flex;align-items:center;justify-content:center;">{{ p.initials }}</span>
+              <span style="font-size:13px;font-weight:500;color:var(--ink);">{{ p.name }}</span>
+              <span style="font-size:12px;color:var(--ink-3);">{{ p.count }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:30px;">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+            <div style="background:var(--surface-2);border:1px solid var(--line);border-radius:15px;padding:18px 18px 16px;transition:all .18s ease;" style-hover="transform:translateY(-2px);box-shadow:0 10px 22px rgba(81,69,230,.1);border-color:var(--accent);">
+              <div style="font-family:var(--font-display);font-weight:700;font-size:30px;color:var(--accent-2);line-height:1;letter-spacing:-.02em;">{{ k.value }}</div>
+              <div style="font-weight:600;font-size:10px;letter-spacing:.11em;color:var(--ink-3);margin-top:10px;text-transform:uppercase;">{{ k.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:var(--warm-soft);border-left:4px solid var(--warm);border-radius:0 14px 14px 0;padding:22px 26px;margin-bottom:34px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px;">
+            <span style="font-family:var(--font-display);font-weight:700;font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;">Rolling TL;DR&nbsp; <span style="color:var(--ink-3);font-weight:500;">custom</span></span>
+            <button style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line-2);border-radius:9px;padding:7px 13px;font-family:var(--font-display);font-weight:600;font-size:11.5px;color:var(--accent);cursor:pointer;white-space:nowrap;transition:all .16s ease;" style-hover="border-color:var(--accent);background:var(--accent-soft);">✦ AI sync from sessions</button>
+          </div>
+          <p style="margin:0;font-size:14.5px;line-height:1.62;color:var(--ink-2);">{{ tldr }}</p>
+        </div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.13em;color:var(--ink-3);margin-bottom:10px;text-transform:uppercase;">Open action items <span style="font-weight:500;">· rolling, deduped across sessions</span></div>
+        <div style="display:flex;flex-direction:column;">
+          <sc-for list="{{ openActions }}" as="a" hint-placeholder-count="5">
+            <div style="display:flex;align-items:flex-start;gap:16px;padding:14px 12px;margin:0 -12px;border-radius:11px;transition:background .16s ease;cursor:pointer;" style-hover="background:var(--surface-2);">
+              <span style="width:18px;height:18px;border:2px solid var(--line-2);border-radius:6px;flex:none;margin-top:1px;"></span>
+              <div style="width:188px;flex:none;">
+                <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.08em;color:var(--accent-2);margin-bottom:8px;">{{ a.owner }}</div>
+                <sc-if value="{{ a.urgent }}" hint-placeholder-val="{{ true }}">
+                  <span style="display:inline-block;font-weight:600;font-size:10px;color:var(--due-ink);background:var(--due-soft);border:1px solid var(--due);border-radius:999px;padding:4px 11px;">▸ {{ a.due }}</span>
+                </sc-if>
+                <sc-if value="{{ a.notUrgent }}" hint-placeholder-val="{{ false }}">
+                  <span style="display:inline-block;font-weight:600;font-size:10px;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:4px 11px;">{{ a.due }}</span>
+                </sc-if>
+              </div>
+              <div style="flex:1;min-width:0;font-size:14.5px;color:var(--ink);line-height:1.45;padding-top:1px;">{{ a.text }}</div>
+              <span style="flex:none;font-weight:600;font-size:10.5px;letter-spacing:.06em;color:var(--ink-3);padding-top:3px;white-space:nowrap;">{{ a.from }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:42px;display:flex;align-items:baseline;gap:14px;margin-bottom:16px;">
+          <span style="font-family:var(--font-display);font-weight:700;font-size:13px;color:var(--warm);">02</span>
+          <span style="font-family:var(--font-display);font-weight:700;font-size:14px;letter-spacing:.1em;text-transform:uppercase;">Key decisions</span>
+        </div>
+        <div style="display:flex;flex-direction:column;">
+          <sc-for list="{{ keyDecisions }}" as="d" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:16px;padding:13px 12px;margin:0 -12px;border-radius:10px;transition:background .16s ease;" style-hover="background:var(--surface-2);">
+              <span style="width:11px;height:11px;background:var(--accent);transform:rotate(45deg);flex:none;border-radius:2px;"></span>
+              <span style="font-size:14.5px;color:var(--ink);">{{ d.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:42px;display:flex;align-items:baseline;gap:14px;margin-bottom:16px;">
+          <span style="font-family:var(--font-display);font-weight:700;font-size:13px;color:var(--warm);">03</span>
+          <span style="font-family:var(--font-display);font-weight:700;font-size:14px;letter-spacing:.1em;text-transform:uppercase;">Numbers that matter</span>
+        </div>
+        <div style="display:inline-flex;align-items:center;gap:18px;background:var(--accent-soft);border:1px solid var(--line);border-radius:15px;padding:20px 26px;">
+          <div style="width:44px;height:44px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none;">◷</div>
+          <div><div style="font-family:var(--font-display);font-weight:700;font-size:20px;letter-spacing:-.01em;">Next scheduled</div><div style="font-size:13.5px;color:var(--ink-2);margin-top:3px;">meeting: Monday, Jun 23</div></div>
+        </div>
+        <div style="margin-top:42px;display:flex;align-items:baseline;gap:14px;margin-bottom:16px;">
+          <span style="font-family:var(--font-display);font-weight:700;font-size:13px;color:var(--warm);">04</span>
+          <span style="font-family:var(--font-display);font-weight:700;font-size:14px;letter-spacing:.1em;text-transform:uppercase;">Watch-outs</span>
+        </div>
+        <div style="display:flex;flex-direction:column;">
+          <sc-for list="{{ watchouts }}" as="w" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:16px;padding:13px 12px;margin:0 -12px;border-radius:10px;transition:background .16s ease;" style-hover="background:var(--due-soft);">
+              <span style="width:20px;height:20px;border-radius:50%;background:var(--due);color:#fff;font-family:var(--font-display);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none;">!</span>
+              <span style="font-size:14.5px;color:var(--ink);">{{ w.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:42px;display:flex;align-items:baseline;gap:14px;margin-bottom:14px;">
+          <span style="font-family:var(--font-display);font-weight:700;font-size:13px;color:var(--warm);">05</span>
+          <span style="font-family:var(--font-display);font-weight:700;font-size:14px;letter-spacing:.1em;text-transform:uppercase;">Full notes</span>
+        </div>
+        <sc-for list="{{ fullNotes }}" as="n" hint-placeholder-count="2">
+          <p style="margin:0 0 12px;font-size:14px;line-height:1.68;color:var(--ink-2);">{{ n.text }}</p>
+        </sc-for>
+        <div style="border-top:2px solid var(--accent);margin-top:32px;padding-top:18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+          <span style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.1em;color:var(--ink-2);text-transform:uppercase;">{{ confidential }}</span>
+          <span style="font-weight:600;font-size:10px;color:var(--accent-2);background:var(--accent-soft);border-radius:999px;padding:6px 13px;text-transform:uppercase;">Mike | Jordan Weekly 1:1</span>
+          <span style="font-weight:600;font-size:11px;letter-spacing:.1em;color:var(--ink-3);text-transform:uppercase;">Source: Vault</span>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">
+          <button style="background:var(--accent);color:var(--accent-ink);border:none;border-radius:10px;padding:10px 16px;font-family:var(--font-display);font-weight:600;font-size:12.5px;cursor:pointer;box-shadow:0 4px 12px rgba(81,69,230,.25);transition:all .16s ease;" style-hover="transform:translateY(-1px);">↓ Download PDF</button>
+          <button style="background:var(--surface);color:var(--ink-2);border:1px solid var(--line-2);border-radius:10px;padding:10px 16px;font-family:var(--font-display);font-weight:600;font-size:12.5px;cursor:pointer;transition:all .16s ease;" style-hover="border-color:var(--accent);color:var(--accent);">+ Add to series ▾</button>
+          <button style="background:var(--surface);color:var(--ink-2);border:1px solid var(--line-2);border-radius:10px;padding:10px 16px;font-family:var(--font-display);font-weight:600;font-size:12.5px;cursor:pointer;transition:all .16s ease;" style-hover="border-color:var(--accent);color:var(--accent);">Open in Vault</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isMDetail }}" hint-placeholder-val="{{ false }}">
+  <div style="max-width:1180px;margin:0 auto;padding:32px 36px 90px;animation:tl-fadeup .35s ease both;">
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:36px 40px;box-shadow:0 2px 14px rgba(81,69,230,.05);">
+      <button onClick="{{ goMIndex }}" style="background:none;border:none;color:var(--ink-3);font-size:13px;font-weight:500;cursor:pointer;padding:0;margin-bottom:18px;font-family:var(--font-body);transition:color .16s ease;" style-hover="color:var(--accent);">← All meetings</button>
+      <h1 style="font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.025em;margin:0 0 10px;">Stopcock &amp; Syringe CH Rep SCR</h1>
+      <div style="font-size:13px;color:var(--ink-3);letter-spacing:.04em;margin-bottom:6px;">2026-06-17</div>
+      <div style="font-size:14px;color:var(--ink-2);margin-bottom:24px;"><span style="font-weight:600;color:var(--ink);">Topic:</span> Internal · Regulatory updates, quality issues, and label implementation</div>
+      <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.13em;color:var(--ink-3);margin-bottom:10px;text-transform:uppercase;">Attendees</div>
+      <span style="display:inline-flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:6px 14px 6px 6px;margin-bottom:26px;">
+        <span style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-family:var(--font-display);font-weight:700;font-size:10px;display:flex;align-items:center;justify-content:center;">JF</span>
+        <span style="font-size:13px;font-weight:500;color:var(--ink);">Jordan Francis</span>
+      </span>
+      <div style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.13em;color:var(--ink-3);margin:8px 0 10px;text-transform:uppercase;">TL;DR</div>
+      <p style="margin:0 0 30px;font-size:15px;line-height:1.62;color:var(--ink-2);">Israel RMRs received; CER in progress with internal sign-off required by Friday. Two quality issues: particles in syringes (VR closed, root cause investigation to follow) and mislabeled stopcocks (23,000 units, one box affected, RMA to be formalized). Stopcock/syringe label ECNs near completion; implementation pending doc control approval.</p>
+      <div style="font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.13em;color:var(--ink-3);margin-bottom:14px;text-transform:uppercase;">Action items</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:34px;">
+        <sc-for list="{{ detActions }}" as="a" hint-placeholder-count="4">
+          <div style="display:flex;align-items:flex-start;gap:14px;background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:16px 18px;transition:all .16s ease;cursor:pointer;" style-hover="box-shadow:0 8px 20px rgba(81,69,230,.1);transform:translateX(2px);">
+            <span style="width:18px;height:18px;border:2px solid var(--line-2);border-radius:6px;flex:none;margin-top:2px;"></span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:14.5px;color:var(--ink);line-height:1.45;"><span style="font-weight:700;font-family:var(--font-display);color:var(--accent-2);">{{ a.owner }}:</span> {{ a.text }}</div>
+              <div style="font-weight:600;font-size:10.5px;letter-spacing:.06em;color:var(--ink-3);margin-top:7px;text-transform:uppercase;">{{ a.status }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px;">
+        <span style="font-family:var(--font-display);font-weight:700;font-size:13px;color:var(--warm);">01</span>
+        <span style="font-family:var(--font-display);font-weight:700;font-size:14px;letter-spacing:.1em;text-transform:uppercase;">Key decisions</span>
+      </div>
+      <div style="display:flex;flex-direction:column;">
+        <sc-for list="{{ detDecisions }}" as="d" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:16px;padding:13px 12px;margin:0 -12px;border-radius:10px;transition:background .16s ease;" style-hover="background:var(--surface-2);">
+            <span style="width:11px;height:11px;background:var(--accent);transform:rotate(45deg);flex:none;border-radius:2px;"></span>
+            <span style="font-size:14.5px;color:var(--ink);">{{ d.text }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border-top:2px solid var(--accent);margin-top:34px;padding-top:18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <span style="font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.1em;color:var(--ink-2);text-transform:uppercase;">{{ confidential }}</span>
+        <span style="font-weight:600;font-size:11px;letter-spacing:.1em;color:var(--ink-3);text-transform:uppercase;">Source: Vault</span>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:900},&quot;productName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Sloan AI&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tagline&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;SALES COMMAND CENTER&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;startPage&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;today&quot;,&quot;tasks&quot;,&quot;inbox&quot;,&quot;accounts&quot;,&quot;meetings&quot;,&quot;quote&quot;,&quot;activity&quot;],&quot;default&quot;:&quot;today&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;startDark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { page: 'today', mview: 'index', dark: false, group: 'customers', tile: 'all' };
+  rootRef = React.createRef();
+
+  themes = {
+    light: { '--canvas':'#F4F4F9','--surface':'#FFFFFF','--surface-2':'#F2F2F8','--ink':'#16162A','--ink-2':'#4A4A63','--ink-3':'#8B8BA3','--line':'#E7E7F0','--line-2':'#D6D6E4','--accent':'#5145E6','--accent-2':'#4A3FD0','--accent-ink':'#FFFFFF','--accent-soft':'#ECEBFD','--warm':'#F59E0B','--warm-soft':'#FEF4E3','--due':'#E4584A','--due-soft':'#FCEAE7','--due-ink':'#BE3B2E','--ok':'#12A150','--ok-soft':'#E5F5EC' },
+    dark: { '--canvas':'#0E0E18','--surface':'#181826','--surface-2':'#202032','--ink':'#F3F3F9','--ink-2':'#B4B4CB','--ink-3':'#7B7B96','--line':'#2A2A3C','--line-2':'#373749','--accent':'#7C72FF','--accent-2':'#9D95FF','--accent-ink':'#FFFFFF','--accent-soft':'#222138','--warm':'#F6B23D','--warm-soft':'#2E2718','--due':'#FF7565','--due-soft':'#37231F','--due-ink':'#FF9686','--ok':'#34D399','--ok-soft':'#16271F' }
+  };
+
+  componentDidMount() {
+    if (this.props.startPage) this.setState({ page: this.props.startPage });
+    if (this.props.startDark) this.setState({ dark: true });
+    this.applyTheme();
+  }
+  componentDidUpdate() { this.applyTheme(); }
+  applyTheme() {
+    const el = this.rootRef.current; if (!el) return;
+    const vars = this.state.dark ? this.themes.dark : this.themes.light;
+    for (const k in vars) el.style.setProperty(k, vars[k]);
+  }
+
+  nav(active) {
+    return 'display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;cursor:pointer;font-family:var(--font-body);font-weight:600;font-size:14px;transition:all .15s ease;' +
+      (active ? 'background:var(--accent-soft);color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);' : 'color:var(--ink-2);');
+  }
+  seg(active) {
+    return 'border:none;border-radius:8px;padding:7px 13px;font-family:var(--font-display);font-weight:600;font-size:12.5px;cursor:pointer;transition:all .16s ease;' +
+      (active ? 'background:var(--accent);color:var(--accent-ink);box-shadow:0 2px 8px rgba(81,69,230,.3);' : 'background:transparent;color:var(--ink-3);');
+  }
+  chip(hue, soft) { return 'font-weight:700;font-size:10.5px;border-radius:999px;padding:3px 9px;color:' + hue + ';background:' + soft + ';'; }
+  avatar(soft, hue) { return 'width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;font-size:14px;flex:none;background:' + soft + ';color:' + hue + ';'; }
+
+  renderVals() {
+    const PAL = ['#5145E6','#0E9F8E','#E4584A','#B852CC','#D98A0B','#4A4A63'];
+    const SOFT = ['#ECEBFD','#E1F4F0','#FCEAE7','#F7E9FA','#FBF0DC','#ECECF3'];
+    const st = this.state, p = st.page;
+    const set = (o) => this.setState(o);
+    const goMIndex = () => set({ page:'meetings', mview:'index' });
+    const goMHub = () => set({ page:'meetings', mview:'hub' });
+    const goMDetail = () => set({ page:'meetings', mview:'detail' });
+
+    // ---- customers meta ----
+    const CM = {
+      stryker:{name:'Stryker',initials:'St',hue:'#5145E6',soft:'#ECEBFD'},
+      gore:{name:'WL Gore',initials:'WG',hue:'#0E9F8E',soft:'#E1F4F0'},
+      angiosafe:{name:'Angiosafe',initials:'An',hue:'#E4584A',soft:'#FCEAE7'},
+      intuitive:{name:'Intuitive',initials:'It',hue:'#B852CC',soft:'#F7E9FA'},
+      cook:{name:'Cook Medical',initials:'Co',hue:'#D98A0B',soft:'#FBF0DC'},
+      internal:{name:'Internal',initials:'IN',hue:'#4A4A63',soft:'#ECECF3'}
+    };
+    const M = (date,monthKey,cust,kicker,title,opts) => {
+      opts = opts||{}; const hue = CM[cust].hue;
+      return { date, monthKey, cust, kicker, title, hue,
+        hasTag:!!opts.tag, tag:opts.tag||'', seriesId:opts.seriesId||null, selected:!!opts.selected,
+        open: opts.open || goMDetail,
+        dateStyle:'font-family:var(--font-display);font-weight:700;font-size:14px;white-space:nowrap;color:'+hue+';',
+        kickerStyle:'font-family:var(--font-display);font-weight:700;font-size:10px;letter-spacing:.11em;margin-bottom:6px;text-transform:uppercase;color:'+hue+';' };
+    };
+    const meetings = [
+      M('Jun 17','Jun','internal','Internal · SCR','Stopcock & Syringe CH Rep SCR',{open:goMDetail}),
+      M('Jun 16','Jun','internal','Internal · Revenue','Weekly OEM OUS & USA Revenue Call'),
+      M('Jun 16','Jun','internal','Internal · 1:1','Mike 1on1 (Time-Spent Breakdown)',{tag:'MIKE | JORDAN 1:1',seriesId:'mj',open:goMHub}),
+      M('Jun 16','Jun','internal','Internal · 1:1','Mike / Jordan 1:1 — Rolling Notes',{tag:'MIKE | JORDAN 1:1',seriesId:'mj',selected:true,open:goMHub}),
+      M('Jun 16','Jun','stryker','Stryker · MDR','Dash 9F MDR Implementation (ECN & Shelf Life)',{seriesId:'stryker'}),
+      M('Jun 16','Jun','stryker','Stryker · Dilator','9F Dash Additional Dilator Discussion',{seriesId:'stryker'}),
+      M('Jun 12','Jun','stryker','Stryker · Pricing','Stryker Lockable Syringe Pricing & LTA (Jay Gordet)',{seriesId:'stryker'}),
+      M('May 28','May','stryker','Stryker · LTA','Long-Term Agreement Redline Review',{seriesId:'stryker'}),
+      M('Jun 16','Jun','gore','WL Gore · Account','WL Gore — Weekly Account Sync'),
+      M('May 30','May','gore','WL Gore · Samples','Hydrophilic Coating Sample Feedback'),
+      M('Jun 12','Jun','angiosafe','Angiosafe · Feasibility','Custom Guide Sheath Stiffness Feasibility'),
+      M('May 26','May','angiosafe','Angiosafe · Spec','Sample Request & Spec Review'),
+      M('Jun 10','Jun','intuitive','Intuitive · Regulatory','Israel Registration Kickoff',{seriesId:'israel'}),
+      M('Jun 9','Jun','cook','Cook · Tubing','High-Pressure Tubing Spec Review')
+    ];
+    meetings.forEach(m => {
+      const sel = m.selected;
+      m.rowStyle = 'display:flex;align-items:center;gap:18px;background:'+(sel?'var(--accent-soft)':'var(--surface)')+';border:1px solid '+(sel?'var(--accent)':'var(--line)')+';border-left:3px solid '+m.hue+';border-radius:13px;padding:15px 20px;cursor:pointer;transition:all .16s ease;box-shadow:0 1px 2px rgba(22,22,42,.04);';
+    });
+
+    // ---- meetings grouping ----
+    const activeTile = st.tile, grp = st.group;
+    const selectTile = (id) => set({ tile:id });
+    const setGroup = (g) => set({ group:g, tile:'all' });
+    const tileBase = 'flex:none;width:238px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px;cursor:pointer;transition:all .18s ease;box-shadow:0 1px 3px rgba(22,22,42,.05);';
+    const tileActive = 'flex:none;width:238px;background:var(--accent-soft);border:1.5px solid var(--accent);border-radius:18px;padding:18px;cursor:pointer;transition:all .18s ease;box-shadow:0 10px 24px rgba(81,69,230,.16);';
+    const mkTile = (id,name,initials,soft,hue,meta,openCount) => ({
+      open:()=>selectTile(id), style: activeTile===id?tileActive:tileBase,
+      avatarStyle:this.avatar(soft,hue), initials, name, meta, showOpen:openCount>0, openLabel:openCount+' open'
+    });
+    const allTile = (lbl) => mkTile('all','All Meetings','≡','var(--accent-soft)','var(--accent)',lbl,0);
+    const dot = (hue) => 'width:10px;height:10px;border-radius:50%;flex:none;background:'+hue+';box-shadow:0 0 0 3px '+hue+'22;';
+    const sec = (name,hue,count,last,list,showHeader) => ({ name,count,last,showHeader,meetings:list,dotStyle:dot(hue) });
+    let groupTiles=[], feedSections=[], railLabel='', showRail=true;
+    const customersList=[{id:'stryker',count:9,open:4,last:'Jun 16'},{id:'gore',count:3,open:1,last:'Jun 16'},{id:'angiosafe',count:2,open:2,last:'Jun 12'},{id:'intuitive',count:4,open:0,last:'Jun 10'},{id:'cook',count:5,open:1,last:'Jun 9'},{id:'internal',count:30,open:5,last:'Jun 17'}];
+    if (grp==='customers'){ railLabel='Customers · 8 active'; groupTiles=[allTile('120 meetings · 8 customers')];
+      customersList.forEach(c=>{const m=CM[c.id];groupTiles.push(mkTile(c.id,m.name,m.initials,m.soft,m.hue,c.count+' meetings · last '+c.last,c.open));});
+      feedSections=customersList.filter(c=>activeTile==='all'||activeTile===c.id).map(c=>{const m=CM[c.id];return sec(m.name,m.hue,c.count,c.last,meetings.filter(x=>x.cust===c.id),true);});
+    } else if (grp==='series'){ railLabel='Rolling series · 6 active';
+      const sm=[{id:'mj',name:'Mike | Jordan Weekly 1:1',initials:'MJ',count:10,open:8,last:'Jun 16',hue:'#5145E6',soft:'#ECEBFD'},{id:'stryker',name:'Stryker Hub',initials:'ST',count:7,open:4,last:'Jun 16',hue:'#0E9F8E',soft:'#E1F4F0'},{id:'israel',name:'Intuitive Israel Reg.',initials:'IS',count:4,open:0,last:'Jun 10',hue:'#B852CC',soft:'#F7E9FA'}];
+      groupTiles=[allTile('6 series · 21 sessions')]; sm.forEach(s=>groupTiles.push(mkTile(s.id,s.name,s.initials,s.soft,s.hue,s.count+' sessions · last '+s.last,s.open)));
+      feedSections=sm.filter(s=>activeTile==='all'||activeTile===s.id).map(s=>sec(s.name,s.hue,s.count,s.last,meetings.filter(x=>x.seriesId===s.id),true));
+    } else if (grp==='month'){ railLabel='Months';
+      const mo=[{id:'Jun',name:'June 2026',last:'Jun 17',hue:'#5145E6',soft:'#ECEBFD',initials:'Jun'},{id:'May',name:'May 2026',last:'May 30',hue:'#8B8BA3',soft:'#EFEFF4',initials:'May'}];
+      groupTiles=[allTile('120 meetings · 2 months')]; mo.forEach(x=>groupTiles.push(mkTile(x.id,x.name,x.initials,x.soft,x.hue,meetings.filter(y=>y.monthKey===x.id).length+' meetings',0)));
+      feedSections=mo.filter(x=>activeTile==='all'||activeTile===x.id).map(x=>sec(x.name,x.hue,meetings.filter(y=>y.monthKey===x.id).length,x.last,meetings.filter(y=>y.monthKey===x.id),true));
+    } else { showRail=false; feedSections=[sec('All meetings','#5145E6',120,'Jun 17',meetings,false)]; }
+    const feedLabel = grp==='all' ? 'All 120 meetings' : (activeTile==='all' ? 'Showing all · grouped by '+grp : 'Filtered view');
+    const heroStats=[{value:'120',label:'meetings'},{value:'8',label:'customers'},{value:'12',label:'open actions'},{value:'6',label:'rolling series'}];
+
+    // ---- TODAY ----
+    const acctTag = (name,hue,soft) => 'font-weight:600;font-size:10px;letter-spacing:.04em;color:'+hue+';background:'+soft+';border-radius:999px;padding:3px 9px;';
+    const todayKpis=[
+      {value:'4',label:'Due today',color:'var(--due)',cardStyle:'background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:18px;transition:all .18s ease;box-shadow:0 1px 3px rgba(22,22,42,.05);'},
+      {value:'12',label:'Open actions',color:'var(--accent-2)',cardStyle:'background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:18px;transition:all .18s ease;box-shadow:0 1px 3px rgba(22,22,42,.05);'},
+      {value:'9',label:'Meetings this week',color:'var(--ink)',cardStyle:'background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:18px;transition:all .18s ease;box-shadow:0 1px 3px rgba(22,22,42,.05);'},
+      {value:'4',label:'Flagged emails',color:'var(--ink)',cardStyle:'background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:18px;transition:all .18s ease;box-shadow:0 1px 3px rgba(22,22,42,.05);'},
+      {value:'7',label:'Accounts overdue',color:'var(--due)',cardStyle:'background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:18px;transition:all .18s ease;box-shadow:0 1px 3px rgba(22,22,42,.05);'}
+    ];
+    const tom = (text,acct,hue,soft,due) => ({ text, acct, due, acctStyle:acctTag(acct,hue,soft) });
+    const topOfMind=[
+      tom('Formalize RMA for mislabeled stopcocks with case number','Stryker','#5145E6','#ECEBFD','DUE TODAY'),
+      tom('Send CER and NDA progress update to group email chain','Internal','#4A4A63','#ECECF3','DUE TODAY'),
+      tom('Deliver time-spent breakdown by activity to Mike','Internal','#4A4A63','#ECECF3','DUE ASAP'),
+      tom('Confirm Monday Jun 23 meeting is still on calendar','Internal','#4A4A63','#ECECF3','THIS WEEK')
+    ];
+    const tmtg = (time,title,tag,hue,soft) => ({ time, title, tag, hue, open:goMDetail, tagStyle:acctTag(tag,hue,soft) });
+    const todayMeetings=[
+      tmtg('9:00','Stopcock & Syringe CH Rep SCR','Internal','#4A4A63','#ECECF3'),
+      tmtg('11:30','Dash 9F MDR Implementation','Stryker','#5145E6','#ECEBFD'),
+      tmtg('2:00','WL Gore — Weekly Account Sync','WL Gore','#0E9F8E','#E1F4F0')
+    ];
+
+    // ---- ACTIVITY (shared with Today recent) ----
+    const actTag = (label) => 'font-weight:700;font-size:10px;letter-spacing:.04em;color:var(--accent-2);background:var(--accent-soft);border-radius:999px;padding:3px 9px;white-space:nowrap;';
+    const recentActivity=[
+      {type:'new_email',title:'New flagged email',detail:'veronica.parra@merit.com: RE: K12-12241',time:'5:00 PM',hue:'#5145E6',tagStyle:actTag()},
+      {type:'new_email',title:'New flagged email',detail:'niloufar.samimi@merit.com: Re: Stryker | EU MDR Documents',time:'3:15 PM',hue:'#5145E6',tagStyle:actTag()},
+      {type:'brief',title:'Daily brief ready',detail:'12 open actions across 8 accounts',time:'8:00 AM',hue:'#12A150',tagStyle:'font-weight:700;font-size:10px;color:var(--ok);background:var(--ok-soft);border-radius:999px;padding:3px 9px;'},
+      {type:'due_today',title:'Due today',detail:'4 tasks need your attention',time:'7:00 AM',hue:'#E4584A',tagStyle:'font-weight:700;font-size:10px;color:var(--due-ink);background:var(--due-soft);border-radius:999px;padding:3px 9px;'},
+      {type:'new_email',title:'New flagged email',detail:'epicc_no_reply@merit.com: ECN218128 ready (ROUTE_APPROVAL)',time:'Jun 16',hue:'#5145E6',tagStyle:actTag()},
+      {type:'new_email',title:'New flagged email',detail:'jordan.francis@merit.com: New booking — Michael Usrey',time:'Jun 12',hue:'#5145E6',tagStyle:actTag()}
+    ];
+
+    // ---- TASKS ----
+    const dueP = (txt,tone) => {
+      if (tone==='due') return 'display:inline-block;font-weight:600;font-size:10px;color:var(--due-ink);background:var(--due-soft);border:1px solid var(--due);border-radius:999px;padding:4px 11px;';
+      if (tone==='warm') return 'display:inline-block;font-weight:600;font-size:10px;color:#92600A;background:var(--warm-soft);border-radius:999px;padding:4px 11px;';
+      if (tone==='accent') return 'display:inline-block;font-weight:600;font-size:10px;color:var(--accent-2);background:var(--accent-soft);border-radius:999px;padding:4px 11px;';
+      return 'display:inline-block;font-weight:600;font-size:10px;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:4px 11px;';
+    };
+    const tk = (owner,due,tone,text,acct,hue,soft) => ({ owner, due, text, acct, dueStyle:dueP(due,tone), acctStyle:acctTag(acct,hue,soft) });
+    const taskGroups=[
+      { label:'Overdue', count:2, dotStyle:dot('#E4584A'), items:[
+        tk('JORDAN','2 DAYS AGO','due','Follow up with Kirill for final Aust sort numbers to process credit','Aust Mfg','#D98A0B','#FBF0DC'),
+        tk('JORDAN','1 DAY AGO','due','Coordinate with Kate to ship held product back to Aust','Aust Mfg','#D98A0B','#FBF0DC') ] },
+      { label:'Due today', count:2, dotStyle:dot('#F59E0B'), items:[
+        tk('JORDAN','TODAY','warm','Formalize RMA for mislabeled stopcocks with case number','Stryker','#5145E6','#ECEBFD'),
+        tk('BRIAN','TODAY','warm','Send physical particle sample, sort methodology, and contained quantity','Stryker','#5145E6','#ECEBFD') ] },
+      { label:'Upcoming', count:2, dotStyle:dot('#5145E6'), items:[
+        tk('JORDAN','MON JUN 22','accent','Deliver time-spent breakdown by activity to Mike for sharing with Adam','Internal','#4A4A63','#ECECF3'),
+        tk('JORDAN','BEFORE JULY','accent','Schedule meetings with Paul Kennedy, Haley/McKenzie (PCN), and Regulatory','Internal','#4A4A63','#ECECF3') ] },
+      { label:'No date', count:2, dotStyle:dot('#8B8BA3'), items:[
+        tk('JORDAN','NO DUE DATE','muted','Map current complaint/RGA process and identify bottlenecks','Internal','#4A4A63','#ECECF3'),
+        tk('TBD','NO DUE DATE','muted','Map process flows for prioritized areas (RGA/complaints, GP10 docs)','Internal','#4A4A63','#ECECF3') ] }
+    ];
+    const segOnA = this.seg(true), segOnB = this.seg(false);
+
+    // ---- INBOX ----
+    const stp = (s) => {
+      if (s==='new') return 'font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);background:var(--accent-soft);border-radius:999px;padding:4px 11px;height:fit-content;';
+      if (s==='filed') return 'font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ok);background:var(--ok-soft);border-radius:999px;padding:4px 11px;height:fit-content;';
+      return 'font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:4px 11px;height:fit-content;';
+    };
+    const inboxEmails=[
+      {subject:'RE: K12-12241',sender:'veronica.parra@merit.com',snippet:'Hi @Jordan Francis — filed to 300 Inbox/2026-06-16-veronica-parra-re-k12-12241.md',suggestion:'Already filed to vault.',status:'filed',statusStyle:stp('filed'),actionable:false},
+      {subject:'Re: Stryker | EU MDR Documents',sender:'niloufar.samimi@merit.com',snippet:'Hi Anitha, Please see the attached draft DOC. Best regards, Nellie Niloufar Samimi, Senior Regional Regulatory Specialist.',suggestion:'Suggestion: sender domain merit.com; subject mentions Stryker.',status:'new',statusStyle:stp('new'),actionable:true,ws:'merit',acctPlaceholder:'Stryker'},
+      {subject:'ECN218128 is ready for your action (ROUTE_APPROVAL)',sender:'epicc_no_reply@merit.com',snippet:'ECN218128 Requestor: Arumugam, Ramdinesh. Initial release of Dash 9F eIFU 407044002 in 24 languages.',suggestion:'Suggestion: sender domain merit.com.',status:'new',statusStyle:stp('new'),actionable:true,ws:'merit',acctPlaceholder:'account (optional)'},
+      {subject:'test',sender:'jordan.francis1232@gmail.com',snippet:'Hi Jordan, checking to see if you have part MSS031 syringe. Thanks, Jordan',suggestion:'Suggestion: no strong signal, please pick.',status:'replied',statusStyle:stp('replied'),actionable:true,ws:'workstream…',acctPlaceholder:'account (optional)'}
+    ];
+
+    // ---- ACCOUNTS (master-detail) ----
+    const initials = (n) => n.split(/[\s/]+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    const acctRaw=[
+      {id:'intuitive',name:'Intuitive Surgical',type:'OEM Account · Pacific OEM',num:'#69249',open:17,overdue:10,region:'Pacific OEM',segment:'Strategic',since:'2019',last:'Jun 16',contacts:6},
+      {id:'balt',name:'Balt',type:'OEM Account · Pacific OEM',num:'',open:15,overdue:9,region:'Pacific OEM',segment:'Growth',since:'2021',last:'Jun 15',contacts:4},
+      {id:'medtronic',name:'Medtronic',type:'OEM Account · Pacific OEM',num:'',open:16,overdue:4,region:'Pacific OEM',segment:'Strategic',since:'2017',last:'Jun 14',contacts:6},
+      {id:'tiger',name:'Tiger',type:'OEM Account · Pacific OEM',num:'',open:9,overdue:4,region:'Pacific OEM',segment:'Growth',since:'2022',last:'Jun 12',contacts:3},
+      {id:'aust',name:'Aust Manufacturing',type:'OEM Account · Pacific OEM',num:'',open:7,overdue:2,region:'Pacific OEM',segment:'Core',since:'2020',last:'Jun 11',contacts:5},
+      {id:'nectero',name:'Nectero',type:'OEM Account · Pacific OEM',num:'',open:6,overdue:2,region:'Pacific OEM',segment:'Emerging',since:'2023',last:'Jun 10',contacts:3},
+      {id:'stryker',name:'Stryker',type:'OEM Account · Pacific OEM',num:'',open:9,overdue:1,region:'Pacific OEM',segment:'Strategic',since:'2018',last:'Jun 16',contacts:6},
+      {id:'healionics',name:'Healionics',type:'OEM Account · Pacific OEM',num:'',open:5,overdue:1,region:'Pacific OEM',segment:'Emerging',since:'2023',last:'Jun 9',contacts:3},
+      {id:'shockwave',name:'Shockwave Medical',type:'OEM Account · Pacific OEM',num:'',open:6,overdue:0,region:'Pacific OEM',segment:'Growth',since:'2021',last:'Jun 8',contacts:4}
+    ];
+    const acctList = acctRaw.map((a,i)=>Object.assign({},a,{hue:PAL[i%6],soft:SOFT[i%6],initials:initials(a.name)}));
+    const acctSel = st.acctSel || acctList[0].id;
+    const sel = acctList.find(a=>a.id===acctSel) || acctList[0];
+    const acctTab = st.acctTab || 'overview';
+    const rowBaseA='display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;cursor:pointer;transition:all .14s ease;border:1px solid transparent;';
+    const rowActiveA='display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;cursor:pointer;transition:all .14s ease;background:var(--accent-soft);border:1px solid var(--accent);';
+    const acctRows = acctList.map(a=>({
+      name:a.name, initials:a.initials,
+      select:()=>set({acctSel:a.id,acctTab:'overview'}),
+      rowStyle: a.id===acctSel?rowActiveA:rowBaseA,
+      avatarStyle:'width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;font-size:12px;flex:none;background:'+a.soft+';color:'+a.hue+';',
+      meta: a.open+' open'+(a.overdue?' · '+a.overdue+' overdue':''),
+      metaColor: a.overdue? 'var(--due-ink)':'var(--ink-3)'
+    }));
+    const acctStatTiles=[
+      {v:String(sel.open),l:'Open tasks',c:'var(--accent-2)'},
+      {v:String(sel.overdue),l:'Overdue',c:'var(--due)'},
+      {v:String(sel.contacts),l:'Contacts',c:'var(--ink)'},
+      {v:sel.last,l:'Last activity',c:'var(--ink)'}
+    ];
+    const tabA=(key,label)=>({label,open:()=>set({acctTab:key}),
+      style: 'background:none;border:none;border-bottom:2.5px solid '+(acctTab===key?'var(--accent)':'transparent')+';padding:14px 2px;margin-right:22px;cursor:pointer;white-space:nowrap;font-family:var(--font-display);font-weight:600;font-size:13.5px;color:'+(acctTab===key?'var(--ink)':'var(--ink-3)')+';'});
+    const acctTabs=[tabA('overview','Overview'),tabA('contacts','Contacts'),tabA('pricing','Pricing'),tabA('meetings','Meetings'),tabA('tasks','Tasks')];
+    const CPOOL=[['Shilpan Shah','VP Procurement'],['Veronica Parra','Quality Engineer'],['Niloufar Samimi','Regulatory Specialist'],['Jay Gordet','Sourcing Manager'],['Adam Cole','R&D Director'],['Dana Whitfield','Program Manager']];
+    const dom = sel.name.split(/[\s/]+/)[0].toLowerCase()+'.com';
+    const acctContacts = CPOOL.slice(0, Math.max(3,Math.min(6,sel.contacts))).map((c,i)=>({
+      name:c[0], role:c[1], email:c[0].toLowerCase().replace(/\s+/g,'.')+'@'+dom, phone:'+1 (385) 555-0'+(120+i),
+      initials:c[0].split(' ').map(w=>w[0]).join(''),
+      avatarStyle:'width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;font-size:12px;flex:none;background:'+SOFT[i%6]+';color:'+PAL[i%6]+';'
+    }));
+    const acctPrimary = acctContacts.slice(0,3);
+    const acctPricing=[
+      {part:'502195001',desc:'Pin Vise Salmon .018"–.038"',your:'$4.33',list:'$5.10',lead:'4–6 wk'},
+      {part:'MED-10ML',desc:'Medallion 10ml Syringe',your:'$1.92',list:'$2.20',lead:'In stock'},
+      {part:'MRQ-3W',desc:'Marquis 3-Way Stopcock',your:'$0.88',list:'$1.05',lead:'2–3 wk'},
+      {part:'VL-30',desc:'VacLok 30ml Control Syringe',your:'$3.41',list:'$3.95',lead:'4 wk'}
+    ];
+    const acctSnapshot=[{label:'Account #',value:sel.num||'Not assigned'},{label:'Region',value:sel.region},{label:'Segment',value:sel.segment},{label:'Customer since',value:sel.since}];
+    const aHue=sel.hue, aSoft=sel.soft;
+    const acctTasks=[
+      {owner:'JORDAN',due:'DUE TODAY',urgent:true,text:'Formalize RMA and send return shipping instructions'},
+      {owner:'JORDAN',due:'THIS WEEK',urgent:true,text:'Send updated quote and confirm current inventory'},
+      {owner:'BRIAN',due:'NO DUE DATE',urgent:false,text:'Share label sets and sort methodology with full team'}
+    ].map(t=>({owner:t.owner,text:t.text,due:t.due,dueStyle: t.urgent?'display:inline-block;font-weight:600;font-size:10px;color:var(--due-ink);background:var(--due-soft);border:1px solid var(--due);border-radius:999px;padding:4px 11px;':'display:inline-block;font-weight:600;font-size:10px;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:4px 11px;'}));
+    const acctMeetings=[
+      {date:'Jun 16',title:sel.name+' — Weekly Account Sync',kicker:'Account'},
+      {date:'Jun 9',title:sel.name+' — Pricing & Lead Time Review',kicker:'Pricing'}
+    ].map(m=>({date:m.date,title:m.title,kicker:m.kicker,open:goMDetail,
+      rowStyle:'display:flex;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--line);border-left:3px solid '+aHue+';border-radius:12px;padding:13px 18px;cursor:pointer;transition:all .16s ease;',
+      dateStyle:'font-family:var(--font-display);font-weight:700;font-size:13px;color:'+aHue+';width:52px;flex:none;',
+      kickerStyle:'font-family:var(--font-display);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:'+aHue+';margin-bottom:3px;'}));
+    const acctHeaderAvatar='width:54px;height:54px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;font-size:19px;flex:none;background:'+aSoft+';color:'+aHue+';';
+    const acctNumStyle = sel.num ? 'font-weight:700;font-size:12px;color:var(--accent-2);background:var(--accent-soft);border-radius:999px;padding:5px 12px;' : 'font-weight:600;font-size:12px;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;';
+
+    // ---- QUOTE ----
+    const customerOptions = acctRaw.map(a=>({name:a.name}));
+    const quoteLines=[{part:'502195001',desc:'Pin Vise Salmon fits .018"–.038" Guide Wires',qty:'200',cost:'4.33',total:'$866.00'}];
+
+    const productName = this.props.productName ?? 'Sloan AI';
+    return {
+      rootRef:this.rootRef, productName, tagline:this.props.tagline ?? 'SALES COMMAND CENTER',
+      confidential: productName + ' · Confidential',
+      darkLabel: this.state.dark ? 'Light mode' : 'Dark mode',
+      toggleDark: () => set({ dark: !st.dark }),
+      goToday:()=>set({page:'today'}), goTasks:()=>set({page:'tasks'}), goInbox:()=>set({page:'inbox'}),
+      goAccounts:()=>set({page:'accounts'}), goMeetings:()=>set({page:'meetings',mview:'index'}),
+      goQuote:()=>set({page:'quote'}), goActivity:()=>set({page:'activity'}),
+      navToday:this.nav(p==='today'), navTasks:this.nav(p==='tasks'), navInbox:this.nav(p==='inbox'),
+      navAccounts:this.nav(p==='accounts'), navMeetings:this.nav(p==='meetings'), navQuote:this.nav(p==='quote'), navActivity:this.nav(p==='activity'),
+      isToday:p==='today', isTasks:p==='tasks', isInbox:p==='inbox', isAccounts:p==='accounts', isQuote:p==='quote', isActivity:p==='activity',
+      isMIndex:p==='meetings'&&st.mview==='index', isMHub:p==='meetings'&&st.mview==='hub', isMDetail:p==='meetings'&&st.mview==='detail',
+      goMIndex,
+      // meetings index
+      setCustomers:()=>setGroup('customers'), setSeries:()=>setGroup('series'), setMonth:()=>setGroup('month'), setAll:()=>setGroup('all'),
+      grpCustomers:this.seg(grp==='customers'), grpSeries:this.seg(grp==='series'), grpMonth:this.seg(grp==='month'), grpAll:this.seg(grp==='all'),
+      groupTiles, feedSections, railLabel, showRail, feedLabel, heroStats,
+      // today
+      todayKpis, topOfMind, todayMeetings, recentActivity,
+      // tasks
+      taskGroups, segOnA, segOnB,
+      // inbox / accounts / quote
+      inboxEmails, customerOptions, quoteLines,
+      acctRows, acctStatTiles, acctTabs, acctContacts, acctPrimary, acctPricing, acctSnapshot, acctTasks, acctMeetings,
+      acctSelName:sel.name, acctSelType:sel.type, acctSelInit:sel.initials, acctSelNum:(sel.num||'No account number'), acctSelNumStyle:acctNumStyle, acctHeaderAvatar,
+      acctTabOverview:acctTab==='overview', acctTabContacts:acctTab==='contacts', acctTabPricing:acctTab==='pricing', acctTabMeetings:acctTab==='meetings', acctTabTasks:acctTab==='tasks',
+      // hub + detail data
+      people:[{initials:'JF',name:'Jordan Francis',count:'10×'},{initials:'M',name:'Mike',count:'4×'},{initials:'MB',name:'Mike Blackham',count:'2×'}],
+      kpis:[{value:'10',label:'sessions'},{value:'12',label:'open actions'},{value:'10',label:'closed'},{value:'25',label:'decisions logged'},{value:'Jun 16',label:'latest'}],
+      tldr:'Jordan is working to map and optimize the complaint and RGA process, with plans to review current bottlenecks with Paul from Quality and coordinate with the PCN team and regulatory contacts. Active operational items include finalizing AST sort numbers with Krill to process credit and coordinating a product shipment return with Kate. Nick is gathering time allocation data across the team to understand current resource deployment on RGA, QA, and PCN activities.',
+      openActions:[
+        {owner:'JORDAN',due:'DUE ASAP',urgent:true,notUrgent:false,text:'Gather time allocation data from all reps on RGA/QA/PCN',from:'FROM MAY 6'},
+        {owner:'JORDAN',due:'DUE BEFORE JULY',urgent:true,notUrgent:false,text:'Schedule meetings with Paul Kennedy, Haley/McKenzie (PCN), and Regulatory',from:'FROM MAY 6'},
+        {owner:'JORDAN',due:'NO DUE DATE',urgent:false,notUrgent:true,text:'Map current complaint/RGA process and identify bottlenecks',from:'FROM MAY 6'},
+        {owner:'JORDAN',due:'NO DUE DATE',urgent:false,notUrgent:true,text:'Follow up with Kirill for final Aust sort numbers to process credit',from:'FROM MAY 6'},
+        {owner:'JORDAN',due:'NO DUE DATE',urgent:false,notUrgent:true,text:'Coordinate with Kate to ship held product back to Aust',from:'FROM MAY 6'},
+        {owner:'TBD',due:'NO DUE DATE',urgent:false,notUrgent:true,text:'Map process flows for the prioritized areas (RGA/complaints, GP10 docs, regulatory framework)',from:'FROM MAY 26'},
+        {owner:'JORDAN',due:'DUE EOW / MON JUN 22',urgent:true,notUrgent:false,text:'Deliver time-spent breakdown by activity to Mike for sharing with Adam',from:''},
+        {owner:'JORDAN',due:'DUE THIS WEEK',urgent:true,notUrgent:false,text:'Confirm Monday Jun 23 meeting is still on calendar',from:''}
+      ],
+      keyDecisions:[{text:'Shipments are priority one'},{text:'Time-spent analysis is priority two'},{text:'Monday Jun 23 is the next formal touchpoint'}],
+      watchouts:[{text:'Jordan hammered by inbound customer requests: Gore, Stryker, Australia quality issue, long term agreements'},{text:'Juneteenth (Jun 19) disrupted the week; customers kept working regardless'},{text:'Mexico call rescheduled, adding to schedule churn'}],
+      fullNotes:[{text:'Mike was delayed due to strategy meetings, finance calls with Mary, and upcoming presentations. Jordan was expecting a Mexico call that got rescheduled, so he jumped into the 1:1 early. Jordan flagged being overwhelmed last week with customer-facing work across Gore, Stryker, an Australia quality issue, and several long term agreements getting started.'},{text:'The main ask from Mike: Jordan should produce a time-spent breakdown by activity. Mike noted existing data already exists but Jordan should adjust figures to better reflect reality. Priorities confirmed: get product out the door first, then work on the time analysis. Monday Jun 23 is the next scheduled touchpoint.'}],
+      detActions:[
+        {owner:'Jordan',text:'Send CER and NDA progress update to group email chain',status:'tracking only'},
+        {owner:'Jordan',text:'Send quote for 200 torquer units (0.018–0.038 size) and check current inventory',status:'tracking only'},
+        {owner:'Jordan',text:'Formalize RMA for mislabeled stopcocks with case number and return shipping instructions',status:'tracking only'},
+        {owner:'Brian',text:'Send physical particle sample, sort methodology, and contained quantity to Jordan',status:'tracking only'},
+        {owner:'Scott',text:'Share both label sets (with and without CH rep, syringe and stopcock) with full team',status:'tracking only'},
+        {owner:'Julio',text:'Confirm with quality team whether printed label version is acceptable for inspection',status:'tracking only'}
+      ],
+      detDecisions:[{text:'Internal CER sign-off required by Friday'},{text:'Mislabeled stopcock lot (23,000 units) handled via formal RMA, one box affected'},{text:'Label ECN implementation pending doc control approval'}]
+    };
+  }
+}
+</script>
+</body>
+</html>

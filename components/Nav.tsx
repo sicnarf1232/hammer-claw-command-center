@@ -26,29 +26,19 @@ const ITEMS: { href: string; label: string; Icon: ComponentType<IconProps> }[] =
     { href: "/notifications", label: "Activity", Icon: ActivityIcon },
   ];
 
-// The Film Room logo mark: a rounded square in the accent color with a simple
-// geometric play glyph (meeting "film").
+// Film Room logo mark: a rounded square in the accent color with a small
+// skewed film-strip glyph.
 function LogoMark() {
   return (
     <span
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
-      style={{
-        background: "var(--accent)",
-        boxShadow: "0 6px 16px rgb(81 69 230 / 0.28)",
-      }}
+      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px]"
+      style={{ background: "var(--accent)", boxShadow: "0 4px 12px rgb(81 69 230 / 0.32)" }}
       aria-hidden
     >
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-        <path d="M9 7.5v9l7-4.5-7-4.5Z" fill="var(--accent-ink)" />
-        <circle
-          cx="12"
-          cy="12"
-          r="9.2"
-          stroke="var(--accent-ink)"
-          strokeOpacity=".5"
-          strokeWidth="1.4"
-        />
-      </svg>
+      <span className="flex items-end gap-[3px]">
+        <span className="block w-1 rounded-[2px]" style={{ height: 15, background: "var(--accent-ink)", transform: "skewX(-12deg)" }} />
+        <span className="block w-1 rounded-[2px]" style={{ height: 10, background: "var(--accent-ink)", opacity: 0.7, transform: "skewX(-12deg)" }} />
+      </span>
     </span>
   );
 }
@@ -57,44 +47,59 @@ export default function Nav() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
-      <div className="mx-auto flex max-w-[1180px] items-center gap-4 px-5 py-3 sm:px-7">
-        <Link href="/meetings" className="flex items-center gap-2.5">
-          <LogoMark />
-          <span className="leading-none">
-            <span className="block text-[15px] font-bold tracking-tight text-fg">
-              Film Room
-            </span>
-            <span className="eyebrow mt-1 block text-[10px] text-muted">
-              Meeting Intelligence
-            </span>
+    <aside className="sticky top-0 flex h-screen w-[236px] shrink-0 flex-col border-r border-border bg-surface px-3.5 py-[18px]">
+      <Link href="/meetings" className="flex items-center gap-3 px-2.5 pb-5 pt-1.5">
+        <LogoMark />
+        <span className="leading-none">
+          <span className="block text-[17px] font-bold tracking-tight text-fg">
+            Film Room
           </span>
-        </Link>
+          <span
+            className="mt-1 block text-[8px] font-semibold uppercase text-muted"
+            style={{ letterSpacing: "0.22em" }}
+          >
+            Meeting Intelligence
+          </span>
+        </span>
+      </Link>
 
-        <nav className="ml-2 flex flex-1 items-center gap-0.5 overflow-x-auto">
-          {ITEMS.map(({ href, label, Icon }) => {
-            const active =
-              pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? "page" : undefined}
-                className={`flex shrink-0 items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-                  active
-                    ? "bg-accentSoft text-[color:var(--accent)]"
-                    : "text-ink2 hover:text-[color:var(--accent)]"
-                }`}
-              >
-                <Icon className="h-[16px] w-[16px] shrink-0" />
-                <span className="hidden lg:inline">{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+      <nav className="flex flex-col gap-0.5">
+        {ITEMS.map(({ href, label, Icon }) => {
+          const active = pathname === href || pathname.startsWith(href + "/");
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              className="flex items-center gap-3 rounded-[11px] px-3 py-2.5 text-sm font-semibold transition-colors"
+              style={
+                active
+                  ? {
+                      background: "var(--accent-soft)",
+                      color: "var(--accent)",
+                      boxShadow: "inset 3px 0 0 var(--accent)",
+                    }
+                  : { color: "var(--ink-2)" }
+              }
+            >
+              <Icon className="h-[18px] w-[18px] shrink-0" />
+              <span>{label}</span>
+              {href === "/inbox" && (
+                <span
+                  className="ml-auto rounded-full px-1.5 py-0.5 text-[10.5px] font-bold"
+                  style={{ color: "var(--accent)", background: "var(--accent-soft)" }}
+                >
+                  4
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
 
+      <div className="mt-auto">
         <ThemeToggle />
       </div>
-    </header>
+    </aside>
   );
 }

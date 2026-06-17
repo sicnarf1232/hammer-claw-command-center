@@ -272,11 +272,8 @@ async function SeriesDetail({ path }: { path: string }) {
           </div>
         </div>
 
-        <div className="mt-7">
-          <div className="mb-3 flex items-center gap-2.5">
-            <SectionIndex n={2} />
-            <h3 className="text-base font-bold text-fg">Sessions</h3>
-          </div>
+        <div>
+          <SectionHeader title="Sessions" />
           {series.log.length === 0 ? (
             <p className="text-sm text-muted">No entries yet.</p>
           ) : (
@@ -333,14 +330,20 @@ function bulletsOf(body: string): string[] {
     .filter(Boolean);
 }
 
-function SectionIndex({ n }: { n: number }) {
+// Section header in the design's style: a warm two-digit index + uppercase
+// kicker. Pass label only (no number) to render just the kicker.
+function SectionHeader({ n, title }: { n?: number; title: string }) {
   return (
-    <span
-      className="flex h-6 w-6 items-center justify-center rounded-[7px] text-[11px] font-bold tabular-nums"
-      style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
-    >
-      {String(n).padStart(2, "0")}
-    </span>
+    <div className="mb-3.5 mt-9 flex items-baseline gap-3.5">
+      {n != null && (
+        <span className="text-[13px] font-bold tabular-nums" style={{ color: "var(--warm)" }}>
+          {String(n).padStart(2, "0")}
+        </span>
+      )}
+      <span className="text-sm font-bold uppercase tracking-[0.1em] text-fg">
+        {title}
+      </span>
+    </div>
   );
 }
 
@@ -357,12 +360,9 @@ function NumberedSection({
 }) {
   const items = bulletsOf(body);
   return (
-    <section className="mt-7">
-      <div className="mb-3 flex items-center gap-2.5">
-        <SectionIndex n={index} />
-        <h3 className="text-base font-bold text-fg">{title}</h3>
-      </div>
-      <div className="grid gap-1.5">
+    <section>
+      <SectionHeader n={index} title={title} />
+      <div className="flex flex-col">
         {items.map((it, i) => (
           <ListItem key={i} text={it} variant={variant} />
         ))}
@@ -374,37 +374,35 @@ function NumberedSection({
 function ListItem({ text, variant }: { text: string; variant: OrderedSection["variant"] }) {
   if (variant === "watch") {
     return (
-      <div
-        className="flex items-start gap-2.5 rounded-[10px] p-2.5 transition-colors"
-        style={{ background: "transparent" }}
-      >
+      <div className="-mx-3 flex items-center gap-4 rounded-[10px] px-3 py-3 transition-colors hover:bg-[color:var(--due-soft)]">
         <span
-          className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-xs font-bold"
-          style={{ background: "var(--due-soft)", color: "var(--due-ink)" }}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          style={{ background: "var(--due)" }}
         >
           !
         </span>
-        <span className="text-sm text-fg/85">{text}</span>
+        <span className="text-[15px] text-fg">{text}</span>
       </div>
     );
   }
   if (variant === "number") {
     return (
       <div
-        className="flex items-start gap-2.5 rounded-[10px] p-2.5"
-        style={{ background: "var(--accent-soft)" }}
+        className="-mx-3 mb-1.5 flex items-center gap-4 rounded-[12px] border px-4 py-3"
+        style={{ background: "var(--accent-soft)", borderColor: "var(--line)" }}
       >
-        <span className="mt-0.5 text-xs" style={{ color: "var(--accent)" }}>
-          ◆
-        </span>
-        <span className="text-sm text-fg/85">{text}</span>
+        <span className="shrink-0 text-sm" style={{ color: "var(--accent)" }}>◆</span>
+        <span className="text-[15px] text-fg">{text}</span>
       </div>
     );
   }
   return (
-    <div className="flex items-start gap-2.5 rounded-[10px] p-2.5 transition-colors hover:bg-surface2">
-      <span className="mt-1.5 h-2 w-2 shrink-0 rotate-45" style={{ background: "var(--accent)" }} />
-      <span className="text-sm text-fg/85">{text}</span>
+    <div className="-mx-3 flex items-center gap-4 rounded-[10px] px-3 py-3 transition-colors hover:bg-surface2">
+      <span
+        className="block shrink-0 rotate-45 rounded-[2px]"
+        style={{ width: 11, height: 11, background: "var(--accent)" }}
+      />
+      <span className="text-[15px] text-fg">{text}</span>
     </div>
   );
 }
@@ -428,11 +426,8 @@ function FullNotesSection({ index, body }: { index: number; body: string }) {
   }
 
   return (
-    <section className="mt-7">
-      <div className="mb-3 flex items-center gap-2.5">
-        <SectionIndex n={index} />
-        <h3 className="text-base font-bold text-fg">Full Notes</h3>
-      </div>
+    <section>
+      <SectionHeader n={index} title="Full Notes" />
       <div className="grid gap-3">
         {blocks.map((b, i) => (
           <div key={i}>

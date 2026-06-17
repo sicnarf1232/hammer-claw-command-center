@@ -28,12 +28,14 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        <Nav />
-        <main className="px-5 py-8 sm:px-7">
-          <div className="mx-auto max-w-[1180px] animate-fade-in">
-            {children}
-          </div>
-        </main>
+        <div className="flex">
+          <Nav />
+          <main className="min-w-0 flex-1">
+            <div className="mx-auto max-w-[1180px] animate-fade-in px-6 py-8 pb-24 sm:px-9">
+              {children}
+            </div>
+          </main>
+        </div>
       </body>
     </html>
   );

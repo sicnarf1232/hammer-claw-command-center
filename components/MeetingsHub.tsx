@@ -73,13 +73,20 @@ export default function MeetingsHub({
         >
           ● Synced from vault · just now
         </span>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-[36px] font-bold leading-none tracking-tight text-fg">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-[580px]">
+            <div
+              className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--accent)" }}
+            >
+              ✦ Film Room
+            </div>
+            <h1 className="text-[36px] font-bold leading-[1.02] tracking-tight text-fg">
               All Meetings
             </h1>
-            <p className="mt-2 text-sm text-ink2">
-              Every filed session, grouped your way, straight from the vault.
+            <p className="mt-2.5 text-[15px] leading-relaxed text-ink2">
+              Every conversation across customers and rolling series, grouped,
+              deduped, and ready to brief in seconds.
             </p>
           </div>
           <div className="flex gap-2">
@@ -356,7 +363,7 @@ function MeetingRow({ row }: { row: HubRow }) {
         <div className="eyebrow text-[10px]" style={{ color: hue }}>{kicker}</div>
         <div className="mt-0.5 truncate text-sm font-semibold text-fg">{row.title}</div>
       </div>
-      <span className="shrink-0 text-[13px] font-semibold opacity-0 transition-opacity group-hover:opacity-100" style={{ color: "var(--accent)" }}>
+      <span className="shrink-0 text-[12.5px] font-semibold" style={{ color: "var(--ink-3)" }}>
         Open →
       </span>
     </div>
