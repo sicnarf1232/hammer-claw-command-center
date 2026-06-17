@@ -3,6 +3,16 @@
 Status: PLANNING (not yet built). Captured 2026-06-17 to revisit after current
 meeting/pull work. Build steps are sequenced; nothing here is implemented.
 
+### Decisions locked (2026-06-17)
+
+- **Approach: self-theming first, productize later.** Build the single-user
+  theming engine + Settings UI (option A below), but key the config so it can
+  become per-tenant later (option B) with no rework. The multi-tenant / SaaS
+  decision is explicitly deferred.
+- **Timing: deferred.** Finish the current meeting/pull items first. This is the
+  map only; do not start building until Jordan says go (and the Claude Design
+  layout prompt lands, which informs how deep the theming/layout goes).
+
 ## Goal
 
 Let the **user configure branding in the app** (logo, brand colors, app name,
