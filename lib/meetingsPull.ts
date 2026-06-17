@@ -28,7 +28,8 @@ import {
   meetingBasename,
   meetingFolder,
   renderMeetingNote,
-  upsertMeetingsIndex,
+  rebuildMeetingsIndex,
+  indexRowFromPath,
   type MeetingRow,
 } from "@/lib/meetingFormat";
 import { appTimezone, todayISO } from "@/lib/dates";
@@ -118,7 +119,6 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   const filed: PullFiled[] = [];
   const skipped: PullSkipped[] = [];
   const errors: PullError[] = [];
-  const newRows: MeetingRow[] = [];
   const seriesUpdated: PullSeriesUpdate[] = [];
 
   // 4) One note at a time (respects Granola + Anthropic rate limits). Stop
@@ -164,7 +164,11 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
       const matched = findSeries(series, triaged, attendees);
       if (matched) triaged.series = matched.name;
 
-      const folder = meetingFolder(triaged.workstream, triaged.account);
+      const folder = meetingFolder(
+        triaged.workstream,
+        triaged.account,
+        triaged.bucket,
+      );
       const path = `${folder}/${finalBasename}.md`;
       const content = renderMeetingNote({
         triaged,
@@ -189,13 +193,6 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
         bucket: triaged.bucket,
         workstream: triaged.workstream,
       });
-      newRows.push({
-        date,
-        bucket: triaged.bucket,
-        title: triaged.title,
-        basename: finalBasename,
-      });
-
       // Update the rolling-series doc if this meeting belongs to one.
       if (matched) {
         try {
@@ -241,15 +238,21 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
     }
   }
 
-  // 5) Refresh the index in one commit if anything was filed.
-  if (newRows.length && indexFile) {
-    const stamp = `${todayISO()} (app Granola pull: ${newRows.length} new)`;
-    const updated = upsertMeetingsIndex(indexFile.content, newRows, stamp);
+  // 5) Rebuild the index from the actual meeting files on disk. This always
+  // runs (even when nothing new filed) so it self-heals a stale index left by
+  // an earlier partial/timed-out pull. Re-list to include this pull's writes.
+  if (indexFile) {
+    const freshFiles = await listMarkdownFiles().catch(() => allFiles);
+    const rows = freshFiles
+      .map((f) => indexRowFromPath(f.path))
+      .filter((r): r is MeetingRow => r !== null);
+    const stamp = `${todayISO()} (app Granola pull: ${filed.length} new, ${rows.length} meetings indexed)`;
+    const updated = rebuildMeetingsIndex(indexFile.content, rows, stamp);
     if (updated !== indexFile.content) {
       await writeFile({
         path: MEETINGS_INDEX_PATH,
         content: updated,
-        message: `app: index ${newRows.length} pulled meeting(s) ${todayISO()}`,
+        message: `app: rebuild meetings index ${todayISO()}`,
       });
     }
   }

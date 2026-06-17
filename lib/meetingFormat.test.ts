@@ -5,6 +5,8 @@ import {
   meetingFolder,
   renderMeetingNote,
   upsertMeetingsIndex,
+  rebuildMeetingsIndex,
+  indexRowFromPath,
 } from "./meetingFormat";
 import type { TriagedMeeting } from "./ai";
 
@@ -62,13 +64,79 @@ describe("meetingFolder", () => {
       "300 Merit/Meetings/MicroVention Terumo",
     );
   });
-  it("stages merit meetings with no account under _Unfiled", () => {
-    expect(meetingFolder("merit", null)).toBe("300 Merit/Meetings/_Unfiled");
+  it("routes internal merit meetings to Internal, ambiguous ones to _Unfiled", () => {
+    expect(meetingFolder("merit", null, "Internal")).toBe(
+      "300 Merit/Meetings/Internal",
+    );
+    expect(meetingFolder("merit", null, "Stryker")).toBe(
+      "300 Merit/Meetings/_Unfiled",
+    );
   });
   it("routes other workstreams to their own Meetings folders", () => {
     expect(meetingFolder("sloan", "Acme")).toBe("500 Sloan/Meetings/Acme");
     expect(meetingFolder("personal", null)).toBe("600 Personal/Meetings");
-    expect(meetingFolder("shared", null)).toBe("300 Merit/Meetings/_Unfiled");
+  });
+});
+
+describe("indexRowFromPath", () => {
+  it("parses a dated meeting note into a row with the folder as bucket", () => {
+    expect(
+      indexRowFromPath("300 Merit/Meetings/Stryker/2026-06-16 - Dash 9F MDR.md"),
+    ).toEqual({
+      date: "2026-06-16",
+      bucket: "Stryker",
+      title: "Dash 9F MDR",
+      basename: "2026-06-16 - Dash 9F MDR",
+    });
+  });
+  it("buckets Internal and _Unfiled folders", () => {
+    expect(
+      indexRowFromPath("300 Merit/Meetings/Internal/2026-06-16 - Mike 1on1.md")
+        ?.bucket,
+    ).toBe("Internal");
+    expect(
+      indexRowFromPath("300 Merit/Meetings/_Unfiled/2026-06-16 - X.md")?.bucket,
+    ).toBe("Unfiled");
+  });
+  it("ignores non-dated working files", () => {
+    expect(indexRowFromPath("300 Merit/Meetings/Stryker/Amplitude.md")).toBeNull();
+  });
+});
+
+describe("rebuildMeetingsIndex", () => {
+  const index = [
+    "# Meetings Index",
+    "",
+    "## Recent meetings",
+    "",
+    "| Date | Bucket | Title | Note |",
+    "|------|--------|-------|------|",
+    "| 2026-06-10 | Stryker | Stale Old | [[2026-06-10 - Stale Old]] |",
+    "",
+    "trailing prose",
+  ].join("\n");
+
+  it("replaces the table from the file set, newest first", () => {
+    const out = rebuildMeetingsIndex(index, [
+      {
+        date: "2026-06-16",
+        bucket: "Internal",
+        title: "Mike 1on1",
+        basename: "2026-06-16 - Mike 1on1",
+      },
+      {
+        date: "2026-06-12",
+        bucket: "Stryker",
+        title: "LTA",
+        basename: "2026-06-12 - LTA",
+      },
+    ]);
+    const rows = out.split("\n").filter((l) => l.startsWith("| 2026-"));
+    expect(rows[0]).toContain("2026-06-16 - Mike 1on1");
+    expect(rows[1]).toContain("2026-06-12 - LTA");
+    // The stale row that has no backing file is dropped on rebuild.
+    expect(out).not.toContain("Stale Old");
+    expect(out).toContain("trailing prose");
   });
 });
 

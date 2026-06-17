@@ -107,10 +107,14 @@ function deriveMatchRules(
     .filter((p) => !/jordan/i.test(p))
     .map((p) => p.split(/\s+/)[0]) // first name
     .filter(Boolean);
-  const isOneOnOne = /\b1\s*:?\s*1\b|1on1|one on one/i.test(name);
+  const isOneOnOne = /\b1\s*[:\- ]?\s*1\b|1on1|one on one/i.test(name);
   return {
     titleContains: others.map((o) => o.toLowerCase()),
-    titleAlsoContains: isOneOnOne ? ["1:1", "1on1", "one on one"] : [],
+    // Cover the variants a title may use after filename sanitizing ("1:1" can
+    // become "1 1" or "1-1") so a sanitized title still matches.
+    titleAlsoContains: isOneOnOne
+      ? ["1:1", "1 1", "1-1", "1on1", "one on one"]
+      : [],
     attendeesInclude: others,
     topicKeywords: tags,
   };

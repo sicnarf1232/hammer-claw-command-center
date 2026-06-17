@@ -36,20 +36,72 @@ export function meetingBasename(date: string, title: string): string {
 }
 
 // Where the note files, by workstream and (for customer meetings) account.
-export function meetingFolder(ws: Workstream, account: string | null): string {
+// Internal meetings (no customer, Internal bucket) go to the Internal folder;
+// only genuinely ambiguous account-less meetings stage in _Unfiled.
+export function meetingFolder(
+  ws: Workstream,
+  account: string | null,
+  bucket?: string,
+): string {
   const acct = account ? sanitizeForFilename(account) : null;
+  const internal = !acct && /internal/i.test(bucket ?? "");
   switch (ws) {
     case "merit":
-      return acct ? `300 Merit/Meetings/${acct}` : `300 Merit/Meetings/_Unfiled`;
+      if (acct) return `300 Merit/Meetings/${acct}`;
+      return internal
+        ? `300 Merit/Meetings/Internal`
+        : `300 Merit/Meetings/_Unfiled`;
     case "sloan":
       return acct ? `500 Sloan/Meetings/${acct}` : `500 Sloan/Meetings`;
     case "personal":
       return `600 Personal/Meetings`;
     case "shared":
     default:
-      // No shared Meetings home in the folder model; stage for refiling.
-      return `300 Merit/Meetings/_Unfiled`;
+      return internal
+        ? `300 Merit/Meetings/Internal`
+        : `300 Merit/Meetings/_Unfiled`;
   }
+}
+
+// Parse a meeting file path into an index row, or null if it is not a dated
+// meeting note ("YYYY-MM-DD - Title.md"). Bucket comes from the folder: the
+// account name, or "Internal"/"Unfiled", or the workstream for loose files.
+export function indexRowFromPath(path: string): MeetingRow | null {
+  const file = path.split("/").pop() ?? "";
+  const m = file.match(/^(\d{4}-\d{2}-\d{2}) - (.+)\.md$/);
+  if (!m) return null;
+  const [, date, title] = m;
+  return {
+    date,
+    bucket: bucketFromPath(path),
+    title,
+    basename: file.replace(/\.md$/, ""),
+  };
+}
+
+function bucketFromPath(path: string): string {
+  const parts = path.split("/");
+  const mi = parts.lastIndexOf("Meetings");
+  const seg = mi >= 0 ? parts[mi + 1] : undefined;
+  if (!seg || seg.endsWith(".md")) {
+    const ws = parts[0] ?? "";
+    if (/Personal/i.test(ws)) return "Personal";
+    if (/Sloan/i.test(ws)) return "Sloan";
+    return "Internal";
+  }
+  if (seg === "_Unfiled") return "Unfiled";
+  return seg;
+}
+
+// Rebuild the index table from a full set of rows (newest first, deduped by
+// basename, capped at 30), replacing the existing table. Self-heals a stale
+// index regardless of who filed the notes. Surrounding prose is preserved.
+export function rebuildMeetingsIndex(
+  content: string,
+  rows: MeetingRow[],
+  updateStamp?: string,
+): string {
+  return writeIndexTable(content, rows, updateStamp, true);
 }
 
 function yamlString(s: string): string {
@@ -142,9 +194,20 @@ export function upsertMeetingsIndex(
   newRows: MeetingRow[],
   updateStamp?: string, // optional "Last update" note
 ): string {
+  return writeIndexTable(content, newRows, updateStamp, false);
+}
+
+// Shared table writer. When `rebuild` is true the table is replaced by `rows`
+// alone; otherwise `rows` are merged ahead of the existing table. Either way:
+// newest first, deduped by basename, capped at 30, surrounding prose preserved.
+function writeIndexTable(
+  content: string,
+  rows: MeetingRow[],
+  updateStamp: string | undefined,
+  rebuild: boolean,
+): string {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
 
-  // Locate the header row ("| Date | Bucket | ...") and its separator.
   let headerIdx = -1;
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i].trim();
@@ -154,12 +217,10 @@ export function upsertMeetingsIndex(
     }
   }
   if (headerIdx === -1 || headerIdx + 1 >= lines.length) {
-    // No recognizable table; leave the file untouched rather than corrupt it.
-    return content;
+    return content; // no recognizable table; do not corrupt the file
   }
   const sepIdx = headerIdx + 1;
 
-  // Collect the contiguous data rows directly under the separator.
   let dataEnd = sepIdx + 1;
   while (dataEnd < lines.length && lines[dataEnd].trim().startsWith("|")) {
     dataEnd++;
@@ -178,14 +239,15 @@ export function upsertMeetingsIndex(
     merged.push({ date, line });
   };
 
-  for (const r of newRows) pushRow(r.date, r.basename, rowToLine(r));
-  for (const line of existing) {
-    const m = line.match(/\[\[([^\]]+)\]\]/);
-    const date = line.split("|")[1]?.trim() ?? "";
-    pushRow(date, m ? m[1] : line, line);
+  for (const r of rows) pushRow(r.date, r.basename, rowToLine(r));
+  if (!rebuild) {
+    for (const line of existing) {
+      const m = line.match(/\[\[([^\]]+)\]\]/);
+      const date = line.split("|")[1]?.trim() ?? "";
+      pushRow(date, m ? m[1] : line, line);
+    }
   }
 
-  // Newest first, capped at 30.
   merged.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const capped = merged.slice(0, 30).map((m) => m.line);
 
@@ -195,7 +257,6 @@ export function upsertMeetingsIndex(
     ...lines.slice(dataEnd),
   ];
 
-  // Refresh the "**Last update:**" line if one exists and a stamp was given.
   if (updateStamp) {
     for (let i = 0; i < out.length; i++) {
       if (out[i].trim().startsWith("**Last update:**")) {
