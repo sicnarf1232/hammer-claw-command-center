@@ -65,7 +65,7 @@ function yamlList(items: string[]): string {
 // Decisions, Numbers That Matter, Watch-Outs, Full Notes. Optional sections are
 // omitted when empty; TL;DR and Action Items always render.
 export function renderMeetingNote(input: RenderInput): string {
-  const { triaged: t, date, meetingTime, attendees, granolaId, webUrl } = input;
+  const { triaged: t, date, meetingTime, attendees, granolaId } = input;
 
   const fm: string[] = ["---"];
   fm.push(`workstream: ${t.workstream}`);
@@ -75,27 +75,25 @@ export function renderMeetingNote(input: RenderInput): string {
   fm.push(`date: ${date}`);
   if (meetingTime) fm.push(`meeting_time: ${meetingTime}`);
   if (t.account) fm.push(`customer: ${yamlString(`[[${t.account}]]`)}`);
-  if (t.topic) fm.push(`topic: ${yamlString(t.topic)}`);
   if (attendees.length) fm.push(`attendees: ${yamlList(attendees)}`);
   if (t.series) fm.push(`series: ${t.series}`);
   fm.push(`granola_id: ${granolaId}`);
-  if (webUrl) fm.push(`granola_url: ${webUrl}`);
-  fm.push(`source: granola-pull`);
   fm.push("---");
 
-  const titleSuffix = t.account ? ` - ${t.account}` : "";
+  // Title and meta match Jordan's vault: "Title -- Account", a Customer/Date/
+  // Time line, then a Bucket line carrying the bucket and a short topic.
+  const titleSuffix = t.account ? ` -- ${t.account}` : "";
   const metaLine1: string[] = [];
   if (t.account) metaLine1.push(`**Customer:** [[${t.account}]]`);
   metaLine1.push(`**Date:** ${date}`);
   if (meetingTime) metaLine1.push(`**Time:** ${meetingTime}`);
-  if (t.series) metaLine1.push(`**Series:** ${t.series}`);
 
   const body: string[] = ["", `# ${t.title}${titleSuffix}`, "", metaLine1.join(" · ")];
-  if (t.topic) body.push(`**Topic:** ${t.topic}`);
+  body.push(`**Bucket:** ${t.bucket}${t.topic ? ` · ${t.topic}` : ""}`);
 
   // Always-render sections.
   body.push("", "## TL;DR", "", t.tldr || "(no summary captured)");
-  body.push("", "## Action Items", "", renderActionItems(t, date));
+  body.push("", "## Action Items", "", renderActionItems(t));
 
   // Optional sections, omitted when empty.
   if (t.decisions.length) {
@@ -122,27 +120,16 @@ function bullets(items: string[]): string {
   return items.map((d) => `- ${d}`).join("\n");
 }
 
-// Dual-capture action items: Jordan's items carry an inline field row (so the
-// task parser surfaces them as real tasks); everyone else's stay plain, with an
-// optional indented "Due:" line (Handoff SPEC section 3).
-function renderActionItems(t: TriagedMeeting, date: string): string {
+// Action items match Jordan's vault: one combined list of "- [ ] Owner: task",
+// with an optional indented "🗓️ Due:" line. Meeting action items are tracking,
+// not dual-captured tasks (real tasks live in customer/project notes).
+function renderActionItems(t: TriagedMeeting): string {
   if (!t.actionItems.length) return "- (none captured)";
   const lines: string[] = [];
   for (const ai of t.actionItems) {
     const owner = ai.owner ? `${ai.owner}: ` : "";
-    const box = "- [ ] ";
-    if (ai.isJordans) {
-      lines.push(`${box}${owner || "Jordan: "}${ai.text}`);
-      const fields: string[] = [];
-      if (t.account) fields.push(`[customer:: [[${t.account}]]]`);
-      fields.push(`[created:: ${date}]`);
-      if (ai.priority) fields.push(`[priority:: ${ai.priority}]`);
-      if (ai.due) fields.push(`[due:: ${ai.due}]`);
-      lines.push(`    ${fields.join(" ")}`);
-    } else {
-      lines.push(`${box}${owner}${ai.text}`);
-      if (ai.due) lines.push(`    Due: ${ai.due}`);
-    }
+    lines.push(`- [ ] ${owner}${ai.text}`);
+    if (ai.due) lines.push(`    🗓️ Due: ${ai.due}`);
   }
   return lines.join("\n");
 }

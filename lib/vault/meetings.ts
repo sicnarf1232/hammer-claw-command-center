@@ -21,7 +21,8 @@ export function parseMeetingNote(content: string, path = ""): MeetingNote {
   const attendees = toStringArray(frontmatter.raw.attendees);
   const customer = parseCustomerLink(frontmatter.raw.customer);
   const series = asString(frontmatter.raw.series);
-  const topic = asString(frontmatter.raw.topic);
+  const topic =
+    asString(frontmatter.raw.topic) ?? extractMetaTopic(allLines, bodyStart);
   const granolaId = asString(frontmatter.raw.granola_id);
   const date = frontmatter.date ?? asString(frontmatter.raw.date);
   const title = firstHeading(allLines, bodyStart) ?? basenameOf(path).replace(/\.md$/, "");
@@ -207,6 +208,21 @@ function countFrontmatterLines(content: string): number {
     if (lines[i].trim() === "---") return i + 1;
   }
   return 0;
+}
+
+// Pull the topic from the body meta line ("**Bucket:** ..." or "**Topic:** ...")
+// that sits between the H1 and the first H2. Used when topic is not a frontmatter
+// field (Jordan's notes carry it on the Bucket line).
+function extractMetaTopic(
+  allLines: string[],
+  bodyStart: number,
+): string | undefined {
+  for (let i = bodyStart; i < allLines.length; i++) {
+    if (/^##\s+/.test(allLines[i])) break;
+    const m = allLines[i].match(/^\*\*(?:Bucket|Topic):\*\*\s*(.+?)\s*$/);
+    if (m) return m[1].trim();
+  }
+  return undefined;
 }
 
 function firstHeading(allLines: string[], from: number): string | undefined {

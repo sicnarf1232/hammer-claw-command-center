@@ -1,12 +1,13 @@
 import { splitFrontmatter } from "./frontmatter";
 
-// Rolling-series notes (Meeting Notes App Handoff SPEC section 5): a living doc
-// per recurring meeting, with a pinned "Current State" plus a reverse-
-// chronological "Meeting Log". Series docs live in the vault under
-// `<workstream>/Meetings/_Series/<id>.md` and carry their own matchRules in
-// frontmatter, so the doc IS the config: drop one in and the pull maintains it.
+// Rolling-series notes: a living doc per recurring meeting, with a pinned
+// "Current State" plus a reverse-chronological "Meeting Log". These match
+// Jordan's real vault convention: docs live under `<...>/Meetings/.../Rolling/`,
+// frontmatter is `type: Rolling Series` with `series` (name), `participants`,
+// `tags` (no matchRules). When matchRules are absent we derive them from the
+// participants and series name, so existing docs work with no edits.
 
-export const SERIES_DIR_MARKER = "/Meetings/_Series/";
+export const SERIES_DIR_MARKER = "/Rolling/";
 
 export interface SeriesMatchRules {
   titleContains?: string[];
@@ -53,29 +54,37 @@ export function parseSeriesDoc(content: string, path = ""): Series {
   const { frontmatter, body } = splitFrontmatter(content);
   const raw = frontmatter.raw;
 
-  const mrRaw = (raw.matchRules ?? {}) as Record<string, unknown>;
-  const matchRules: SeriesMatchRules = {
-    titleContains: toStringArray(mrRaw.titleContains),
-    titleAlsoContains: toStringArray(mrRaw.titleAlsoContains),
-    attendeesInclude: toStringArray(mrRaw.attendeesInclude),
-    topicKeywords: toStringArray(mrRaw.topicKeywords),
-  };
+  const id =
+    asString(raw.id) ??
+    path.split("/").pop()?.replace(/\.md$/, "") ??
+    "series";
+  // Jordan's docs name the series in `series`; the handoff sample used `name`.
+  const name = asString(raw.series) ?? asString(raw.name) ?? id;
+  const participants = toStringArray(raw.participants);
+  const tags = toStringArray(raw.tags);
+
+  // Use explicit matchRules when present, else derive them from the series name
+  // and participants so existing docs (which have none) still match meetings.
+  const mrRaw = raw.matchRules as Record<string, unknown> | undefined;
+  const matchRules: SeriesMatchRules = mrRaw
+    ? {
+        titleContains: toStringArray(mrRaw.titleContains),
+        titleAlsoContains: toStringArray(mrRaw.titleAlsoContains),
+        attendeesInclude: toStringArray(mrRaw.attendeesInclude),
+        topicKeywords: toStringArray(mrRaw.topicKeywords),
+      }
+    : deriveMatchRules(name, participants, tags);
 
   const lines = body.split("\n");
   const currentState = sectionBody(lines, /^##\s+Current State/i).trim();
   const log = parseLog(lines);
 
-  const id =
-    asString(raw.id) ??
-    path.split("/").pop()?.replace(/\.md$/, "") ??
-    "series";
-
   return {
     path,
     id,
-    name: asString(raw.name) ?? id,
+    name,
     cadence: asString(raw.cadence),
-    participants: toStringArray(raw.participants),
+    participants,
     matchRules,
     color: asString(raw.color),
     status: asString(raw.status),
@@ -83,6 +92,27 @@ export function parseSeriesDoc(content: string, path = ""): Series {
     currentState,
     log,
     raw: content,
+  };
+}
+
+// Derive matchRules from a series with no explicit rules: non-Jordan
+// participants drive both the title hint and the required-attendee set; a "1:1"
+// in the name adds the 1:1 title variants; tags become soft topic keywords.
+function deriveMatchRules(
+  name: string,
+  participants: string[],
+  tags: string[],
+): SeriesMatchRules {
+  const others = participants
+    .filter((p) => !/jordan/i.test(p))
+    .map((p) => p.split(/\s+/)[0]) // first name
+    .filter(Boolean);
+  const isOneOnOne = /\b1\s*:?\s*1\b|1on1|one on one/i.test(name);
+  return {
+    titleContains: others.map((o) => o.toLowerCase()),
+    titleAlsoContains: isOneOnOne ? ["1:1", "1on1", "one on one"] : [],
+    attendeesInclude: others,
+    topicKeywords: tags,
   };
 }
 
@@ -122,34 +152,27 @@ export function matchesSeries(
   return false;
 }
 
-// Apply a new meeting to a series doc: prepend a log entry and replace Current
-// State. Frontmatter is preserved verbatim except the `updated` stamp. Action
-// items are intentionally not copied in (the full note owns those).
+// Apply a new meeting to a series doc, surgically: replace the Current State
+// block, prepend the new log entry under Meeting Log, and restamp `updated`.
+// Everything else (the H1, frontmatter, existing entries, dividers) is preserved
+// byte-for-byte. Action items are intentionally not copied in (the full note
+// owns those). If the doc lacks the expected sections, append them.
 export function applyMeetingToSeries(
   series: Series,
   entry: NewLogEntry,
   newCurrentState: string,
   asOf: string, // "MM/DD"
 ): string {
-  const { fmBlock, body } = splitFrontmatterBlock(series.raw);
+  const text = series.raw.replace(/\r\n/g, "\n");
+  const fmEnd = frontmatterEnd(text);
+  const head = text.slice(0, fmEnd); // frontmatter block incl. trailing newline
+  let bodyLines = text.slice(fmEnd).split("\n");
 
-  const newBody = [
-    `# ${series.name} - Rolling Notes`,
-    "",
-    `## Current State (as of ${asOf})`,
-    "",
-    newCurrentState.trim() || "(no current state captured)",
-    "",
-    "---",
-    "",
-    "## Meeting Log",
-    "",
-    renderLogEntry(entry),
-    ...renderExistingLog(series.log),
-  ].join("\n");
+  bodyLines = replaceCurrentState(bodyLines, newCurrentState.trim(), asOf);
+  bodyLines = prependLogEntry(bodyLines, renderLogEntry(entry));
 
-  const fm = stampUpdated(fmBlock, entry.date);
-  return `${fm}\n${newBody}\n`;
+  const newHead = stampUpdated(head, entry.date);
+  return newHead + bodyLines.join("\n");
 }
 
 export function mmdd(isoDate: string): string {
@@ -157,24 +180,90 @@ export function mmdd(isoDate: string): string {
   return m ? `${m[1]}/${m[2]}` : isoDate;
 }
 
+// ---- surgical edit helpers ----
+
+// Replace the lines from "## Current State" up to (not including) the next H2,
+// keeping a single divider if one was there. Appends the section if missing.
+function replaceCurrentState(
+  lines: string[],
+  body: string,
+  asOf: string,
+): string[] {
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^##\s+Current State/i.test(lines[i])) {
+      start = i;
+      break;
+    }
+  }
+  const block = [
+    `## Current State (as of ${asOf})`,
+    "",
+    body || "(no current state captured)",
+    "",
+  ];
+  if (start === -1) {
+    // No section yet: put it right after the H1 (or at the top of the body).
+    let h1 = lines.findIndex((l) => /^#\s+/.test(l));
+    if (h1 === -1) h1 = -1;
+    const at = h1 + 1;
+    return [...lines.slice(0, at), "", ...block, ...lines.slice(at)];
+  }
+  let end = start + 1;
+  let dividerKept = false;
+  while (end < lines.length && !/^##\s+/.test(lines[end])) {
+    if (lines[end].trim() === "---") {
+      dividerKept = true;
+      end++;
+      break;
+    }
+    end++;
+  }
+  const tail = dividerKept ? ["---", ""] : [];
+  return [...lines.slice(0, start), ...block, ...tail, ...lines.slice(end)];
+}
+
+// Insert the rendered entry just after the "## Meeting Log" heading (and its
+// blank line). Appends the section if missing.
+function prependLogEntry(lines: string[], entry: string): string[] {
+  let idx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^##\s+Meeting Log/i.test(lines[i])) {
+      idx = i;
+      break;
+    }
+  }
+  const entryLines = [...entry.split("\n"), ""];
+  if (idx === -1) {
+    return [...lines, "", "## Meeting Log", "", ...entryLines];
+  }
+  let at = idx + 1;
+  if (at < lines.length && lines[at].trim() === "") at++; // keep one blank line
+  return [...lines.slice(0, at), ...entryLines, ...lines.slice(at)];
+}
+
+function frontmatterEnd(text: string): number {
+  if (!text.startsWith("---")) return 0;
+  const lines = text.split("\n");
+  if (lines[0].trim() !== "---") return 0;
+  let offset = lines[0].length + 1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") {
+      return offset + lines[i].length + 1; // include the closing fence + newline
+    }
+    offset += lines[i].length + 1;
+  }
+  return 0;
+}
+
 // ---- rendering helpers ----
 
+// Match Jordan's existing log entries: "### MM/DD — Title" with an em dash.
 function renderLogEntry(entry: NewLogEntry): string {
-  const lines = [`### ${mmdd(entry.date)} - ${entry.title}`];
+  const lines = [`### ${mmdd(entry.date)} — ${entry.title}`];
   for (const b of entry.bullets) lines.push(`- ${b}`);
   lines.push(`- Source: [[${entry.meetingBasename}]]`);
   return lines.join("\n");
-}
-
-function renderExistingLog(log: SeriesLogEntry[]): string[] {
-  if (!log.length) return [];
-  const out: string[] = [];
-  for (const e of log) {
-    out.push("", `### ${e.heading}`);
-    const text = e.text.trim();
-    if (text) out.push(text);
-  }
-  return out;
 }
 
 // ---- parsing helpers ----
@@ -223,38 +312,29 @@ function parseLog(lines: string[]): SeriesLogEntry[] {
   return entries;
 }
 
-function splitFrontmatterBlock(content: string): {
-  fmBlock: string;
-  body: string;
-} {
-  const text = content.replace(/\r\n/g, "\n");
-  const lines = text.split("\n");
-  if (lines[0]?.trim() !== "---") return { fmBlock: "", body: text };
-  for (let i = 1; i < lines.length; i++) {
+// Restamp `updated:` inside a frontmatter block (text including the fences and
+// trailing newline). Preserves the trailing newline so the body joins cleanly.
+function stampUpdated(head: string, isoDate: string): string {
+  if (!head) return head;
+  const lines = head.split("\n");
+  let closing = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i].trim() === "---") {
-      return {
-        fmBlock: lines.slice(0, i + 1).join("\n"),
-        body: lines.slice(i + 1).join("\n"),
-      };
+      closing = i;
+      break;
     }
   }
-  return { fmBlock: "", body: text };
-}
-
-function stampUpdated(fmBlock: string, isoDate: string): string {
-  if (!fmBlock) return fmBlock;
-  const lines = fmBlock.split("\n");
+  const limit = closing === -1 ? lines.length : closing;
   let found = false;
-  for (let i = 0; i < lines.length; i++) {
+  for (let i = 0; i < limit; i++) {
     if (/^updated\s*:/.test(lines[i])) {
       lines[i] = `updated: ${isoDate}`;
       found = true;
       break;
     }
   }
-  if (!found) {
-    // Insert before the closing fence.
-    lines.splice(lines.length - 1, 0, `updated: ${isoDate}`);
+  if (!found && closing !== -1) {
+    lines.splice(closing, 0, `updated: ${isoDate}`);
   }
   return lines.join("\n");
 }

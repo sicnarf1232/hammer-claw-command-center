@@ -83,15 +83,23 @@ describe("renderMeetingNote", () => {
     createdISO: "2026-06-17",
   });
 
-  it("writes the meeting frontmatter to contract", () => {
+  it("writes the meeting frontmatter to match the vault", () => {
     expect(md).toContain("workstream: merit");
     expect(md).toContain("type: meeting");
     expect(md).toContain("date: 2026-05-28");
     expect(md).toContain('customer: "[[MicroVention Terumo]]"');
-    expect(md).toContain('topic: "Sample build, GTIN implementation"');
+    expect(md).toContain("series: Terumo / Merit PCN Recurring");
     expect(md).toContain("granola_id: not_1d3tmYTlCICgjy");
-    expect(md).toContain("source: granola-pull");
     expect(md).toContain("attendees: [Jordan Francis, Zoya, Ben Skousen]");
+    // topic lives on the Bucket line, not in frontmatter.
+    expect(md).not.toContain("topic:");
+  });
+
+  it("renders the title and Bucket line in Jordan's style", () => {
+    expect(md).toContain("# GTIN Alignment -- MicroVention Terumo");
+    expect(md).toContain(
+      "**Bucket:** Terumo · Sample build, GTIN implementation",
+    );
   });
 
   it("renders the canonical sections in order", () => {
@@ -107,18 +115,16 @@ describe("renderMeetingNote", () => {
     expect(positions.every((p) => p >= 0)).toBe(true);
     const sorted = [...positions].sort((a, b) => a - b);
     expect(positions).toEqual(sorted);
-    // Full Notes subsections render as ### headings.
     expect(md).toContain("### GTIN Constraint");
-    expect(md).toContain("**Topic:** Sample build, GTIN implementation");
   });
 
-  it("dual-captures action items: Jordan's gets a field row, others get a Due line", () => {
+  it("renders plain action items with a calendar Due line (no dual-capture)", () => {
     expect(md).toContain("- [ ] Zoya: Follow up on internal part number");
-    expect(md).toContain("    Due: Next week");
+    expect(md).toContain("    🗓️ Due: Next week");
     expect(md).toContain("- [ ] Jordan: Send updated validation memos to Terumo");
-    expect(md).toContain(
-      "    [customer:: [[MicroVention Terumo]]] [created:: 2026-05-28] [priority:: high] [due:: 2026-06-20]",
-    );
+    expect(md).toContain("    🗓️ Due: 2026-06-20");
+    expect(md).not.toContain("[customer::");
+    expect(md).not.toContain("[priority::");
   });
 
   it("omits optional sections when empty", () => {

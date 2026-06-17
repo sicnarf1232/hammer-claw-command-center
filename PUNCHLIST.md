@@ -226,3 +226,21 @@ The repo is live and pushed: https://github.com/sicnarf1232/hammer-claw-command-
 
 7. Wire Power Automate Flow A to `https://<app>.vercel.app/api/webhooks/email`
    with header `X-HC-Signature: <HC_WEBHOOK_SECRET>` (sections 4 and 5).
+
+## 9. Granola pull replaces Cowork triage (2026-06-17)
+
+Decision: the app's "Pull from Granola" is the single Granola->vault pipeline,
+replacing the Cowork granola-triage scheduler. The code is realigned to the real
+vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
+`**Bucket:**` meta line; plain action items with `🗓️ Due:`; ` -- ` separators).
+
+- [ ] RETIRE COWORK TRIAGE: once a live app pull is verified to file correctly,
+      turn off the Cowork granola-triage / EOD-recap "pull fresh meetings" step so
+      two systems do not both write meeting notes, Meetings-Index.md, and the
+      Rolling docs (vault CLAUDE.md rule 3: one writer per file).
+- [ ] VERIFY LIVE: press "Pull from Granola", confirm a meeting files into the
+      right account folder in the new format and that a matching meeting updates
+      `300 Merit/Meetings/Internal/Rolling/Mike 1on1.md` (Current State + a new
+      log entry). Correct any misfiles in the vault.
+- [ ] OPTIONAL: the app reads series from any `/Rolling/` folder. If you keep
+      rolling docs elsewhere, tell me and I will widen discovery.
