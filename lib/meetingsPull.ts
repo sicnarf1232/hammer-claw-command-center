@@ -36,6 +36,10 @@ import { appTimezone, todayISO } from "@/lib/dates";
 const MEETINGS_INDEX_PATH = "100 Periodics/Meetings-Index.md";
 // Safety bound on a single pull (first pull on an empty index could be large).
 const MAX_PER_PULL = 50;
+// Soft wall-clock budget per request. Serverless has a hard cap (60s on Vercel
+// Hobby), so we stop starting new meetings well before it and return partial
+// progress with `truncated: true`. The user (or cron) just runs it again.
+const SOFT_BUDGET_MS = 45_000;
 
 export interface PullFiled {
   title: string;
@@ -73,6 +77,7 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   if (!vaultConfigured()) {
     throw new Error("Vault is not configured (GITHUB_TOKEN / VAULT_REPO).");
   }
+  const startedAt = Date.now();
 
   // 1) Determine the pull window from the newest date already in the index.
   const indexFile = await getFile(MEETINGS_INDEX_PATH);
@@ -116,8 +121,14 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   const newRows: MeetingRow[] = [];
   const seriesUpdated: PullSeriesUpdate[] = [];
 
-  // 4) One note at a time (respects Granola + Anthropic rate limits).
+  // 4) One note at a time (respects Granola + Anthropic rate limits). Stop
+  // starting new meetings once the soft budget is spent so we return cleanly.
+  let stoppedEarly = false;
   for (const summary of candidates) {
+    if (Date.now() - startedAt > SOFT_BUDGET_MS) {
+      stoppedEarly = true;
+      break;
+    }
     const label = summary.title ?? summary.id;
     try {
       const note = await getNote(summary.id, false);
@@ -246,7 +257,7 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   return {
     createdAfter,
     considered: candidates.length,
-    truncated,
+    truncated: truncated || stoppedEarly,
     filed,
     skipped,
     errors,

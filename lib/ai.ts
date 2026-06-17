@@ -24,6 +24,13 @@ function model(): string {
   return process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 }
 
+// Fast model for high-volume, latency-sensitive work (meeting triage, series
+// updates) where many calls run inside one request under a serverless time cap.
+// Defaults to Haiku; override with ANTHROPIC_FAST_MODEL.
+function fastModel(): string {
+  return process.env.ANTHROPIC_FAST_MODEL ?? "claude-haiku-4-5-20251001";
+}
+
 let _client: Anthropic | null = null;
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) throw new AiNotConfiguredError();
@@ -177,7 +184,7 @@ export async function triageMeeting(
   ];
 
   const res = await client().messages.create({
-    model: model(),
+    model: fastModel(),
     max_tokens: 2500,
     system,
     messages: [{ role: "user", content: parts.join("\n") }],
@@ -313,7 +320,7 @@ export async function updateSeries(
   ];
 
   const res = await client().messages.create({
-    model: model(),
+    model: fastModel(),
     max_tokens: 2000,
     system,
     messages: [{ role: "user", content: parts.join("\n") }],
