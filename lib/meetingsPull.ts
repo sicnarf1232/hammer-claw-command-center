@@ -81,6 +81,12 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   const startedAt = Date.now();
 
   // 1) Determine the pull window from the newest date already in the index.
+  // The window is EXCLUSIVE of the newest indexed day: we only fetch notes
+  // created on a later day. This makes re-pulls safe, the app never re-fetches
+  // a day it has already filed, so it cannot recreate duplicates even when an
+  // existing note (e.g. one filed by another tool) carries a different title or
+  // id. The trade-off is no intra-day incremental pull, which fits the daily
+  // end-of-day workflow. (Granola created_at approximates the meeting day.)
   const indexFile = await getFile(MEETINGS_INDEX_PATH);
   const indexRows = indexFile ? parseMeetingsIndex(indexFile.content) : [];
   const newestDate = indexRows.reduce(
@@ -88,7 +94,7 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
     "",
   );
   const createdAfter = newestDate
-    ? `${newestDate}T00:00:00Z`
+    ? isoStartOfDayAfter(newestDate)
     : isoDaysAgo(30);
 
   // 2) List candidates, oldest first so the index ends up newest-first.
@@ -384,5 +390,13 @@ function denverTime(iso: string): string {
 
 function isoDaysAgo(days: number): string {
   const ms = Date.parse(`${todayISO()}T00:00:00Z`) - days * 86400000;
+  return new Date(ms).toISOString();
+}
+
+// Start of the day AFTER the given ISO date (UTC). Add an hour cushion so a
+// late-evening meeting in Mountain Time (which lands on the next UTC day) on the
+// newest indexed day is still treated as already covered, not re-pulled.
+function isoStartOfDayAfter(isoDate: string): string {
+  const ms = Date.parse(`${isoDate}T00:00:00Z`) + 24 * 3600000 + 7 * 3600000;
   return new Date(ms).toISOString();
 }
