@@ -85,8 +85,11 @@ export interface MeetingNote {
   customer?: Wikilink;
   attendees: string[];
   series?: string;
+  topic?: string;
   granolaId?: string;
-  sections: Record<string, string>; // "TL;DR", "Notes", "Decisions", "Action Items"
+  // Canonical sections: "TL;DR", "Action Items", "Key Decisions",
+  // "Numbers That Matter", "Watch-Outs", "Full Notes" (legacy notes may differ).
+  sections: Record<string, string>;
   actionItems: ActionItem[];
 }
 

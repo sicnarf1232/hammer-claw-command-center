@@ -129,7 +129,13 @@ async function MeetingDetail({ path }: { path: string }) {
     );
   }
 
-  const sectionOrder = ["TL;DR", "Notes", "Decisions"];
+  // Canonical sections rendered in order. TL;DR sits above Action Items; the
+  // detail sections follow. "Full Notes" gets subsection-aware rendering.
+  const detailSections = [
+    "Key Decisions",
+    "Numbers That Matter",
+    "Watch-Outs",
+  ];
 
   return (
     <Shell>
@@ -143,6 +149,11 @@ async function MeetingDetail({ path }: { path: string }) {
           {note.customer ? ` · ${note.customer.display}` : ""}
           {note.series ? ` · ${note.series}` : ""}
         </div>
+        {note.topic && (
+          <div className="mt-1 text-sm text-muted">
+            <span className="font-medium text-fg/80">Topic:</span> {note.topic}
+          </div>
+        )}
 
         {note.attendees.length > 0 && (
           <div className="mt-3">
@@ -157,10 +168,8 @@ async function MeetingDetail({ path }: { path: string }) {
           </div>
         )}
 
-        {sectionOrder.map((h) =>
-          note!.sections[h] ? (
-            <Section key={h} heading={h} body={note!.sections[h]} />
-          ) : null,
+        {note.sections["TL;DR"] && (
+          <Section heading="TL;DR" body={note.sections["TL;DR"]} />
         )}
 
         <div className="mt-5">
@@ -177,8 +186,60 @@ async function MeetingDetail({ path }: { path: string }) {
             </div>
           )}
         </div>
+
+        {detailSections.map((h) =>
+          note!.sections[h] ? (
+            <Section key={h} heading={h} body={note!.sections[h]} />
+          ) : null,
+        )}
+
+        {note.sections["Full Notes"] && (
+          <FullNotesSection body={note.sections["Full Notes"]} />
+        )}
       </div>
     </Shell>
+  );
+}
+
+// Full Notes renders its "### Subsection" headings as styled subheads, with the
+// prose under each. Falls back to plain prose when there are no subsections.
+function FullNotesSection({ body }: { body: string }) {
+  const blocks: { heading: string | null; text: string }[] = [];
+  let current: { heading: string | null; text: string } | null = null;
+  for (const line of body.split("\n")) {
+    const h = line.match(/^###\s+(.+?)\s*$/);
+    if (h) {
+      current = { heading: h[1].trim(), text: "" };
+      blocks.push(current);
+    } else {
+      if (!current) {
+        current = { heading: null, text: "" };
+        blocks.push(current);
+      }
+      current.text += (current.text ? "\n" : "") + line;
+    }
+  }
+
+  return (
+    <div className="mt-5">
+      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+        Full Notes
+      </div>
+      <div className="grid gap-3">
+        {blocks.map((b, i) => (
+          <div key={i}>
+            {b.heading && (
+              <div className="mb-0.5 text-sm font-medium text-fg">
+                {b.heading}
+              </div>
+            )}
+            <div className="whitespace-pre-wrap text-sm leading-relaxed text-fg/75">
+              {b.text.trim()}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

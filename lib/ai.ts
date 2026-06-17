@@ -102,16 +102,24 @@ export interface TriagedActionItem {
   due?: string; // YYYY-MM-DD if the meeting set one
 }
 
+export interface FullNotesSection {
+  subsection: string; // a "### " heading under Full Notes
+  text: string; // prose / bullets for that subsection
+}
+
 export interface TriagedMeeting {
   workstream: Workstream; // merit | sloan | personal | shared
   account: string | null; // customer/account display name, e.g. "MicroVention Terumo"
   bucket: string; // Meetings-Index bucket, e.g. "Terumo" or "Internal"
   series: string | null; // recurring series name if evident, else null
   title: string; // clean meeting title (no date, no customer prefix)
+  topic: string | null; // one-line topic for the meta line
   tldr: string; // 2-4 sentence summary
-  notes: string; // markdown body of substance
-  decisions: string[]; // key decisions, each a short line
   actionItems: TriagedActionItem[];
+  decisions: string[]; // key decisions, each a short line
+  numbers: string[]; // "numbers that matter": quantities, dollars, dates, timelines
+  watchouts: string[]; // risks, blockers, timing pressure
+  fullNotes: FullNotesSection[]; // detailed notes grouped into subsections
 }
 
 export interface TriageInput {
@@ -137,11 +145,17 @@ export async function triageMeeting(
     "   - account is the customer/company display name (e.g. 'MicroVention Terumo'). Prefer an exact match from the known-accounts list when the meeting is with that customer. Use null for internal/1:1/non-customer meetings.",
     "   - bucket is a short label for the meetings index: the customer short name (e.g. 'Terumo', 'Stryker') for customer meetings, or 'Internal' for internal ones.",
     "   - series: the recurring-series name if the title/summary clearly indicates a recurring meeting, else null.",
-    "2) STRUCTURE it: a 2-4 sentence tldr; a 'notes' markdown body capturing the substance; a list of key decisions; and action items.",
-    "   - Action items: mark isJordans true ONLY for items Jordan himself owns. Set owner to the person's name ('Jordan' for his own). For Jordan's items, set priority (high|med|low) and a due date (YYYY-MM-DD) only if the meeting stated one.",
+    "2) STRUCTURE it into the canonical note format:",
+    "   - topic: a short one-line topic for the meeting (e.g. 'Regulatory, Quality Plan addendum'), or null.",
+    "   - tldr: 2-4 sentences on what was decided, what moved, what is next.",
+    "   - actionItems: mark isJordans true ONLY for items Jordan himself owns. Set owner to the person's name ('Jordan' for his own). For Jordan's items, set priority (high|med|low) and a due date (YYYY-MM-DD) only if the meeting stated one. For others, include a due string only if stated.",
+    "   - decisions: key decisions, each a short line. Empty array if none.",
+    "   - numbers: 'numbers that matter', quantities, dollars, percentages, dates, timelines. Empty array if none.",
+    "   - watchouts: risks, blockers, timing pressure. Empty array if none.",
+    "   - fullNotes: the detailed notes grouped into 1-5 subsections, each {subsection, text}. text may use simple bullet lines. This is where the substance goes.",
     "House style, follow exactly: never use em dashes (use commas, colons, or periods). Do not invent facts, names, dates, prices, or commitments. If something is unknown, leave it out rather than guessing.",
     "Output ONLY a single JSON object, no markdown fence, no commentary. Schema:",
-    '{"workstream":"merit","account":null,"bucket":"Internal","series":null,"title":"...","tldr":"...","notes":"...","decisions":["..."],"actionItems":[{"owner":"Jordan","text":"...","isJordans":true,"priority":"high","due":"2026-06-20"}]}',
+    '{"workstream":"merit","account":null,"bucket":"Internal","series":null,"title":"...","topic":null,"tldr":"...","actionItems":[{"owner":"Jordan","text":"...","isJordans":true,"priority":"high","due":"2026-06-20"}],"decisions":["..."],"numbers":["..."],"watchouts":["..."],"fullNotes":[{"subsection":"...","text":"..."}]}',
   ].join("\n");
 
   const parts = [
@@ -200,8 +214,21 @@ function normalizeTriage(
   };
   const ws = isWorkstream(raw.workstream) ? raw.workstream : "merit";
 
-  const decisions = Array.isArray(raw.decisions)
-    ? raw.decisions.map((d) => noEmDash(str(d).trim())).filter(Boolean)
+  const lineList = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.map((d) => noEmDash(str(d).trim())).filter(Boolean)
+      : [];
+
+  const fullNotes: FullNotesSection[] = Array.isArray(raw.fullNotes)
+    ? raw.fullNotes
+        .map((s): FullNotesSection | null => {
+          const o = (s ?? {}) as Record<string, unknown>;
+          const text = noEmDash(str(o.text).trim());
+          const subsection = noEmDash(str(o.subsection).trim());
+          if (!text && !subsection) return null;
+          return { subsection: subsection || "Notes", text };
+        })
+        .filter((x): x is FullNotesSection => x !== null)
     : [];
 
   const prio = (v: unknown): Priority | undefined =>
@@ -234,10 +261,13 @@ function normalizeTriage(
     bucket: strOrNull(raw.bucket) ?? (ws === "merit" ? "Merit" : "Internal"),
     series: strOrNull(raw.series),
     title: noEmDash(strOrNull(raw.title) ?? input.title ?? "Untitled meeting"),
+    topic: strOrNull(raw.topic) ? noEmDash(strOrNull(raw.topic)!) : null,
     tldr: noEmDash(str(raw.tldr).trim()),
-    notes: noEmDash(str(raw.notes).trim()),
-    decisions,
     actionItems,
+    decisions: lineList(raw.decisions),
+    numbers: lineList(raw.numbers),
+    watchouts: lineList(raw.watchouts),
+    fullNotes,
   };
 }
 

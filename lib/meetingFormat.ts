@@ -1,4 +1,3 @@
-import { identityFor } from "@/lib/workstreams";
 import type { Workstream } from "@/lib/vault/types";
 import type { TriagedMeeting } from "@/lib/ai";
 
@@ -61,10 +60,12 @@ function yamlList(items: string[]): string {
   return `[${items.map((i) => i.replace(/[[\],]/g, " ").trim()).filter(Boolean).join(", ")}]`;
 }
 
-// Render the full meeting note (frontmatter + body) to the docs/02 contract.
+// Render the full meeting note (frontmatter + body) to the canonical format
+// (Meeting Notes App Handoff SPEC section 3): TL;DR, Action Items, Key
+// Decisions, Numbers That Matter, Watch-Outs, Full Notes. Optional sections are
+// omitted when empty; TL;DR and Action Items always render.
 export function renderMeetingNote(input: RenderInput): string {
   const { triaged: t, date, meetingTime, attendees, granolaId, webUrl } = input;
-  const id = identityFor(t.workstream);
 
   const fm: string[] = ["---"];
   fm.push(`workstream: ${t.workstream}`);
@@ -74,6 +75,7 @@ export function renderMeetingNote(input: RenderInput): string {
   fm.push(`date: ${date}`);
   if (meetingTime) fm.push(`meeting_time: ${meetingTime}`);
   if (t.account) fm.push(`customer: ${yamlString(`[[${t.account}]]`)}`);
+  if (t.topic) fm.push(`topic: ${yamlString(t.topic)}`);
   if (attendees.length) fm.push(`attendees: ${yamlList(attendees)}`);
   if (t.series) fm.push(`series: ${t.series}`);
   fm.push(`granola_id: ${granolaId}`);
@@ -81,43 +83,48 @@ export function renderMeetingNote(input: RenderInput): string {
   fm.push(`source: granola-pull`);
   fm.push("---");
 
-  const metaBits: string[] = [];
-  if (t.account) metaBits.push(`**Customer:** [[${t.account}]]`);
-  metaBits.push(`**Date:** ${date}`);
-  if (meetingTime) metaBits.push(`**Time:** ${meetingTime}`);
-  if (t.series) metaBits.push(`**Series:** ${t.series}`);
+  const titleSuffix = t.account ? ` - ${t.account}` : "";
+  const metaLine1: string[] = [];
+  if (t.account) metaLine1.push(`**Customer:** [[${t.account}]]`);
+  metaLine1.push(`**Date:** ${date}`);
+  if (meetingTime) metaLine1.push(`**Time:** ${meetingTime}`);
+  if (t.series) metaLine1.push(`**Series:** ${t.series}`);
 
-  const body: string[] = [
-    "",
-    `# ${t.title}`,
-    "",
-    metaBits.join(" · "),
-    "",
-    "## TL;DR",
-    "",
-    t.tldr || "(no summary captured)",
-    "",
-    "## Notes",
-    "",
-    t.notes || "(no notes captured)",
-    "",
-    "## Action Items",
-    "",
-    renderActionItems(t, date),
-    "",
-    "## Decisions",
-    "",
-    t.decisions.length
-      ? t.decisions.map((d) => `- ${d}`).join("\n")
-      : "- (none captured)",
-    "",
-  ];
+  const body: string[] = ["", `# ${t.title}${titleSuffix}`, "", metaLine1.join(" · ")];
+  if (t.topic) body.push(`**Topic:** ${t.topic}`);
+
+  // Always-render sections.
+  body.push("", "## TL;DR", "", t.tldr || "(no summary captured)");
+  body.push("", "## Action Items", "", renderActionItems(t, date));
+
+  // Optional sections, omitted when empty.
+  if (t.decisions.length) {
+    body.push("", "## Key Decisions", "", bullets(t.decisions));
+  }
+  if (t.numbers.length) {
+    body.push("", "## Numbers That Matter", "", bullets(t.numbers));
+  }
+  if (t.watchouts.length) {
+    body.push("", "## Watch-Outs", "", bullets(t.watchouts));
+  }
+  if (t.fullNotes.length) {
+    body.push("", "## Full Notes");
+    for (const s of t.fullNotes) {
+      body.push("", `### ${s.subsection}`, "", s.text.trim());
+    }
+  }
+  body.push("");
 
   return [...fm, ...body].join("\n");
 }
 
+function bullets(items: string[]): string {
+  return items.map((d) => `- ${d}`).join("\n");
+}
+
 // Dual-capture action items: Jordan's items carry an inline field row (so the
-// task parser surfaces them as real tasks); everyone else's stay plain.
+// task parser surfaces them as real tasks); everyone else's stay plain, with an
+// optional indented "Due:" line (Handoff SPEC section 3).
 function renderActionItems(t: TriagedMeeting, date: string): string {
   if (!t.actionItems.length) return "- (none captured)";
   const lines: string[] = [];
@@ -134,6 +141,7 @@ function renderActionItems(t: TriagedMeeting, date: string): string {
       lines.push(`    ${fields.join(" ")}`);
     } else {
       lines.push(`${box}${owner}${ai.text}`);
+      if (ai.due) lines.push(`    Due: ${ai.due}`);
     }
   }
   return lines.join("\n");

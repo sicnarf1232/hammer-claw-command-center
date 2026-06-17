@@ -21,6 +21,7 @@ export function parseMeetingNote(content: string, path = ""): MeetingNote {
   const attendees = toStringArray(frontmatter.raw.attendees);
   const customer = parseCustomerLink(frontmatter.raw.customer);
   const series = asString(frontmatter.raw.series);
+  const topic = asString(frontmatter.raw.topic);
   const granolaId = asString(frontmatter.raw.granola_id);
   const date = frontmatter.date ?? asString(frontmatter.raw.date);
   const title = firstHeading(allLines, bodyStart) ?? basenameOf(path).replace(/\.md$/, "");
@@ -42,6 +43,7 @@ export function parseMeetingNote(content: string, path = ""): MeetingNote {
     customer,
     attendees,
     series,
+    topic,
     granolaId,
     sections: sections.text,
     actionItems,

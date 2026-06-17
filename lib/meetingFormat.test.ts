@@ -14,11 +14,15 @@ const baseTriage: TriagedMeeting = {
   bucket: "Terumo",
   series: "Terumo / Merit PCN Recurring",
   title: "GTIN Alignment",
+  topic: "Sample build, GTIN implementation",
   tldr: "Merit cannot build samples without a valid GTIN from Terumo.",
-  notes: "Two-track plan: bridge inventory plus validation doc sharing.",
-  decisions: ["Biweekly cadence locked", "Bridge inventory pursued"],
   actionItems: [
-    { owner: "Zoya", text: "Follow up on internal part number", isJordans: false },
+    {
+      owner: "Zoya",
+      text: "Follow up on internal part number",
+      isJordans: false,
+      due: "Next week",
+    },
     {
       owner: "Jordan",
       text: "Send updated validation memos to Terumo",
@@ -26,6 +30,13 @@ const baseTriage: TriagedMeeting = {
       priority: "high",
       due: "2026-06-20",
     },
+  ],
+  decisions: ["Biweekly cadence locked", "Bridge inventory pursued"],
+  numbers: ["1.5-year validation timeline", "Supply gap by April 2027"],
+  watchouts: ["HPF tubing validation data is severely limited"],
+  fullNotes: [
+    { subsection: "GTIN Constraint", text: "Merit needs a valid GS1 barcode." },
+    { subsection: "Bridge Inventory", text: "Secure inventory in parallel." },
   ],
 };
 
@@ -77,24 +88,59 @@ describe("renderMeetingNote", () => {
     expect(md).toContain("type: meeting");
     expect(md).toContain("date: 2026-05-28");
     expect(md).toContain('customer: "[[MicroVention Terumo]]"');
+    expect(md).toContain('topic: "Sample build, GTIN implementation"');
     expect(md).toContain("granola_id: not_1d3tmYTlCICgjy");
     expect(md).toContain("source: granola-pull");
     expect(md).toContain("attendees: [Jordan Francis, Zoya, Ben Skousen]");
   });
 
-  it("renders the required body sections", () => {
-    expect(md).toContain("## TL;DR");
-    expect(md).toContain("## Notes");
-    expect(md).toContain("## Action Items");
-    expect(md).toContain("## Decisions");
+  it("renders the canonical sections in order", () => {
+    const order = [
+      "## TL;DR",
+      "## Action Items",
+      "## Key Decisions",
+      "## Numbers That Matter",
+      "## Watch-Outs",
+      "## Full Notes",
+    ];
+    const positions = order.map((h) => md.indexOf(h));
+    expect(positions.every((p) => p >= 0)).toBe(true);
+    const sorted = [...positions].sort((a, b) => a - b);
+    expect(positions).toEqual(sorted);
+    // Full Notes subsections render as ### headings.
+    expect(md).toContain("### GTIN Constraint");
+    expect(md).toContain("**Topic:** Sample build, GTIN implementation");
   });
 
-  it("dual-captures action items: Jordan's gets a field row, others stay plain", () => {
+  it("dual-captures action items: Jordan's gets a field row, others get a Due line", () => {
     expect(md).toContain("- [ ] Zoya: Follow up on internal part number");
+    expect(md).toContain("    Due: Next week");
     expect(md).toContain("- [ ] Jordan: Send updated validation memos to Terumo");
     expect(md).toContain(
       "    [customer:: [[MicroVention Terumo]]] [created:: 2026-05-28] [priority:: high] [due:: 2026-06-20]",
     );
+  });
+
+  it("omits optional sections when empty", () => {
+    const sparse = renderMeetingNote({
+      triaged: {
+        ...baseTriage,
+        decisions: [],
+        numbers: [],
+        watchouts: [],
+        fullNotes: [],
+      },
+      date: "2026-05-28",
+      meetingTime: null,
+      attendees: ["Jordan Francis"],
+      granolaId: "not_x",
+      createdISO: "2026-06-17",
+    });
+    expect(sparse).toContain("## TL;DR");
+    expect(sparse).toContain("## Action Items");
+    expect(sparse).not.toContain("## Key Decisions");
+    expect(sparse).not.toContain("## Numbers That Matter");
+    expect(sparse).not.toContain("## Full Notes");
   });
 
   it("never emits em dashes (house style)", () => {
