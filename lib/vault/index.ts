@@ -61,7 +61,13 @@ export async function getAllTasks(): Promise<Task[]> {
   for (const file of contents) {
     if (!file) continue;
     try {
-      tasks.push(...parseTasks(file.content, file.path));
+      const isMeeting = file.path.includes("/Meetings/");
+      for (const t of parseTasks(file.content, file.path)) {
+        // In meeting notes only Jordan's items (which carry an inline field
+        // row) are real tasks; others' action items are tracked in the note.
+        if (isMeeting && Object.keys(t.fields).length === 0) continue;
+        tasks.push(t);
+      }
     } catch {
       // One malformed note must not break the whole list.
     }

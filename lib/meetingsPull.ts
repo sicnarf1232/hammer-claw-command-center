@@ -23,7 +23,13 @@ import {
   type Series,
 } from "@/lib/vault/series";
 import { listAccounts } from "@/lib/accounts";
-import { triageMeeting, updateSeries, type TriagedMeeting } from "@/lib/ai";
+import {
+  triageMeeting,
+  updateSeries,
+  type TriagedMeeting,
+  type TriagedActionItem,
+  type OwnerClass,
+} from "@/lib/ai";
 import {
   meetingBasename,
   meetingFolder,
@@ -157,6 +163,9 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
         knownAccounts,
         date,
       });
+      for (const ai of triaged.actionItems) {
+        ai.ownerClass = classifyOwner(ai, roster);
+      }
 
       // Recompute the basename from the cleaned title triage produced.
       const finalBasename = meetingBasename(date, triaged.title);
@@ -307,6 +316,16 @@ function findSeries(
     }
   }
   return null;
+}
+
+// Classify an action item's owner against the roster: Jordan is "me" (a real
+// task), Merit-internal people are "team", customer contacts are "customer".
+function classifyOwner(ai: TriagedActionItem, roster: Roster): OwnerClass {
+  if (ai.isJordans || /jordan/i.test(ai.owner ?? "")) return "me";
+  const entry = ai.owner ? classifyName(roster, ai.owner) : undefined;
+  if (entry?.classification === "merit") return "team";
+  if (entry?.classification === "customer") return "customer";
+  return "unknown";
 }
 
 function seriesSummary(t: TriagedMeeting): string {

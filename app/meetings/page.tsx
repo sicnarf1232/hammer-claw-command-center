@@ -481,12 +481,20 @@ function ActionItemRow({ item }: { item: ActionItem }) {
                     {customer}
                   </span>
                 )}
-                {item.task?.due && (
+                {item.task?.due && item.task.due !== "TBD" && (
                   <span
                     className="chip tabular-nums"
                     style={{ background: "var(--due-soft)", color: "var(--due-ink)", borderColor: "transparent" }}
                   >
                     due {item.task.due}
+                  </span>
+                )}
+                {item.task?.due === "TBD" && (
+                  <span
+                    className="chip"
+                    style={{ background: "var(--warm-soft)", color: "var(--warm)", borderColor: "transparent" }}
+                  >
+                    ⚑ needs due date
                   </span>
                 )}
               </span>

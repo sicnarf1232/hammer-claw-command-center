@@ -186,13 +186,13 @@ describe("renderMeetingNote", () => {
     expect(md).toContain("### GTIN Constraint");
   });
 
-  it("renders plain action items with a calendar Due line (no dual-capture)", () => {
+  it("field-rows Jordan's items (real tasks) and tracks others with a Due line", () => {
     expect(md).toContain("- [ ] Zoya: Follow up on internal part number");
     expect(md).toContain("    🗓️ Due: Next week");
     expect(md).toContain("- [ ] Jordan: Send updated validation memos to Terumo");
-    expect(md).toContain("    🗓️ Due: 2026-06-20");
-    expect(md).not.toContain("[customer::");
-    expect(md).not.toContain("[priority::");
+    expect(md).toContain("[created:: 2026-05-28]");
+    expect(md).toContain("[due:: 2026-06-20]");
+    expect(md).toContain("[customer:: [[MicroVention Terumo]]]");
   });
 
   it("omits optional sections when empty", () => {

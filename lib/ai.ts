@@ -101,12 +101,16 @@ export async function draftReply(input: DraftReplyInput): Promise<string> {
 
 // ---- Meeting triage (Granola pull) ----
 
+export type OwnerClass = "me" | "team" | "customer" | "unknown";
+
 export interface TriagedActionItem {
   owner: string | null; // "Jordan" for Jordan's items, the person's name otherwise
   text: string; // action text, owner prefix stripped
   isJordans: boolean; // true => render with a field row, surfaces as a real task
   priority?: Priority;
-  due?: string; // YYYY-MM-DD if the meeting set one
+  due?: string; // YYYY-MM-DD if the meeting stated a concrete date
+  dueText?: string; // the raw due phrase when not a concrete date (flag to fix)
+  ownerClass?: OwnerClass; // assigned during the pull from the roster
 }
 
 export interface FullNotesSection {
@@ -155,14 +159,14 @@ export async function triageMeeting(
     "2) STRUCTURE it into the canonical note format:",
     "   - topic: a short one-line topic for the meeting (e.g. 'Regulatory, Quality Plan addendum'), or null.",
     "   - tldr: 2-4 sentences on what was decided, what moved, what is next.",
-    "   - actionItems: mark isJordans true ONLY for items Jordan himself owns. Set owner to the person's name ('Jordan' for his own). For Jordan's items, set priority (high|med|low) and a due date (YYYY-MM-DD) only if the meeting stated one. For others, include a due string only if stated.",
+    "   - actionItems: ALWAYS set owner to the person's name ('Jordan' for his own). Mark isJordans true ONLY for items Jordan himself owns; set priority (high|med|low) for those. For the due date: if the meeting stated a concrete date set due to YYYY-MM-DD; if it stated a vague or range due ('this week', 'before Friday', 'Jun 15-16') set dueText to that exact phrase and leave due empty.",
     "   - decisions: key decisions, each a short line. Empty array if none.",
     "   - numbers: 'numbers that matter', quantities, dollars, percentages, dates, timelines. Empty array if none.",
     "   - watchouts: risks, blockers, timing pressure. Empty array if none.",
     "   - fullNotes: the detailed notes grouped into 1-5 subsections, each {subsection, text}. text may use simple bullet lines. This is where the substance goes.",
     "House style, follow exactly: never use em dashes (use commas, colons, or periods). Do not invent facts, names, dates, prices, or commitments. If something is unknown, leave it out rather than guessing.",
     "Output ONLY a single JSON object, no markdown fence, no commentary. Schema:",
-    '{"workstream":"merit","account":null,"bucket":"Internal","series":null,"title":"...","topic":null,"tldr":"...","actionItems":[{"owner":"Jordan","text":"...","isJordans":true,"priority":"high","due":"2026-06-20"}],"decisions":["..."],"numbers":["..."],"watchouts":["..."],"fullNotes":[{"subsection":"...","text":"..."}]}',
+    '{"workstream":"merit","account":null,"bucket":"Internal","series":null,"title":"...","topic":null,"tldr":"...","actionItems":[{"owner":"Jordan","text":"...","isJordans":true,"priority":"high","due":"2026-06-20","dueText":""}],"decisions":["..."],"numbers":["..."],"watchouts":["..."],"fullNotes":[{"subsection":"...","text":"..."}]}',
   ].join("\n");
 
   const parts = [
@@ -251,12 +255,14 @@ function normalizeTriage(
             typeof o.due === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.due)
               ? o.due
               : undefined;
+          const dueText = !due ? (strOrNull(o.dueText) ?? undefined) : undefined;
           return {
             owner: strOrNull(o.owner),
             text: textVal,
             isJordans: o.isJordans === true,
             priority: prio(o.priority),
             due,
+            dueText: dueText ? noEmDash(dueText) : undefined,
           };
         })
         .filter((x): x is TriagedActionItem => x !== null)

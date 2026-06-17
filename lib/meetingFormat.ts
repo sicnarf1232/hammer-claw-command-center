@@ -145,7 +145,7 @@ export function renderMeetingNote(input: RenderInput): string {
 
   // Always-render sections.
   body.push("", "## TL;DR", "", t.tldr || "(no summary captured)");
-  body.push("", "## Action Items", "", renderActionItems(t));
+  body.push("", "## Action Items", "", renderActionItems(t, date));
 
   // Optional sections, omitted when empty.
   if (t.decisions.length) {
@@ -172,16 +172,31 @@ function bullets(items: string[]): string {
   return items.map((d) => `- ${d}`).join("\n");
 }
 
-// Action items match Jordan's vault: one combined list of "- [ ] Owner: task",
-// with an optional indented "🗓️ Due:" line. Meeting action items are tracking,
-// not dual-captured tasks (real tasks live in customer/project notes).
-function renderActionItems(t: TriagedMeeting): string {
+// Action items: one combined "- [ ] Owner: task" list. Jordan's ("me") items
+// carry an inline field row so they surface as real tasks (created = meeting
+// date; due is the concrete date or TBD to flag). Team/customer items are
+// tracked-only with a "🗓️ Due:" line, and a "(confirm)" hint when the due is
+// vague. ownerClass is assigned during the pull from the roster.
+function renderActionItems(t: TriagedMeeting, date: string): string {
   if (!t.actionItems.length) return "- (none captured)";
   const lines: string[] = [];
   for (const ai of t.actionItems) {
+    const cls = ai.ownerClass ?? (ai.isJordans ? "me" : "unknown");
     const owner = ai.owner ? `${ai.owner}: ` : "";
     lines.push(`- [ ] ${owner}${ai.text}`);
-    if (ai.due) lines.push(`    🗓️ Due: ${ai.due}`);
+    if (cls === "me") {
+      const fields: string[] = [];
+      if (t.account) fields.push(`[customer:: [[${t.account}]]]`);
+      fields.push(`[created:: ${date}]`);
+      if (ai.priority) fields.push(`[priority:: ${ai.priority}]`);
+      fields.push(`[due:: ${ai.due ?? "TBD"}]`);
+      if (!ai.due && ai.dueText) fields.push(`[due_note:: ${ai.dueText}]`);
+      lines.push(`    ${fields.join(" ")}`);
+    } else if (ai.due) {
+      lines.push(`    🗓️ Due: ${ai.due}`);
+    } else if (ai.dueText) {
+      lines.push(`    🗓️ Due: ${ai.dueText} (confirm)`);
+    }
   }
   return lines.join("\n");
 }
