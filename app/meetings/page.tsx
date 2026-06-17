@@ -18,6 +18,7 @@ import { customerHue, initials } from "@/lib/customerHues";
 import { meetingNoteToEditable } from "@/lib/meetingEdit";
 import { listAccounts } from "@/lib/accounts";
 import MeetingEditor from "@/components/MeetingEditor";
+import { needsDueDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -513,13 +514,16 @@ function ActionItemRow({ item }: { item: ActionItem }) {
     item.task?.customer && item.task.customer !== "internal"
       ? item.task.customer.display
       : null;
+  const flag = needsDueDate(item.due);
+  const vague =
+    flag && item.due && item.due.toLowerCase() !== "tbd" ? item.due : null;
   return (
     <div
       className="lift rounded-[12px] p-3"
       style={{
         background: "var(--surface-2)",
         border: "1px solid var(--line)",
-        borderLeft: "3px solid var(--accent)",
+        borderLeft: `3px solid ${item.isJordans ? "var(--accent)" : "var(--line-2)"}`,
       }}
     >
       <div className="flex items-start gap-2.5">
@@ -537,32 +541,30 @@ function ActionItemRow({ item }: { item: ActionItem }) {
               </span>
             )}
             {item.text}
-            {item.isJordans && (
-              <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
-                <PriorityChip priority={item.task?.priority} />
-                {customer && (
-                  <span className="chip" style={{ borderColor: "var(--line-2)" }}>
-                    {customer}
-                  </span>
-                )}
-                {item.task?.due && item.task.due !== "TBD" && (
-                  <span
-                    className="chip tabular-nums"
-                    style={{ background: "var(--due-soft)", color: "var(--due-ink)", borderColor: "transparent" }}
-                  >
-                    due {item.task.due}
-                  </span>
-                )}
-                {item.task?.due === "TBD" && (
-                  <span
-                    className="chip"
-                    style={{ background: "var(--warm-soft)", color: "var(--warm)", borderColor: "transparent" }}
-                  >
-                    ⚑ needs due date
-                  </span>
-                )}
-              </span>
-            )}
+            <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
+              {item.isJordans && <PriorityChip priority={item.task?.priority} />}
+              {item.isJordans && customer && (
+                <span className="chip" style={{ borderColor: "var(--line-2)" }}>
+                  {customer}
+                </span>
+              )}
+              {!flag && item.due && (
+                <span
+                  className="chip tabular-nums"
+                  style={{ background: "var(--due-soft)", color: "var(--due-ink)", borderColor: "transparent" }}
+                >
+                  due {item.due}
+                </span>
+              )}
+              {flag && (
+                <span
+                  className="chip"
+                  style={{ background: "var(--warm-soft)", color: "var(--warm)", borderColor: "transparent" }}
+                >
+                  ⚑ needs due date{vague ? ` · ${vague}` : ""}
+                </span>
+              )}
+            </span>
           </div>
           <div className="mt-0.5 text-2xs text-muted">
             {item.isJordans ? "Jordan" : "tracking only"}

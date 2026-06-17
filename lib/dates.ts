@@ -32,3 +32,13 @@ export function isISODate(v: string | undefined): v is string {
 export function appTimezone(): string {
   return TZ;
 }
+
+// A meeting action item "needs a due date" when the due is missing, the TBD
+// placeholder, or a vague/non-ISO value (a range or a phrase like "this week"
+// or "EOW"). This is the Phase-A flag condition, shared by the read-only
+// meeting view and the Phase-C editor.
+export function needsDueDate(due: string | undefined): boolean {
+  const v = (due ?? "").trim();
+  if (!v || v.toLowerCase() === "tbd") return true;
+  return !isISODate(v);
+}

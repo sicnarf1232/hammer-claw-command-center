@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { MeetingEdit, EditableActionItem } from "@/lib/meetingEdit";
+import { needsDueDate } from "@/lib/dates";
 
 // Phase C: in-app editor for a meeting note. Edits write back to the vault as a
 // single commit via /api/meetings/note (markdown stays the source of truth).
@@ -217,6 +218,7 @@ export default function MeetingEditor({
             <ActionItemEditor
               key={it._id}
               item={it}
+              date={date}
               accountNames={accountNames}
               onChange={(patch) => updateItem(it._id, patch)}
               onRemove={() => setItems(items.filter((x) => x._id !== it._id))}
@@ -261,16 +263,18 @@ export default function MeetingEditor({
 
 function ActionItemEditor({
   item,
+  date,
   accountNames,
   onChange,
   onRemove,
 }: {
   item: Row;
+  date?: string;
   accountNames: string[];
   onChange: (patch: Partial<Row>) => void;
   onRemove: () => void;
 }) {
-  const flagged = item.isJordans && (!item.due.trim() || item.due.trim() === "TBD");
+  const flagged = needsDueDate(item.due);
   return (
     <div
       className="rounded-[12px] p-3"
@@ -325,6 +329,14 @@ function ActionItemEditor({
             }
           />
         </label>
+        {flagged && (
+          <span
+            className="chip"
+            style={{ background: "var(--warm-soft)", color: "var(--warm)", borderColor: "transparent" }}
+          >
+            ⚑ needs due date
+          </span>
+        )}
         {item.isJordans && (
           <>
             <label className="flex items-center gap-1.5 text-2xs uppercase tracking-wide text-muted">
@@ -358,9 +370,19 @@ function ActionItemEditor({
             </datalist>
           </>
         )}
-        <span className="text-2xs text-muted">
-          {item.isJordans ? "Jordan · feeds /today" : "tracking only"}
-        </span>
+        <label className="ml-auto flex items-center gap-1.5 text-2xs text-muted">
+          <input
+            type="checkbox"
+            checked={item.isJordans}
+            onChange={(e) =>
+              onChange({
+                isJordans: e.target.checked,
+                created: item.created ?? (e.target.checked ? date : undefined),
+              })
+            }
+          />
+          feeds /today (mine)
+        </label>
       </div>
     </div>
   );
