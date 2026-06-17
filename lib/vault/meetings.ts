@@ -131,17 +131,20 @@ function parseActionItems(
         isJordans: true,
         owner,
         text,
+        due: task.due,
         task,
         sourceFile: path,
         sourceLine: i,
       });
     } else {
-      // Other owner: tracking only, no field row.
+      // Other owner: tracking only, no field row. A "🗓️ Due:" continuation
+      // line carries the (often vague) due, which Phase C lets the user set.
       items.push({
         done,
         isJordans: false,
         owner,
         text,
+        due: extractDueLine(allLines, i + 1, cont.nextIndex),
         sourceFile: path,
         sourceLine: i,
       });
@@ -150,6 +153,20 @@ function parseActionItems(
   }
 
   return items;
+}
+
+// Read the "🗓️ Due: <value>" continuation line of a tracking-only item, if any.
+// The trailing "(confirm)" hint on vague dues is stripped to the bare value.
+function extractDueLine(
+  allLines: string[],
+  start: number,
+  end: number,
+): string | undefined {
+  for (let i = start; i < end; i++) {
+    const m = allLines[i].match(/^\s*🗓️\s*Due:\s*(.+?)\s*$/);
+    if (m) return m[1].replace(/\s*\(confirm\)\s*$/, "").trim();
+  }
+  return undefined;
 }
 
 function splitOwner(title: string): { owner?: string; text: string } {

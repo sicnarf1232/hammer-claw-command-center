@@ -72,6 +72,7 @@ export interface ActionItem {
   isJordans: boolean;
   owner?: string; // "Zoya" for others-capture, "Jordan" for Jordan's
   text: string; // the action text, owner prefix stripped
+  due?: string; // due date/text: Jordan's from [due::], others from "🗓️ Due:"
   task?: Task; // present when isJordans (full parsed task)
   sourceFile: string;
   sourceLine: number;

@@ -1,26 +1,27 @@
 # Connectivity Roadmap — meetings ↔ tasks ↔ accounts ↔ contacts
 
-## ▶ PICKUP — start here next session: Phase C (editable meeting notes)
+## ▶ PICKUP — start here next session: Phase D (real PDF / share)
 
-Done so far: the **Film Room redesign** (whole app, sidebar shell, SN Pro,
-3 meeting screens — see `docs/design/Film Room Preview.dc.html`) and **Phase A**
-(meetings carry real tasks: owner class me/team/customer, Jordan's items become
-tasks dated to the meeting, vague/missing dues flagged `⚑ needs due date`).
-Working tree clean and pushed at commit `f910606`.
+Done so far: the **Film Room redesign**, **Phase A** (meetings carry real
+tasks), and now **Phase C** (editable meeting notes). Phase C shipped an in-app
+editor reached from a meeting's detail view ("Edit" → `?note=...&edit=1`) that
+writes one commit to the vault: title, account, bucket/topic, attendees,
+TL;DR + the optional sections, and the action items (clears the Phase-A
+`[due:: TBD]` flags, reassigns owners). Pure transform + 15 tests in
+`lib/meetingEdit.ts`; writer `editMeetingNote` in `lib/writeback.ts`; route
+`POST /api/meetings/note`; client `components/MeetingEditor.tsx`. See CHANGELOG.
 
-Phase C goal: an **in-app editor for a meeting note that writes back to the
-vault** as a commit. It is the surface that (a) clears the Phase-A
-`[due:: TBD]` flags by setting a real date, (b) reassigns attendees/owners,
-and (c) edits the account, sections, and action items.
-Key files to touch: `app/meetings/page.tsx` (MeetingDetail → add edit mode),
-a new client editor component, `lib/writeback.ts` (add a meeting-note writer,
-mirror `completeTask`), and `lib/vault/meetings.ts` (the parser is the contract).
-Writes go through `lib/github.writeFile` (already busts the SHA/tree cache).
+Phase D goal: generate a branded **Film Room PDF** of a meeting note (and
+series) for email sharing, plus a "copy for email" (clean HTML). Reuse the
+existing PDF pipeline (`lib/quotePdf.ts` / `POST /api/quote/pdf`, `pdf-lib`).
+PDF is the primary, best-looking path (confirmed); HTML copy is a nice-to-have.
 
-Status: PLANNING (2026-06-17). Captures the connected-system vision: meetings
-flow Granola → app → vault, carry real tasks, tie to accounts + contacts, are
-editable in-app, and export to a shareable PDF. Sequenced; nothing built yet
-except the noted done items.
+Phase B (accounts & contacts wiring) is still unbuilt and can come before or
+after D. No em dashes in any generated output (house style).
+
+Status: Phase C DONE (2026-06-17), typecheck + 71 tests + production build
+clean. Next: Phase D (or Phase B). Verify Phase C live by opening a meeting,
+pressing Edit, setting a flagged due date, and confirming the vault commit.
 
 ## Flow direction (locked)
 

@@ -15,6 +15,9 @@ import PullFromGranola from "@/components/PullFromGranola";
 import MeetingsHub from "@/components/MeetingsHub";
 import { granolaConfigured } from "@/lib/granola";
 import { customerHue, initials } from "@/lib/customerHues";
+import { meetingNoteToEditable } from "@/lib/meetingEdit";
+import { listAccounts } from "@/lib/accounts";
+import MeetingEditor from "@/components/MeetingEditor";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,7 +25,7 @@ export const revalidate = 0;
 export default async function MeetingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ note?: string; series?: string }>;
+  searchParams: Promise<{ note?: string; series?: string; edit?: string }>;
 }) {
   if (!vaultConfigured()) {
     return (
@@ -33,6 +36,9 @@ export default async function MeetingsPage({
   }
 
   const sp = await searchParams;
+  if (sp.note && sp.edit) {
+    return <EditMeeting path={sp.note} />;
+  }
   if (sp.note) {
     return <MeetingDetail path={sp.note} />;
   }
@@ -125,7 +131,15 @@ async function MeetingDetail({ path }: { path: string }) {
   return (
     <Shell>
       <article className="panel texture mx-auto max-w-3xl overflow-hidden p-6 sm:p-9">
-        <BackLink />
+        <div className="flex items-center justify-between gap-3">
+          <BackLink />
+          <Link
+            href={`/meetings?note=${encodeURIComponent(path)}&edit=1`}
+            className="btn btn-ghost px-3 py-1 text-xs"
+          >
+            Edit
+          </Link>
+        </div>
         <h1 className="mt-4 text-[30px] font-bold leading-tight tracking-tight text-fg">
           {note.title}
         </h1>
@@ -193,6 +207,56 @@ async function MeetingDetail({ path }: { path: string }) {
 
         <Footer seriesName={note.series} />
       </article>
+    </Shell>
+  );
+}
+
+/* ============================ Phase C — Edit mode ========================== */
+
+async function EditMeeting({ path }: { path: string }) {
+  let note: Awaited<ReturnType<typeof getMeetingNoteByPath>> = null;
+  let roster: Roster = new Map();
+  let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
+  let error: string | null = null;
+  try {
+    [note, roster, accounts] = await Promise.all([
+      getMeetingNoteByPath(path),
+      getRoster().catch(() => new Map() as Roster),
+      listAccounts().catch(() => []),
+    ]);
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to read the meeting note.";
+  }
+
+  if (error) {
+    return (
+      <Shell>
+        <DetailError message={error} />
+      </Shell>
+    );
+  }
+  if (!note) {
+    return (
+      <Shell>
+        <DetailError message={`Note not found at ${path}.`} />
+      </Shell>
+    );
+  }
+
+  const rosterNames = Array.from(
+    new Set(Array.from(roster.values()).map((r) => r.name)),
+  ).sort();
+  const accountNames = Array.from(new Set(accounts.map((a) => a.name))).sort();
+
+  return (
+    <Shell>
+      <MeetingEditor
+        path={path}
+        initial={meetingNoteToEditable(note)}
+        date={note.date}
+        rosterNames={rosterNames}
+        accountNames={accountNames}
+      />
     </Shell>
   );
 }

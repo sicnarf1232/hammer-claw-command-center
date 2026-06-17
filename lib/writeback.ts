@@ -1,5 +1,6 @@
 import { getFile, writeFile } from "@/lib/github";
 import { todayISO } from "@/lib/dates";
+import { applyMeetingEdit, type MeetingEdit } from "@/lib/meetingEdit";
 
 // Mutations that write back into the vault as small, atomic git commits.
 // Each reads the latest file first (writeFile re-reads the SHA), never
@@ -89,6 +90,31 @@ export async function setAccountNumber(
   }
 
   return commitNote(path, lines.join("\n"), value);
+}
+
+// Phase C: edit a meeting note in the app and write it back as one commit.
+// Reads the latest file, applies the structured edit (frontmatter attendees +
+// customer, the H1/meta preamble, the canonical sections, and the dual-capture
+// action items, including clearing [due:: TBD] flags), and commits. The pure
+// transform lives in lib/meetingEdit so it is unit-tested without the network.
+export async function editMeetingNote(
+  path: string,
+  edit: MeetingEdit,
+): Promise<{ commitSha: string; path: string }> {
+  const file = await getFile(path);
+  if (!file) throw new WriteBackError(`Meeting note not found: ${path}`);
+
+  const next = applyMeetingEdit(file.content, edit);
+  if (next === file.content.replace(/\r\n/g, "\n").replace(/\n*$/, "\n")) {
+    return { commitSha: "", path }; // no-op edit
+  }
+
+  const name = path.split("/").pop()!.replace(/\.md$/, "");
+  return writeFile({
+    path,
+    content: next,
+    message: `app: edit meeting note ${name} ${todayISO()}`,
+  });
 }
 
 function commitNote(path: string, content: string, value: string) {
