@@ -46,18 +46,18 @@ in priority order:
 1. **Tasks page** (DONE 2026-06-18): sortable/filterable table, columns
    Task/Account/Type/Status/Start/Due, Merit-default scope, Nextech dropped,
    derived OEM "type of request". See CHANGELOG.
-2. **Editable accounts**: edit account fields in-app (overview, snapshot,
-   contacts) and write back to the account note, mirroring the Phase-C meeting
-   editor. (`lib/accounts` + a writer like `editMeetingNote`.)
-3. **Live contacts**: contacts become first-class with phone, title, and email,
-   editable in-app. Surface as a dropdown/expander within the account Contacts
-   tab. Needs a richer contact model than the current name/detail/email parse,
-   and a writer (extends `lib/contactsWrite`).
-4. **Account detail tabs** (expand from Overview/Contacts/Meetings to):
-   Overview, Contacts, Quotes, Tasks, Open projects (placeholder first), then
-   Pricing, Quality, OEM PCNs. Wire real data where it exists (Tasks, Meetings,
-   Quotes via the price list); Pricing/Quality/PCNs likely need new vault data
-   or a DB.
+2. **Editable accounts** (DONE 2026-06-18): account detail Edit mode writes
+   type/region/stage/status/account#/overview/contacts back to the note
+   (`applyAccountEdit`, `POST /api/accounts/note`).
+3. **Live contacts** (DONE 2026-06-18): contacts carry title + email + phone,
+   editable in-app, shown as dropdowns in the Contacts tab. Parser + serializer
+   updated. Follow-on: per-person `300 Merit/People/` notes (format not pinned).
+4. **Account detail tabs** (SCAFFOLDED 2026-06-18): tab set is now Overview,
+   Contacts, Quotes, Tasks, Open projects, Pricing, Quality, OEM PCNs, Meetings.
+   Overview/Contacts/Tasks/Meetings are wired; Quotes / Open projects / Pricing
+   / Quality / OEM PCNs are "coming soon" placeholders pending data sources
+   (Quotes via the price list; Pricing/Quality/PCNs likely need new vault data
+   or the DB).
 5. **AI layer over the vault**: "informationalize" everything so the app can
    answer questions and act as the OEM team's reference brain. Likely a
    retrieval + `lib/ai` chat surface over the parsed vault. (Decide scope: ask

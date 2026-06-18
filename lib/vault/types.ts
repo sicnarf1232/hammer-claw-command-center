@@ -104,8 +104,10 @@ export interface MeetingsIndexRow {
 // A Merit customer account, parsed from 300 Merit/Customers/<Name>.md.
 export interface AccountContact {
   name: string;
-  detail?: string; // role / company / free text after the name
+  detail?: string; // raw free text after the name (legacy / fallback)
+  title?: string; // role / title (parsed out of detail)
   email?: string;
+  phone?: string;
 }
 
 export interface Account {

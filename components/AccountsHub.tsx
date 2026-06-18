@@ -2,13 +2,24 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { AccountHub } from "@/lib/accounts";
+import { accountToEditable, type EditableContact } from "@/lib/accountEdit";
 import { customerHue, initials } from "@/lib/customerHues";
 import { SearchIcon } from "./icons";
 import AccountNumberEditor from "./AccountNumberEditor";
 
 type Filter = "all" | "open" | "overdue";
-type Tab = "overview" | "contacts" | "meetings";
+type Tab =
+  | "overview"
+  | "contacts"
+  | "quotes"
+  | "tasks"
+  | "projects"
+  | "pricing"
+  | "quality"
+  | "pcns"
+  | "meetings";
 
 // Phase: master-detail Accounts page matching the Film Room design handoff.
 // A searchable/filterable account list on the left; a tabbed detail pane on the
@@ -157,6 +168,7 @@ function Detail({
   tab: Tab;
   setTab: (t: Tab) => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const { hue, soft } = customerHue(a.name);
   const tiles: { v: string | number; l: string; c?: string }[] = [
     { v: a.openTaskCount, l: "Open" },
@@ -188,7 +200,17 @@ function Detail({
               </p>
             </div>
           </div>
-          <AccountNumberEditor path={a.path} initial={a.accountNumber} />
+          <div className="flex items-center gap-2">
+            <AccountNumberEditor path={a.path} initial={a.accountNumber} />
+            {!editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="btn btn-ghost px-3 py-1 text-xs"
+              >
+                Edit
+              </button>
+            )}
+          </div>
         </div>
         <div className="relative mt-5 flex flex-wrap gap-2.5">
           {tiles.map((t) => (
@@ -206,29 +228,97 @@ function Detail({
         </div>
       </div>
 
-      {/* tabs */}
-      <div className="flex gap-1 border-b px-6" style={{ borderColor: "var(--line)" }}>
-        {(["overview", "contacts", "meetings"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className="-mb-px border-b-2 px-3 py-3 text-sm font-medium capitalize transition-colors"
-            style={
-              tab === t
-                ? { borderColor: "var(--accent)", color: "var(--accent)" }
-                : { borderColor: "transparent", color: "var(--ink-3)" }
-            }
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      {editing ? (
+        <AccountEditor account={a} onClose={() => setEditing(false)} />
+      ) : (
+        <>
+          {/* tabs */}
+          <div className="flex gap-1 overflow-x-auto border-b px-6" style={{ borderColor: "var(--line)" }}>
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => t.enabled && setTab(t.key)}
+                disabled={!t.enabled}
+                className="-mb-px whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors disabled:opacity-40"
+                style={
+                  tab === t.key
+                    ? { borderColor: "var(--accent)", color: "var(--accent)" }
+                    : { borderColor: "transparent", color: "var(--ink-3)" }
+                }
+                title={t.enabled ? undefined : "Coming soon"}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-      <div className="p-6 sm:p-7">
-        {tab === "overview" && <Overview a={a} today={today} />}
-        {tab === "contacts" && <Contacts a={a} />}
-        {tab === "meetings" && <Meetings a={a} />}
-      </div>
+          <div className="p-6 sm:p-7">
+            {tab === "overview" && <Overview a={a} today={today} />}
+            {tab === "contacts" && <Contacts a={a} />}
+            {tab === "meetings" && <Meetings a={a} />}
+            {tab === "tasks" && <TasksTab a={a} today={today} />}
+            {PLACEHOLDER_TABS.includes(tab) && <Placeholder label={tabLabel(tab)} />}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const TABS: { key: Tab; label: string; enabled: boolean }[] = [
+  { key: "overview", label: "Overview", enabled: true },
+  { key: "contacts", label: "Contacts", enabled: true },
+  { key: "quotes", label: "Quotes", enabled: false },
+  { key: "tasks", label: "Tasks", enabled: true },
+  { key: "projects", label: "Open projects", enabled: false },
+  { key: "pricing", label: "Pricing", enabled: false },
+  { key: "quality", label: "Quality", enabled: false },
+  { key: "pcns", label: "OEM PCNs", enabled: false },
+  { key: "meetings", label: "Meetings", enabled: true },
+];
+
+const PLACEHOLDER_TABS: Tab[] = ["quotes", "projects", "pricing", "quality", "pcns"];
+
+function tabLabel(t: Tab): string {
+  return TABS.find((x) => x.key === t)?.label ?? t;
+}
+
+function Placeholder({ label }: { label: string }) {
+  return (
+    <div className="rounded-[12px] border border-dashed p-8 text-center" style={{ borderColor: "var(--line-2)" }}>
+      <div className="text-sm font-medium text-fg">{label}</div>
+      <p className="mt-1 text-sm text-muted">
+        Coming soon. This tab will surface {label.toLowerCase()} once the data is wired in.
+      </p>
+    </div>
+  );
+}
+
+function TasksTab({ a, today }: { a: AccountHub; today: string }) {
+  if (a.openTasks.length === 0)
+    return <p className="text-sm text-muted">No open tasks for this account.</p>;
+  return (
+    <div className="flex flex-col">
+      {a.openTasks.map((t, i) => {
+        const overdue = !!t.due && t.due < today;
+        return (
+          <div key={i} className="flex items-start gap-3 border-b py-3" style={{ borderColor: "var(--line)" }}>
+            <span className="mt-0.5 h-4 w-4 flex-none rounded-[5px] border-2" style={{ borderColor: "var(--line-2)" }} />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm text-fg">{t.text}</div>
+              {t.due && (
+                <div className="mt-1 text-2xs tabular-nums" style={{ color: overdue ? "var(--due)" : "var(--ink-3)" }}>
+                  {overdue ? "overdue " : "due "}
+                  {t.due}
+                </div>
+              )}
+            </div>
+            {t.priority && (
+              <span className="chip" style={{ borderColor: "var(--line-2)" }}>{t.priority}</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -327,16 +417,71 @@ function Overview({ a, today }: { a: AccountHub; today: string }) {
 
 function Contacts({ a }: { a: AccountHub }) {
   if (a.contacts.length === 0)
-    return <p className="text-sm text-muted">No contacts listed on this account note.</p>;
+    return <p className="text-sm text-muted">No contacts listed on this account note. Use Edit to add one.</p>;
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-1.5">
       {a.contacts.map((c) => (
-        <ContactRow key={c.name} c={c} />
+        <ContactDropdown key={c.name} c={c} />
       ))}
     </div>
   );
 }
 
+// A contact rendered as a dropdown: the header row expands to show title, email,
+// and phone. Satisfies "contacts as a dropdown within the accounts tab."
+function ContactDropdown({ c }: { c: AccountHub["contacts"][number] }) {
+  const [open, setOpen] = useState(false);
+  const { hue, soft } = customerHue(c.name);
+  const subtitle = c.title ?? c.detail;
+  return (
+    <div className="rounded-[12px] border" style={{ borderColor: "var(--line)" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3.5 px-3.5 py-3 text-left"
+      >
+        <span
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-lg text-[11px] font-bold"
+          style={{ background: soft, color: hue }}
+        >
+          {initials(c.name)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-fg">{c.name}</div>
+          {subtitle && <div className="truncate text-xs text-ink3">{subtitle}</div>}
+        </div>
+        <span className="text-ink3 transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }}>
+          ⌄
+        </span>
+      </button>
+      {open && (
+        <div className="grid gap-1.5 border-t px-3.5 py-3 text-[13px]" style={{ borderColor: "var(--line)" }}>
+          <Field label="Title" value={c.title} />
+          <Field label="Email" value={c.email} href={c.email ? `mailto:${c.email}` : undefined} />
+          <Field label="Phone" value={c.phone} href={c.phone ? `tel:${c.phone.replace(/[^\d+]/g, "")}` : undefined} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, value, href }: { label: string; value?: string; href?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs text-ink3">{label}</span>
+      {value ? (
+        href ? (
+          <a href={href} className="truncate font-medium" style={{ color: "var(--accent-2)" }}>{value}</a>
+        ) : (
+          <span className="truncate font-medium text-fg">{value}</span>
+        )
+      ) : (
+        <span className="text-muted">—</span>
+      )}
+    </div>
+  );
+}
+
+// Compact contact row for the Overview "primary contacts" list.
 function ContactRow({
   c,
   compact,
@@ -345,6 +490,7 @@ function ContactRow({
   compact?: boolean;
 }) {
   const { hue, soft } = customerHue(c.name);
+  const subtitle = c.title ?? c.detail;
   return (
     <div
       className={`flex items-center gap-3.5 ${compact ? "py-2.5" : "border-b py-3.5"}`}
@@ -356,19 +502,170 @@ function ContactRow({
       >
         {initials(c.name)}
       </span>
-      <div className="w-52 flex-none">
+      <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-fg">{c.name}</div>
-        {c.detail && <div className="truncate text-xs text-ink3">{c.detail}</div>}
+        {subtitle && <div className="truncate text-xs text-ink3">{subtitle}</div>}
       </div>
       {c.email && (
         <a
           href={`mailto:${c.email}`}
-          className="min-w-0 flex-1 truncate text-[13px]"
+          className="hidden min-w-0 max-w-[40%] truncate text-[13px] sm:block"
           style={{ color: "var(--accent-2)" }}
         >
           {c.email}
         </a>
       )}
+    </div>
+  );
+}
+
+// ---- account editor (edit mode) ----
+
+interface ContactRowEdit extends EditableContact {
+  _id: number;
+}
+
+function AccountEditor({ account: a, onClose }: { account: AccountHub; onClose: () => void }) {
+  const router = useRouter();
+  const initial = accountToEditable(a);
+  const [type, setType] = useState(initial.type ?? "");
+  const [region, setRegion] = useState(initial.region ?? "");
+  const [stage, setStage] = useState(initial.stage ?? "");
+  const [status, setStatus] = useState(initial.status ?? "");
+  const [accountNumber, setAccountNumber] = useState(initial.accountNumber ?? "");
+  const [overview, setOverview] = useState(initial.overview);
+  const [contacts, setContacts] = useState<ContactRowEdit[]>(
+    initial.contacts.map((c, i) => ({ ...c, _id: i })),
+  );
+  const [nextId, setNextId] = useState(initial.contacts.length);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  function patch(id: number, p: Partial<ContactRowEdit>) {
+    setContacts((prev) => prev.map((c) => (c._id === id ? { ...c, ...p } : c)));
+  }
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    const edit = {
+      type: type.trim() || undefined,
+      region: region.trim() || undefined,
+      stage: stage.trim() || undefined,
+      status: status.trim() || undefined,
+      accountNumber: accountNumber.trim() || undefined,
+      overview,
+      contacts: contacts
+        .filter((c) => c.name.trim())
+        .map(({ _id, ...rest }) => {
+          void _id;
+          return rest;
+        }),
+    };
+    try {
+      const res = await fetch("/api/accounts/note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: a.path, edit }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data.error ?? "Could not save.");
+      } else {
+        onClose();
+        router.refresh();
+      }
+    } catch {
+      setErr("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="p-6 sm:p-7">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <EditField label="Type" value={type} onChange={setType} placeholder="OEM Account" />
+        <EditField label="Account #" value={accountNumber} onChange={setAccountNumber} placeholder="e.g. 69249" />
+        <EditField label="Region" value={region} onChange={setRegion} placeholder="Pacific OEM" />
+        <EditField label="Stage" value={stage} onChange={setStage} placeholder="Strategic / Growth / Core" />
+        <EditField label="Status" value={status} onChange={setStatus} placeholder="active" />
+      </div>
+
+      <div className="mt-5">
+        <p className="eyebrow mb-1.5 text-muted">Overview</p>
+        <textarea
+          value={overview}
+          onChange={(e) => setOverview(e.target.value)}
+          className="input min-h-[90px] w-full"
+          placeholder="What this account is, the relationship, what matters."
+        />
+      </div>
+
+      <div className="mt-6">
+        <p className="eyebrow mb-2 text-muted">Contacts</p>
+        <div className="grid gap-2">
+          {contacts.map((c) => (
+            <div
+              key={c._id}
+              className="grid gap-2 rounded-[12px] border p-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]"
+              style={{ borderColor: "var(--line)" }}
+            >
+              <input className="input" placeholder="Name" value={c.name} onChange={(e) => patch(c._id, { name: e.target.value })} />
+              <input className="input" placeholder="Title" value={c.title ?? ""} onChange={(e) => patch(c._id, { title: e.target.value })} />
+              <input className="input" placeholder="Email" value={c.email ?? ""} onChange={(e) => patch(c._id, { email: e.target.value })} />
+              <input className="input" placeholder="Phone" value={c.phone ?? ""} onChange={(e) => patch(c._id, { phone: e.target.value })} />
+              <button
+                onClick={() => setContacts((prev) => prev.filter((x) => x._id !== c._id))}
+                className="text-muted hover:text-danger"
+                aria-label="Remove contact"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => {
+            setContacts((prev) => [...prev, { _id: nextId, name: "" }]);
+            setNextId((n) => n + 1);
+          }}
+          className="btn btn-ghost mt-2 px-2.5 py-1 text-xs"
+        >
+          + Contact
+        </button>
+      </div>
+
+      {err && <p className="mt-4 text-sm text-danger">{err}</p>}
+
+      <div className="mt-6 flex items-center gap-2 border-t-2 pt-4" style={{ borderColor: "var(--accent)" }}>
+        <button onClick={save} disabled={busy} className="btn btn-primary disabled:opacity-60">
+          {busy ? "Saving…" : "Save to vault"}
+        </button>
+        <button onClick={onClose} disabled={busy} className="btn btn-ghost">
+          Cancel
+        </button>
+        <span className="ml-auto text-2xs text-muted">Writes one commit to the account note.</span>
+      </div>
+    </div>
+  );
+}
+
+function EditField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <p className="eyebrow mb-1.5 text-muted">{label}</p>
+      <input className="input w-full" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

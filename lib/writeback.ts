@@ -2,6 +2,7 @@ import { getFile, writeFile } from "@/lib/github";
 import { todayISO } from "@/lib/dates";
 import { applyMeetingEdit, type MeetingEdit } from "@/lib/meetingEdit";
 import { addContactsToNote, type NewContact } from "@/lib/contactsWrite";
+import { applyAccountEdit, type AccountEdit } from "@/lib/accountEdit";
 
 // Mutations that write back into the vault as small, atomic git commits.
 // Each reads the latest file first (writeFile re-reads the SHA), never
@@ -115,6 +116,29 @@ export async function editMeetingNote(
     path,
     content: next,
     message: `app: edit meeting note ${name} ${todayISO()}`,
+  });
+}
+
+// Milestone 2: edit an account note in-app (frontmatter fields, overview, and
+// the structured contacts list) and write it back as one commit. The pure
+// transform lives in lib/accountEdit.
+export async function editAccountNote(
+  accountPath: string,
+  edit: AccountEdit,
+): Promise<{ commitSha: string; path: string }> {
+  const file = await getFile(accountPath);
+  if (!file) throw new WriteBackError(`Account note not found: ${accountPath}`);
+
+  const next = applyAccountEdit(file.content, edit);
+  if (next === file.content.replace(/\r\n/g, "\n").replace(/\n*$/, "\n")) {
+    return { commitSha: "", path: accountPath };
+  }
+
+  const name = accountPath.split("/").pop()!.replace(/\.md$/, "");
+  return writeFile({
+    path: accountPath,
+    content: next,
+    message: `app: edit account ${name} ${todayISO()}`,
   });
 }
 

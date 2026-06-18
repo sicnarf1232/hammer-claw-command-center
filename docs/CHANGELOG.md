@@ -167,3 +167,12 @@ One line per phase boundary: what shipped and any decisions made.
 - New "Type of request" column: `lib/taskType.ts` (pure, 3 tests) classifies each task by keyword into an OEM set (PCN, Quality & Reg, Pricing/Quote, Samples/Dev, Supply/Logistics, Commercial, Admin/Other) so tasks can be sorted by which team function to engage. There is no such field in the vault, so it is derived; it can be refined later. `TaskView` now also carries `start` (scheduled ?? created).
 - `TaskList`/`TaskRow` are unchanged and still power `/today` and the account detail. 90 tests pass (3 new), typecheck + production build clean.
 - Larger requests captured in the roadmap (see CONNECTIVITY-ROADMAP "Milestone 2"): editable accounts + live contacts (phone/title/email), the expanded account tabs (Quotes / Tasks / Open projects / Pricing / Quality / OEM PCNs), an AI layer over the vault, and the eventual DB cutover so the app becomes its own source of truth.
+
+## Milestone 2 #2 + #3 — editable accounts + live contacts (2026-06-18)
+
+- Accounts are now editable in-app. The account detail pane has an Edit mode (`AccountEditor` in `components/AccountsHub.tsx`) for Type, Account #, Region, Stage, Status, Overview, and the full contacts list (add/edit/remove). Save writes one commit to the account note via `POST /api/accounts/note` → `editAccountNote` → `applyAccountEdit`.
+- Contacts are first-class: name + **title + email + phone**. The contacts parser (`lib/vault/accounts.ts`) extracts title/email/phone from each bullet; the serializer writes `- **Name** — Title · email · phone`. `AccountContact` gained `title`/`phone`.
+- Contacts tab renders each contact as a **dropdown** (`ContactDropdown`): the header row expands to show title, email (mailto), and phone (tel). The Overview "primary contacts" list shows the title.
+- `lib/accountEdit.ts` (pure, 8 tests): `applyAccountEdit` surgically edits the managed frontmatter fields, replaces the Overview body, and rebuilds the contacts section (creating it if absent); everything else in the note is preserved. Round-trips through the parser.
+- Account detail tabs expanded to the requested set: Overview, Contacts, **Quotes**, **Tasks**, **Open projects**, **Pricing**, **Quality**, **OEM PCNs**, Meetings. Tasks is wired (per-account open tasks); Quotes/Open projects/Pricing/Quality/OEM PCNs are clearly-labeled "coming soon" placeholders pending data sources.
+- 95 tests pass (8 new + parser), typecheck + production build clean.

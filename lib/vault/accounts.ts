@@ -77,6 +77,9 @@ function bulletTitles(section?: string): string[] {
   return titles;
 }
 
+const EMAIL_RE = /[\w.+-]+@[\w.-]+\.\w+/;
+const PHONE_RE = /(\(?\+?\d[\d().\-\s]{7,}\d)/;
+
 function parseContacts(section?: string): AccountContact[] {
   if (!section) return [];
   const contacts: AccountContact[] = [];
@@ -85,14 +88,30 @@ function parseContacts(section?: string): AccountContact[] {
     if (!m) continue;
     const text = m[1].trim();
     if (!text) continue;
-    const boldName = text.match(/^\*\*(.+?)\*\*\s*(?:[—,-]\s*)?(.*)$/);
+    const boldName = text.match(/^\*\*(.+?)\*\*\s*(?:[—,·-]\s*)?(.*)$/);
     const name = boldName ? boldName[1].trim() : firstClause(text);
     const detail = boldName ? boldName[2].trim() : undefined;
-    const email = text.match(/[\w.+-]+@[\w.-]+\.\w+/)?.[0];
+    const email = text.match(EMAIL_RE)?.[0];
+    const phone = text.match(PHONE_RE)?.[0]?.trim();
+    // Title is the detail with the email/phone and separators stripped out.
+    let title: string | undefined;
+    if (detail) {
+      title = stripMd(
+        detail
+          .replace(EMAIL_RE, "")
+          .replace(PHONE_RE, "")
+          .replace(/[·,;|]/g, " ")
+          .replace(/\s+/g, " ")
+          .replace(/^[\s.—–-]+|[\s.—–-]+$/g, "")
+          .trim(),
+      ) || undefined;
+    }
     contacts.push({
       name: stripMd(name),
       detail: detail ? stripMd(detail.replace(/\.$/, "")) || undefined : undefined,
+      title,
       email,
+      phone,
     });
   }
   return contacts;
