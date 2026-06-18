@@ -159,3 +159,11 @@ One line per phase boundary: what shipped and any decisions made.
 - `addAccountContacts` in `lib/writeback.ts` (one commit, idempotent); `findAccountByName` in `lib/accounts.ts` maps a meeting's account to its note. Route `POST /api/meetings/sync-contacts`; client `components/SyncContactsButton.tsx`. The pull now reports `contactsAdded` (surfaced in the Pull from Granola result).
 - Contact store decision (per the roadmap open question): contacts stay in the vault (account-note contacts + the roster), no DB table. Not built: parsing `300 Merit/People/` person notes into the directory (their note format is not pinned in docs/02), and contact phone/email capture from attendees (Granola gives names, not emails).
 - 87 tests pass (9 new), typecheck + production build clean.
+
+## Tasks page — sortable/filterable table, de-cluttered (2026-06-18)
+
+- Rebuilt `/tasks` from the grouped list into a data table: rows are tasks; columns are Task / Account / Type / Status / Start / Due. Click a header to sort; filter by search, workstream, account, type, and status. Check a row off to complete it in the vault (`/api/tasks/complete`).
+- De-clutter: the scan still reads the whole vault, but `/tasks` now derives each task's workstream from its folder path (`workstreamFromPath`), drops Nextech entirely, and defaults the workstream filter to Merit (Sloan/Personal reachable via the filter). This removes the Nextech/personal noise the old view showed.
+- New "Type of request" column: `lib/taskType.ts` (pure, 3 tests) classifies each task by keyword into an OEM set (PCN, Quality & Reg, Pricing/Quote, Samples/Dev, Supply/Logistics, Commercial, Admin/Other) so tasks can be sorted by which team function to engage. There is no such field in the vault, so it is derived; it can be refined later. `TaskView` now also carries `start` (scheduled ?? created).
+- `TaskList`/`TaskRow` are unchanged and still power `/today` and the account detail. 90 tests pass (3 new), typecheck + production build clean.
+- Larger requests captured in the roadmap (see CONNECTIVITY-ROADMAP "Milestone 2"): editable accounts + live contacts (phone/title/email), the expanded account tabs (Quotes / Tasks / Open projects / Pricing / Quality / OEM PCNs), an AI layer over the vault, and the eventual DB cutover so the app becomes its own source of truth.

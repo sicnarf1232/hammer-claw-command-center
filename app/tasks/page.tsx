@@ -2,7 +2,7 @@ import { vaultConfigured, getAllTasks } from "@/lib/vault";
 import { listAccounts } from "@/lib/accounts";
 import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
 import { todayISO } from "@/lib/dates";
-import TaskList from "@/components/TaskList";
+import TasksTable from "@/components/TasksTable";
 import SetupNotice from "@/components/SetupNotice";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,11 @@ export default async function TasksPage() {
     const lookup = buildAccountLookup(accounts);
     views = tasks
       .filter((t) => !t.done)
-      .map((t) => toTaskView(t, lookup));
+      .map((t) => toTaskView(t, lookup))
+      // Nextech is a separate business that was removed from the app; never
+      // show its tasks. Merit is the default view (TasksTable workstream
+      // filter); Sloan/Personal stay available behind that filter.
+      .filter((t) => t.workstream !== "nextech");
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to read the vault.";
   }
@@ -37,7 +41,7 @@ export default async function TasksPage() {
           Could not read the vault: {error}
         </div>
       ) : (
-        <TaskList tasks={views} today={today} defaultGroup="account" />
+        <TasksTable tasks={views} today={today} />
       )}
     </Page>
   );
@@ -55,11 +59,13 @@ function Page({
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-fg">Tasks</h1>
         <p className="mt-1 text-sm text-muted">
-          Every open task across the vault
+          Open tasks, sorted and filterable by account, type, and status. Merit
+          OEM by default
           {count !== undefined ? (
             <>
-              , <span className="font-mono tabular-nums text-fg/70">{count}</span>{" "}
-              open
+              {" "}
+              (<span className="font-mono tabular-nums text-fg/70">{count}</span>{" "}
+              across workstreams)
             </>
           ) : null}
           . Check one off to complete it in the vault.

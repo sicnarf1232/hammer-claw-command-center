@@ -36,6 +36,41 @@ output (house style).
 Status: Phase D + Accounts redesign DONE (2026-06-18), typecheck + 78 tests +
 production build clean. Next: Phase B (contacts wiring) or Phase E (series).
 
+## Milestone 2 — App as the Merit OEM brain (captured 2026-06-18)
+
+Jordan's direction: the app should stop being "basic," become genuinely
+intuitive, and eventually cut from the vault to become its own source of truth
+(a DB-backed brain + AI for the Merit Medical OEM team). Captured items, roughly
+in priority order:
+
+1. **Tasks page** (DONE 2026-06-18): sortable/filterable table, columns
+   Task/Account/Type/Status/Start/Due, Merit-default scope, Nextech dropped,
+   derived OEM "type of request". See CHANGELOG.
+2. **Editable accounts**: edit account fields in-app (overview, snapshot,
+   contacts) and write back to the account note, mirroring the Phase-C meeting
+   editor. (`lib/accounts` + a writer like `editMeetingNote`.)
+3. **Live contacts**: contacts become first-class with phone, title, and email,
+   editable in-app. Surface as a dropdown/expander within the account Contacts
+   tab. Needs a richer contact model than the current name/detail/email parse,
+   and a writer (extends `lib/contactsWrite`).
+4. **Account detail tabs** (expand from Overview/Contacts/Meetings to):
+   Overview, Contacts, Quotes, Tasks, Open projects (placeholder first), then
+   Pricing, Quality, OEM PCNs. Wire real data where it exists (Tasks, Meetings,
+   Quotes via the price list); Pricing/Quality/PCNs likely need new vault data
+   or a DB.
+5. **AI layer over the vault**: "informationalize" everything so the app can
+   answer questions and act as the OEM team's reference brain. Likely a
+   retrieval + `lib/ai` chat surface over the parsed vault. (Decide scope: ask
+   over tasks/accounts/meetings first.)
+6. **DB cutover**: once the above are trusted, the app becomes its own vault
+   (Postgres already attached for email/queue) so it no longer depends on the
+   Obsidian repo as the source of truth. Big architectural step; sequence last.
+
+Open questions to resolve before building 3-6: contact model + where phone/title
+live (account note vs `People/` notes vs DB); the "type of request" taxonomy is
+v1 and may need Jordan's edits; Pricing/Quality/PCN data sources; AI scope and
+provider (Claude per repo default).
+
 ## Flow direction (locked)
 
 Granola → **app** (triage, AI) → **vault** (source of truth). The app never
