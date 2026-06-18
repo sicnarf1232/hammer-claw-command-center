@@ -143,3 +143,10 @@ One line per phase boundary: what shipped and any decisions made.
 - Route `POST /api/meetings/pdf` (app-password gated) takes `{ path }` or `{ seriesPath }`, reads + parses, and returns `application/pdf`. Client `components/MeetingShareButtons.tsx` does the blob download and the clipboard copy.
 - 78 tests pass (5 new), typecheck + production build clean. Verified a sample PDF renders the full note (pdftotext confirms all content, house style preserved).
 - Not built (proposed): embed a real Merit/Film Room logo asset in the PDF header (currently a typographic wordmark); a server-rendered HTML preview route.
+
+## Accounts page — adopt the Film Room master-detail design (2026-06-18)
+
+- The "reconcile to the Claude Design" pass only updated the meetings screens; the Accounts page was still the older grid + separate `/accounts/[slug]` route. Rebuilt `/accounts` as the master-detail layout from the handoff (`docs/design/Film Room Preview.dc.html`, lines 242-378): a searchable/filterable account list (All / Open tasks / Overdue) on the left, and a tabbed detail pane (Overview / Contacts / Meetings) on the right with an avatar header, the account-number editor, a radial flourish, and stat tiles.
+- `getAccountsHub()` in `lib/accounts.ts` assembles everything in one server pass (account notes + the cached task scan + the meetings index): per-account open tasks, overdue counts, and recent meetings (matched to an account by index bucket, then by the `/Meetings/<Account>/` path segment). Selection is client-side (`components/AccountsHub.tsx`), so switching accounts is instant; `?a=<slug>` deep-links a selection. Reuses `AccountNumberEditor` (writes the account number back to the vault) and the per-customer hue palette.
+- Data-driven deferrals (noted, not built): the Pricing tab (no per-account negotiated pricing exists yet, only the global 1,144-part list) and the "+ Log activity" write action; contact phone numbers are not in the vault. The old `/accounts/[slug]` route still works for deep links; the unused `AccountsGrid` component was removed.
+- 78 tests pass, typecheck + production build clean.

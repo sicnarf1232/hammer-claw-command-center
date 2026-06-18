@@ -19,13 +19,21 @@ Two open phases remain, either order:
   carry an account, render the aggregated rollup (open actions / decisions /
   numbers / watch-outs across sessions).
 
-Also worth doing (operational, not a build): the existing meeting notes predate
-Phase A, so they are tracking-only; pull today's meetings so new notes get the
-dual-capture/flag format, then retire the Cowork Granola scheduler so there is
-one writer. No em dashes in any generated output (house style).
+Also done (2026-06-18): the **Accounts page** now matches the Film Room
+master-detail design (list + tabbed detail; `getAccountsHub` in
+`lib/accounts.ts`, `components/AccountsHub.tsx`). Phase B contacts wiring is the
+natural follow-on (resolve/auto-create contacts into the Contacts tab). Deferred
+in that UI: the Pricing tab (no per-account pricing data) and "+ Log activity".
 
-Status: Phase D DONE (2026-06-18), typecheck + 78 tests + production build
-clean. Next: Phase B or Phase E.
+Operational note (2026-06-18): ran the Granola pull; `considered: 0` (nothing
+created after the newest indexed day 2026-06-17), so it was a no-op. Existing
+notes predate Phase A and stay tracking-only; only future meetings arrive in the
+dual-capture/flag format. Still pending: retire the Cowork Granola scheduler so
+there is one writer once the app pull is trusted. No em dashes in generated
+output (house style).
+
+Status: Phase D + Accounts redesign DONE (2026-06-18), typecheck + 78 tests +
+production build clean. Next: Phase B (contacts wiring) or Phase E (series).
 
 ## Flow direction (locked)
 

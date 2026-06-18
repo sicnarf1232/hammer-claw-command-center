@@ -1,6 +1,6 @@
 import { listMarkdownFiles, readFiles } from "@/lib/github";
 import { parseAccount, slugify } from "@/lib/vault/accounts";
-import { getAllTasks } from "@/lib/vault";
+import { getAllTasks, getMeetingsIndex } from "@/lib/vault";
 import type { Account, Task } from "@/lib/vault/types";
 
 const CUSTOMERS_DIR = "300 Merit/Customers";
@@ -122,6 +122,102 @@ export async function getAccountBySlug(
     openTasks,
     recentDone,
   };
+}
+
+// ---- Accounts hub (master-detail) ----
+
+export interface HubTask {
+  text: string;
+  due?: string;
+  overdue: boolean;
+  priority?: string;
+}
+export interface HubMeeting {
+  date: string;
+  title: string;
+  notePath: string | null;
+}
+export interface AccountHub extends AccountWithStats {
+  openTasks: HubTask[];
+  recentMeetings: HubMeeting[];
+}
+
+// Assemble everything the master-detail Accounts page needs in one server pass:
+// account notes + the (cached) task scan + the meetings index. Avoids a
+// per-account fetch when the user selects an account (selection is client-side).
+export async function getAccountsHub(): Promise<{
+  accounts: AccountHub[];
+  today: string;
+}> {
+  const [accounts, tasks, meetings] = await Promise.all([
+    listAccounts(),
+    getAllTasks(),
+    getMeetingsIndex().catch(() => []),
+  ]);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const byKey = new Map<string, AccountHub>();
+  const hub: AccountHub[] = accounts.map((a) => ({
+    ...a,
+    openTaskCount: 0,
+    overdueCount: 0,
+    openTasks: [],
+    recentMeetings: [],
+  }));
+  for (const a of hub) for (const k of matchKeys(a)) byKey.set(k, a);
+
+  for (const t of tasks) {
+    if (t.done) continue;
+    const cust = taskCustomerName(t);
+    if (!cust) continue;
+    const acc = byKey.get(norm(cust));
+    if (!acc) continue;
+    const overdue = !!(t.due && t.due < today);
+    acc.openTaskCount++;
+    if (overdue) acc.overdueCount++;
+    if (t.due && (!acc.nextDue || t.due < acc.nextDue)) acc.nextDue = t.due;
+    acc.openTasks.push({
+      text: t.title.replace(/\[[A-Za-z][\w-]*::[^\]]*\]/g, "").trim(),
+      due: t.due,
+      overdue,
+      priority: t.priority,
+    });
+  }
+
+  for (const m of meetings) {
+    const acc = accountForMeeting(byKey, m.bucket, m.notePath);
+    if (acc) acc.recentMeetings.push({ date: m.date, title: m.title, notePath: m.notePath });
+  }
+
+  for (const a of hub) {
+    a.openTasks.sort((x, y) => (x.due ?? "9999").localeCompare(y.due ?? "9999"));
+    a.recentMeetings.sort((x, y) => y.date.localeCompare(x.date));
+    a.recentMeetings = a.recentMeetings.slice(0, 6);
+  }
+
+  hub.sort(
+    (a, b) =>
+      b.overdueCount - a.overdueCount ||
+      b.openTaskCount - a.openTaskCount ||
+      a.name.localeCompare(b.name),
+  );
+  return { accounts: hub, today };
+}
+
+// Link a meeting (index row) to an account by its bucket, then by the account
+// folder segment in the note path ("300 Merit/Meetings/<Account>/...").
+function accountForMeeting(
+  byKey: Map<string, AccountHub>,
+  bucket: string,
+  notePath: string | null,
+): AccountHub | undefined {
+  const byBucket = byKey.get(norm(bucket));
+  if (byBucket) return byBucket;
+  if (notePath) {
+    const seg = notePath.split("/Meetings/")[1]?.split("/")[0];
+    if (seg) return byKey.get(norm(seg));
+  }
+  return undefined;
 }
 
 export { slugify };
