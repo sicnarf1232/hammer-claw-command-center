@@ -130,3 +130,16 @@ One line per phase boundary: what shipped and any decisions made.
 - Route `POST /api/meetings/note` (behind the app password gate) validates the path is a meeting note and coerces the edit payload defensively. Client editor is `components/MeetingEditor.tsx` (server `EditMeeting` builds the model + roster/account datalists; on save it POSTs, returns to the read-only view, and refreshes).
 - The meeting parser now exposes a `due` on every action item (Jordan's from `[due:: ]`, tracking-only from the `🗓️ Due:` line, `(confirm)` stripped) so the editor can show and set it. 71 tests pass (15 new + 4 parser), typecheck + production build clean.
 - Note: re-serializing drops the `(confirm)` hint from tracking-only dues the user didn't touch (the editor now lets them confirm/set the due directly).
+
+## Phase C follow-up — broaden the due-date flag (2026-06-18)
+
+- Fix: the `⚑ needs due date` flag only rendered for Jordan's dual-capture items whose due was literally `TBD`. Real notes pulled before Phase A are plain `- [ ] Owner: task` + `🗓️ Due:` (no field row), so every item parsed tracking-only and vague dues like "Next week" never flagged. `needsDueDate()` in `lib/dates.ts` (true when due is missing, TBD, or non-ISO) is now shared by the read-only view and the editor, and applies to all items. The editor also gained a "feeds /today (mine)" toggle to promote a tracking item to a real task. 73 tests.
+
+## Phase D — Film Room PDF + copy-for-email (2026-06-18)
+
+- Branded **Film Room PDF** of a meeting note or a rolling series, for email sharing, plus a **"Copy for email"** button that puts a clean inline-styled HTML version on the clipboard (rich `text/html` with a plain-text fallback). Reached from the meeting/series detail header. PDF is the primary path.
+- `lib/meetingShare.ts` (pure, 3 tests): a normalized `ShareDoc` model with `meetingToShareDoc` / `seriesToShareDoc`, so meeting and series share one layout engine, plus `renderMeetingEmailHtml` (escaped, em-dash-free, due-flag aware).
+- `lib/meetingPdf.ts` (2 tests): `buildMeetingPdf(doc)` via `pdf-lib` (same dependency as the quote PDF). Multi-page flow with a running footer and page numbers, accent rule + section headings + diamond bullets + checkbox action items with due/flag tags. All text is sanitized to the WinAnsi range the standard fonts can encode, so emoji (🗓️), smart quotes, and em dashes can't crash generation (verified by a unicode/emoji smoke test and a pagination test).
+- Route `POST /api/meetings/pdf` (app-password gated) takes `{ path }` or `{ seriesPath }`, reads + parses, and returns `application/pdf`. Client `components/MeetingShareButtons.tsx` does the blob download and the clipboard copy.
+- 78 tests pass (5 new), typecheck + production build clean. Verified a sample PDF renders the full note (pdftotext confirms all content, house style preserved).
+- Not built (proposed): embed a real Merit/Film Room logo asset in the PDF header (currently a typographic wordmark); a server-rendered HTML preview route.

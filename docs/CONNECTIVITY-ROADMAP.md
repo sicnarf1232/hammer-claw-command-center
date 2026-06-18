@@ -1,27 +1,31 @@
 # Connectivity Roadmap — meetings ↔ tasks ↔ accounts ↔ contacts
 
-## ▶ PICKUP — start here next session: Phase D (real PDF / share)
+## ▶ PICKUP — start here next session: Phase B (accounts & contacts) or Phase E (series)
 
 Done so far: the **Film Room redesign**, **Phase A** (meetings carry real
-tasks), and now **Phase C** (editable meeting notes). Phase C shipped an in-app
-editor reached from a meeting's detail view ("Edit" → `?note=...&edit=1`) that
-writes one commit to the vault: title, account, bucket/topic, attendees,
-TL;DR + the optional sections, and the action items (clears the Phase-A
-`[due:: TBD]` flags, reassigns owners). Pure transform + 15 tests in
-`lib/meetingEdit.ts`; writer `editMeetingNote` in `lib/writeback.ts`; route
-`POST /api/meetings/note`; client `components/MeetingEditor.tsx`. See CHANGELOG.
+tasks), **Phase C** (editable meeting notes), and **Phase D** (Film Room PDF +
+copy-for-email). Phase D added a branded PDF of a meeting note or rolling series
+plus a clean-HTML clipboard copy, reached from the detail header. Shared model
+`lib/meetingShare.ts` (ShareDoc + email HTML); PDF in `lib/meetingPdf.ts`
+(`pdf-lib`, multi-page, WinAnsi-sanitized); route `POST /api/meetings/pdf`;
+client `components/MeetingShareButtons.tsx`. See CHANGELOG.
 
-Phase D goal: generate a branded **Film Room PDF** of a meeting note (and
-series) for email sharing, plus a "copy for email" (clean HTML). Reuse the
-existing PDF pipeline (`lib/quotePdf.ts` / `POST /api/quote/pdf`, `pdf-lib`).
-PDF is the primary, best-looking path (confirmed); HTML copy is a nice-to-have.
+Two open phases remain, either order:
+- **Phase B — accounts & contacts wiring**: assign a meeting to an account
+  (triage proposes; user can change in the Phase-C editor already), resolve
+  attendees to contacts, auto-create missing contacts, seed the directory from
+  the vault (`300 Merit/People/`, account-note contacts, the roster).
+- **Phase E — series as first-class**: widen series detection, let a series
+  carry an account, render the aggregated rollup (open actions / decisions /
+  numbers / watch-outs across sessions).
 
-Phase B (accounts & contacts wiring) is still unbuilt and can come before or
-after D. No em dashes in any generated output (house style).
+Also worth doing (operational, not a build): the existing meeting notes predate
+Phase A, so they are tracking-only; pull today's meetings so new notes get the
+dual-capture/flag format, then retire the Cowork Granola scheduler so there is
+one writer. No em dashes in any generated output (house style).
 
-Status: Phase C DONE (2026-06-17), typecheck + 71 tests + production build
-clean. Next: Phase D (or Phase B). Verify Phase C live by opening a meeting,
-pressing Edit, setting a flagged due date, and confirming the vault commit.
+Status: Phase D DONE (2026-06-18), typecheck + 78 tests + production build
+clean. Next: Phase B or Phase E.
 
 ## Flow direction (locked)
 

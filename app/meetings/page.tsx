@@ -18,7 +18,13 @@ import { customerHue, initials } from "@/lib/customerHues";
 import { meetingNoteToEditable } from "@/lib/meetingEdit";
 import { listAccounts } from "@/lib/accounts";
 import MeetingEditor from "@/components/MeetingEditor";
+import MeetingShareButtons from "@/components/MeetingShareButtons";
 import { needsDueDate } from "@/lib/dates";
+import {
+  meetingToShareDoc,
+  seriesToShareDoc,
+  renderMeetingEmailHtml,
+} from "@/lib/meetingShare";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -128,18 +134,26 @@ async function MeetingDetail({ path }: { path: string }) {
 
   const { hue } = customerHue(note.customer?.display ?? "Internal");
   const sections = orderedSections(note.sections);
+  const shareDoc = meetingToShareDoc(note);
 
   return (
     <Shell>
       <article className="panel texture mx-auto max-w-3xl overflow-hidden p-6 sm:p-9">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <BackLink />
-          <Link
-            href={`/meetings?note=${encodeURIComponent(path)}&edit=1`}
-            className="btn btn-ghost px-3 py-1 text-xs"
-          >
-            Edit
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/meetings?note=${encodeURIComponent(path)}&edit=1`}
+              className="btn btn-ghost px-3 py-1 text-xs"
+            >
+              Edit
+            </Link>
+            <MeetingShareButtons
+              path={path}
+              filename={shareDoc.filenameBase}
+              emailHtml={renderMeetingEmailHtml(shareDoc)}
+            />
+          </div>
         </div>
         <h1 className="mt-4 text-[30px] font-bold leading-tight tracking-tight text-fg">
           {note.title}
@@ -288,10 +302,19 @@ async function SeriesDetail({ path }: { path: string }) {
     );
   }
 
+  const seriesShareDoc = seriesToShareDoc(series);
+
   return (
     <Shell>
       <article className="panel texture mx-auto max-w-3xl overflow-hidden p-6 sm:p-9">
-        <BackLink />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <BackLink />
+          <MeetingShareButtons
+            seriesPath={path}
+            filename={seriesShareDoc.filenameBase}
+            emailHtml={renderMeetingEmailHtml(seriesShareDoc)}
+          />
+        </div>
         <div className="mt-4 flex items-center gap-2.5">
           <span
             className="h-3 w-3 rounded-full"
