@@ -89,6 +89,17 @@ export async function getAccountsWithStats(): Promise<{
   return { accounts: stats, today };
 }
 
+// Find an account by a (customer wikilink) name, tolerant of punctuation and
+// "(BSC)"-style suffixes. Used to map a meeting's account to its note.
+export async function findAccountByName(
+  name: string,
+): Promise<Account | undefined> {
+  const target = norm(name);
+  if (!target) return undefined;
+  const accounts = await listAccounts();
+  return accounts.find((a) => matchKeys(a).some((k) => k === target));
+}
+
 export async function getAccountBySlug(
   slug: string,
 ): Promise<AccountDetail | null> {

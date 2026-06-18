@@ -19,6 +19,7 @@ import { meetingNoteToEditable } from "@/lib/meetingEdit";
 import { listAccounts } from "@/lib/accounts";
 import MeetingEditor from "@/components/MeetingEditor";
 import MeetingShareButtons from "@/components/MeetingShareButtons";
+import SyncContactsButton from "@/components/SyncContactsButton";
 import { needsDueDate } from "@/lib/dates";
 import {
   meetingToShareDoc,
@@ -148,6 +149,7 @@ async function MeetingDetail({ path }: { path: string }) {
             >
               Edit
             </Link>
+            {note.customer && <SyncContactsButton notePath={path} />}
             <MeetingShareButtons
               path={path}
               filename={shareDoc.filenameBase}

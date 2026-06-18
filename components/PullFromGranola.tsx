@@ -15,6 +15,7 @@ interface PullResult {
   skipped: { title: string; reason: string }[];
   errors: { title: string; error: string }[];
   seriesUpdated: { series: string; date: string }[];
+  contactsAdded: { account: string; names: string[] }[];
   truncated: boolean;
 }
 
@@ -84,6 +85,18 @@ export default function PullFromGranola() {
               <span className="text-fg">
                 {Array.from(
                   new Set(result.seriesUpdated.map((s) => s.series)),
+                ).join(", ")}
+              </span>
+            </div>
+          )}
+          {result.contactsAdded?.length > 0 && (
+            <div className="mt-1.5 text-muted">
+              Added{" "}
+              {result.contactsAdded.reduce((n, c) => n + c.names.length, 0)}{" "}
+              contact(s) across{" "}
+              <span className="text-fg">
+                {Array.from(
+                  new Set(result.contactsAdded.map((c) => c.account)),
                 ).join(", ")}
               </span>
             </div>

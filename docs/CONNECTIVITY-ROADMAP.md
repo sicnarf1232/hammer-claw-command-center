@@ -1,23 +1,24 @@
 # Connectivity Roadmap — meetings ↔ tasks ↔ accounts ↔ contacts
 
-## ▶ PICKUP — start here next session: Phase B (accounts & contacts) or Phase E (series)
+## ▶ PICKUP — start here next session: Phase E (series as first-class)
 
 Done so far: the **Film Room redesign**, **Phase A** (meetings carry real
-tasks), **Phase C** (editable meeting notes), and **Phase D** (Film Room PDF +
-copy-for-email). Phase D added a branded PDF of a meeting note or rolling series
-plus a clean-HTML clipboard copy, reached from the detail header. Shared model
-`lib/meetingShare.ts` (ShareDoc + email HTML); PDF in `lib/meetingPdf.ts`
-(`pdf-lib`, multi-page, WinAnsi-sanitized); route `POST /api/meetings/pdf`;
-client `components/MeetingShareButtons.tsx`. See CHANGELOG.
+tasks), **Phase C** (editable meeting notes), **Phase D** (Film Room PDF +
+copy-for-email), the **Accounts master-detail redesign**, and **Phase B**
+(attendees → contacts, auto-create). Phase B resolves attendees against the
+account + roster and auto-creates missing customer contacts on the account note,
+via a "Sync contacts" button on a meeting and automatically during the Granola
+pull. `lib/contacts.ts` (resolution) + `lib/contactsWrite.ts` (write) +
+`addAccountContacts`; route `POST /api/meetings/sync-contacts`. See CHANGELOG.
 
-Two open phases remain, either order:
-- **Phase B — accounts & contacts wiring**: assign a meeting to an account
-  (triage proposes; user can change in the Phase-C editor already), resolve
-  attendees to contacts, auto-create missing contacts, seed the directory from
-  the vault (`300 Merit/People/`, account-note contacts, the roster).
+One core phase remains:
 - **Phase E — series as first-class**: widen series detection, let a series
   carry an account, render the aggregated rollup (open actions / decisions /
   numbers / watch-outs across sessions).
+
+Phase B leftovers worth a follow-on: parse `300 Merit/People/` person notes into
+the contact directory (format not pinned in docs/02 — ask Jordan), and capture
+contact emails (Granola gives attendee names, not addresses).
 
 Also done (2026-06-18): the **Accounts page** now matches the Film Room
 master-detail design (list + tabbed detail; `getAccountsHub` in

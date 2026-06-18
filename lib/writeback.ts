@@ -1,6 +1,7 @@
 import { getFile, writeFile } from "@/lib/github";
 import { todayISO } from "@/lib/dates";
 import { applyMeetingEdit, type MeetingEdit } from "@/lib/meetingEdit";
+import { addContactsToNote, type NewContact } from "@/lib/contactsWrite";
 
 // Mutations that write back into the vault as small, atomic git commits.
 // Each reads the latest file first (writeFile re-reads the SHA), never
@@ -115,6 +116,28 @@ export async function editMeetingNote(
     content: next,
     message: `app: edit meeting note ${name} ${todayISO()}`,
   });
+}
+
+// Phase B: add customer contacts to an account note's contacts section as one
+// commit. Idempotent: already-present contacts are skipped (added is empty and
+// no commit is made). The pure transform lives in lib/contactsWrite.
+export async function addAccountContacts(
+  accountPath: string,
+  contacts: NewContact[],
+): Promise<{ commitSha: string; path: string; added: string[] }> {
+  const file = await getFile(accountPath);
+  if (!file) throw new WriteBackError(`Account note not found: ${accountPath}`);
+
+  const { content, added } = addContactsToNote(file.content, contacts);
+  if (added.length === 0) return { commitSha: "", path: accountPath, added };
+
+  const name = accountPath.split("/").pop()!.replace(/\.md$/, "");
+  const res = await writeFile({
+    path: accountPath,
+    content,
+    message: `app: add ${added.length} contact${added.length === 1 ? "" : "s"} to ${name} ${todayISO()}`,
+  });
+  return { ...res, added };
 }
 
 function commitNote(path: string, content: string, value: string) {

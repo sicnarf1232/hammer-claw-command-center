@@ -23,6 +23,8 @@ import {
   type Series,
 } from "@/lib/vault/series";
 import { listAccounts } from "@/lib/accounts";
+import { resolveAttendees } from "@/lib/contacts";
+import { addAccountContacts } from "@/lib/writeback";
 import {
   triageMeeting,
   updateSeries,
@@ -66,6 +68,11 @@ export interface PullSeriesUpdate {
   series: string;
   date: string;
 }
+export interface PullContactsAdded {
+  account: string;
+  names: string[];
+}
+
 export interface PullResult {
   createdAfter: string;
   considered: number;
@@ -74,6 +81,7 @@ export interface PullResult {
   skipped: PullSkipped[];
   errors: PullError[];
   seriesUpdated: PullSeriesUpdate[];
+  contactsAdded: PullContactsAdded[];
 }
 
 // Pull recent Granola meetings into the vault: triage each into the right
@@ -132,6 +140,7 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   const skipped: PullSkipped[] = [];
   const errors: PullError[] = [];
   const seriesUpdated: PullSeriesUpdate[] = [];
+  const contactsAdded: PullContactsAdded[] = [];
 
   // 4) One note at a time (respects Granola + Anthropic rate limits). Stop
   // starting new meetings once the soft budget is spent so we return cleanly.
@@ -208,6 +217,38 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
         bucket: triaged.bucket,
         workstream: triaged.workstream,
       });
+
+      // Phase B: auto-create missing customer contacts on the account note.
+      // Best-effort: a failure here must not fail the meeting filing.
+      if (triaged.account) {
+        try {
+          const acct = accounts.find((a) => a.name === triaged.account);
+          if (acct) {
+            const toCreate = resolveAttendees(
+              attendees,
+              acct.contacts.map((c) => c.name),
+              roster,
+            )
+              .filter((r) => r.willCreate)
+              .map((r) => ({ name: r.name }));
+            if (toCreate.length) {
+              const res = await addAccountContacts(acct.path, toCreate);
+              if (res.added.length) {
+                // Keep the in-memory account current so a second meeting in the
+                // same pull does not re-add the same people.
+                acct.contacts.push(...res.added.map((name) => ({ name })));
+                contactsAdded.push({ account: acct.name, names: res.added });
+              }
+            }
+          }
+        } catch (e) {
+          errors.push({
+            title: `contacts: ${triaged.account}`,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+
       // Update the rolling-series doc if this meeting belongs to one.
       if (matched) {
         try {
@@ -280,6 +321,7 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
     skipped,
     errors,
     seriesUpdated,
+    contactsAdded,
   };
 }
 
