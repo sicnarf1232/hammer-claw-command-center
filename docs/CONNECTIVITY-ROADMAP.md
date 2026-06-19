@@ -60,9 +60,39 @@ in priority order:
    or the DB).
 5. **AI layer over the vault** (DONE 2026-06-19): the `/ask` brain. Grounded
    chat over accounts/contacts/tasks/meetings (`lib/brain.ts` retrieval +
-   `answerVaultQuestion`). Follow-ons: broaden retrieval (price list, situations
-   depth), let it take actions (create/complete tasks, draft from a meeting),
-   and stream responses.
+   `answerVaultQuestion`). Pricing (the quote catalog) and a vault-wide note
+   scan added 2026-06-19. Follow-ons: let it take actions (create/complete
+   tasks, draft from a meeting) and stream responses.
+
+## Milestone 3 — Knowledge ingestion (the growing brain) (captured 2026-06-19)
+
+Jordan's vision: the app should retain and surface reference material so it stops
+being buried in email and becomes widely reusable. Pieces, with the decisions
+each needs:
+
+1. **Document library**: upload + retain ISO docs, biocompatibility reports,
+   drawings, certificates, spec sheets, PCNs. These are mostly PDFs/binaries, not
+   markdown, so they need real storage. Proposed architecture: Vercel Blob for
+   the files + Postgres (already attached) for an index (filename, type, account,
+   uploaded date, extracted text), PDF text extraction on upload, and the brain
+   retrieves over the extracted text. UI: an upload + tag surface, plus a
+   Documents tab on each account and a global library. DECISION NEEDED: confirm
+   Blob + Postgres index (vs committing binaries to the vault git, not
+   recommended), and the tag taxonomy (ISO / biocomp / drawing / cert / PCN /
+   spec / other).
+2. **Website ingestion (meritoem.com)**: fetch key pages on a schedule, extract
+   text, store as knowledge the brain can cite. A cron + WebFetch pipeline into
+   the same knowledge store, refreshed periodically. DECISION NEEDED: which
+   pages/sections matter most (products, capabilities, quality/cert pages).
+3. **Email-sourced knowledge**: the inbox keystone already lands email in the
+   app; let valuable attachments/threads be promoted into the document library so
+   reference material is captured at the point it arrives.
+4. **Continuous retention**: every ingest (pull, upload, fetch, email) adds to
+   the index, so the brain gets richer over time. Pairs with the Milestone 2 #6
+   DB cutover (the index is the start of the app being its own source of truth).
+
+Sequence note: #1 (document library) is the foundation and unblocks the rest.
+Start there once the storage/extraction decision is made.
 6. **DB cutover**: once the above are trusted, the app becomes its own vault
    (Postgres already attached for email/queue) so it no longer depends on the
    Obsidian repo as the source of truth. Big architectural step; sequence last.

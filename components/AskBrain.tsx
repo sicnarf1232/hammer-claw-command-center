@@ -14,7 +14,7 @@ interface Turn {
 const SUGGESTIONS = [
   "What is open and overdue for Stryker?",
   "Summarize where things stand with Terumo.",
-  "Which accounts have the most open tasks?",
+  "What is our price on part MSS031?",
   "What did I commit to in my last meeting?",
 ];
 

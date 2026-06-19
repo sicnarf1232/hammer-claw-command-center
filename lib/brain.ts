@@ -4,8 +4,10 @@ import {
   getMeetingNoteByPath,
   getRoster,
 } from "@/lib/vault";
+import { listMarkdownFiles, readFiles } from "@/lib/github";
 import { listAccounts } from "@/lib/accounts";
 import { customerContacts } from "@/lib/accounts";
+import { getCatalog, type CatalogItem } from "@/lib/priceList";
 import { toTaskView, buildAccountLookup } from "@/lib/taskView";
 import type { Account, Task } from "@/lib/vault/types";
 import type { Roster } from "@/lib/vault/types";
@@ -59,6 +61,85 @@ function keywords(q: string): string[] {
   );
 }
 
+// Does the question look like it is about pricing or a specific part? Used to
+// decide whether to include catalog matches (the catalog is large, so we only
+// pull it in when relevant).
+const PRICE_RE = /\b(price|pricing|cost|costs|quote|catalog|part|sku|how much|list price|unit)\b/i;
+const PARTNUM_RE = /\b([A-Za-z]*\d[A-Za-z0-9]{2,}|[A-Za-z]{2,}\d[A-Za-z0-9]*)\b/;
+
+export function isPricingQuestion(q: string): boolean {
+  return PRICE_RE.test(q) || PARTNUM_RE.test(q);
+}
+
+// Pure: match catalog items to the question. A part-number token in the question
+// that matches a part number scores highest; description keyword overlap adds.
+export function matchCatalog(
+  question: string,
+  items: CatalogItem[],
+  limit: number,
+): CatalogItem[] {
+  const words = keywords(question);
+  const rawTokens = question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length && !rawTokens.length) return [];
+
+  const scored = items.map((it) => {
+    const part = it.partNumber.toLowerCase();
+    const desc = it.description.toLowerCase();
+    let score = 0;
+    for (const tok of rawTokens) {
+      if (tok.length >= 3 && (part === tok || part.includes(tok))) score += 5;
+    }
+    for (const w of words) {
+      if (desc.includes(w)) score += 1;
+    }
+    return { it, score };
+  });
+  return scored
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((s) => s.it);
+}
+
+// Pure: pick the best snippet from a note body for the question. Returns the
+// keyword-hit count and a trimmed window of lines around the densest match.
+export function bestSnippet(
+  question: string,
+  content: string,
+  windowChars = 600,
+): { score: number; snippet: string } {
+  const words = keywords(question);
+  if (!words.length) return { score: 0, snippet: "" };
+  const body = content
+    .replace(/^---[\s\S]*?\n---\n/, "") // drop frontmatter
+    .replace(/\r\n/g, "\n");
+  const lower = body.toLowerCase();
+
+  let score = 0;
+  let firstHit = -1;
+  for (const w of words) {
+    let idx = lower.indexOf(w);
+    if (idx === -1) continue;
+    while (idx !== -1) {
+      score++;
+      idx = lower.indexOf(w, idx + w.length);
+    }
+    if (firstHit === -1 || lower.indexOf(w) < firstHit) firstHit = lower.indexOf(w);
+  }
+  if (score === 0) return { score: 0, snippet: "" };
+
+  const start = Math.max(0, firstHit - 120);
+  const snippet = body
+    .slice(start, start + windowChars)
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+  return { score, snippet };
+}
+
 function taskLine(t: ReturnType<typeof toTaskView>): string {
   const bits = [`- ${t.title.replace(/\[[A-Za-z][\w-]*::[^\]]*\]/g, "").trim()}`];
   const tags: string[] = [];
@@ -89,11 +170,13 @@ export async function assembleBrainContext(question: string): Promise<{
   context: string;
   sources: string[];
 }> {
-  const [openTasks, accounts, meetings, roster] = await Promise.all([
+  const pricing = isPricingQuestion(question);
+  const [openTasks, accounts, meetings, roster, catalog] = await Promise.all([
     getOpenTasks().catch(() => [] as Task[]),
     listAccounts().catch(() => [] as Account[]),
     getMeetingsIndex().catch(() => []),
     getRoster().catch(() => new Map() as Roster),
+    pricing ? getCatalog().catch(() => [] as CatalogItem[]) : Promise.resolve([] as CatalogItem[]),
   ]);
 
   const lookup = buildAccountLookup(accounts);
@@ -166,5 +249,66 @@ export async function assembleBrainContext(question: string): Promise<{
     }
   }
 
+  // Pricing: include matching catalog parts (your price) when the question is
+  // about pricing or names a part. The same catalog the quote builder uses.
+  if (pricing && catalog.length) {
+    const hits = matchCatalog(question, catalog, 12);
+    if (hits.length) {
+      lines.push(`CATALOG PRICING (${hits.length} matches of ${catalog.length} parts):`);
+      lines.push(
+        ...hits.map(
+          (h) =>
+            `- ${h.partNumber}: ${h.description}${h.unitCost != null ? ` = $${h.unitCost.toLocaleString("en-US")}` : " (no price listed)"}`,
+        ),
+      );
+      lines.push("");
+      sources.push("Merit price list");
+    }
+  }
+
+  // Vault-wide scan: search the rest of the vault (projects, people, sales ops,
+  // periodics, memory, etc.) for notes relevant to the question, so the brain
+  // draws on everything, not just the structured types above.
+  const scanned = await scanVaultNotes(question, 4);
+  for (const s of scanned) {
+    lines.push(`VAULT NOTE: ${s.path}`, s.snippet, "");
+    sources.push(`Note: ${s.path.split("/").pop()}`);
+  }
+
   return { context: lines.join("\n"), sources };
+}
+
+// Directories already covered by structured retrieval above, or that are noise.
+// Everything else in the vault is fair game for the keyword scan.
+const SCAN_EXCLUDES = [
+  "000 OS/",
+  "200 Dashboards/",
+  "900 Archive/",
+  "400 Nextech/",
+  "300 Merit/Customers/",
+  "300 Merit/Price List/",
+];
+
+async function scanVaultNotes(
+  question: string,
+  limit: number,
+): Promise<{ path: string; snippet: string }[]> {
+  const files = (await listMarkdownFiles().catch(() => [])).filter(
+    (f) =>
+      !SCAN_EXCLUDES.some((p) => f.path.startsWith(p)) &&
+      !f.path.includes("/Meetings/"), // meetings are retrieved above
+  );
+  if (!files.length) return [];
+
+  const contents = await readFiles(files).catch(() => []);
+  const scored = contents
+    .filter(Boolean)
+    .map((f) => {
+      const { score, snippet } = bestSnippet(question, f.content);
+      return { path: f.path, score, snippet };
+    })
+    .filter((s) => s.score > 0 && s.snippet)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+  return scored.map((s) => ({ path: s.path, snippet: s.snippet }));
 }
