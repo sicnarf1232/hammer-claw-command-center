@@ -131,6 +131,34 @@ export const quoteDrafts = pgTable("quote_drafts", {
     .defaultNow(),
 });
 
+// Document library (Milestone 3): reference material (ISO docs, biocomp,
+// drawings, certs, PCNs, specs) lives in Vercel Blob; this table is the index
+// the app and the brain search. extractedText holds PDF text for retrieval.
+export const documents = pgTable(
+  "documents",
+  {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    blobUrl: text("blob_url").notNull(),
+    // Tag taxonomy: iso | biocomp | drawing | cert | pcn | spec | other
+    docType: text("doc_type").notNull().default("other"),
+    account: text("account"), // optional account/customer name this belongs to
+    tags: jsonb("tags").$type<string[]>().default([]),
+    extractedText: text("extracted_text"), // PDF text for search (best-effort)
+    notes: text("notes"),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    accountIdx: index("documents_account_idx").on(t.account),
+    typeIdx: index("documents_doc_type_idx").on(t.docType),
+  }),
+);
+
 // Key-value for sync bookkeeping (last sync time, etc.).
 export const appMeta = pgTable("app_meta", {
   key: text("key").primaryKey(),

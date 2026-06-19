@@ -8,6 +8,7 @@ import { listMarkdownFiles, readFiles } from "@/lib/github";
 import { listAccounts } from "@/lib/accounts";
 import { customerContacts } from "@/lib/accounts";
 import { getCatalog, type CatalogItem } from "@/lib/priceList";
+import { listDocuments, matchDocuments } from "@/lib/documents";
 import { toTaskView, buildAccountLookup } from "@/lib/taskView";
 import type { Account, Task } from "@/lib/vault/types";
 import type { Roster } from "@/lib/vault/types";
@@ -273,6 +274,24 @@ export async function assembleBrainContext(question: string): Promise<{
   for (const s of scanned) {
     lines.push(`VAULT NOTE: ${s.path}`, s.snippet, "");
     sources.push(`Note: ${s.path.split("/").pop()}`);
+  }
+
+  // Document library: reference material (ISO docs, biocomp, drawings, certs,
+  // PCNs, specs). Empty when the library is not configured. Include the most
+  // relevant docs' extracted text so the brain can answer from them.
+  const docs = await listDocuments().catch(() => []);
+  if (docs.length) {
+    for (const d of matchDocuments(question, docs, 3)) {
+      const snip = d.extractedText
+        ? bestSnippet(question, d.extractedText, 800).snippet
+        : "";
+      lines.push(
+        `DOCUMENT: ${d.title} [${d.docType}${d.account ? `, ${d.account}` : ""}]`,
+        snip || "(no extracted text; this file is in the library)",
+        "",
+      );
+      sources.push(`Doc: ${d.title}`);
+    }
   }
 
   return { context: lines.join("\n"), sources };

@@ -8,6 +8,7 @@ import { accountToEditable, type EditableContact } from "@/lib/accountEdit";
 import { customerHue, initials } from "@/lib/customerHues";
 import { SearchIcon } from "./icons";
 import AccountNumberEditor from "./AccountNumberEditor";
+import DocumentLibrary from "./DocumentLibrary";
 
 type Filter = "all" | "open" | "overdue";
 type Tab =
@@ -257,6 +258,16 @@ function Detail({
             {tab === "contacts" && <Contacts a={a} />}
             {tab === "meetings" && <Meetings a={a} />}
             {tab === "tasks" && <TasksTab a={a} today={today} />}
+            {tab === "quality" && (
+              <DocumentLibrary
+                account={a.name}
+                allowedTypes={["iso", "biocomp", "cert", "drawing", "spec"]}
+                compact
+              />
+            )}
+            {tab === "pcns" && (
+              <DocumentLibrary account={a.name} allowedTypes={["pcn"]} compact />
+            )}
             {PLACEHOLDER_TABS.includes(tab) && <Placeholder label={tabLabel(tab)} />}
           </div>
         </>
@@ -272,12 +283,12 @@ const TABS: { key: Tab; label: string; enabled: boolean }[] = [
   { key: "tasks", label: "Tasks", enabled: true },
   { key: "projects", label: "Open projects", enabled: false },
   { key: "pricing", label: "Pricing", enabled: false },
-  { key: "quality", label: "Quality", enabled: false },
-  { key: "pcns", label: "OEM PCNs", enabled: false },
+  { key: "quality", label: "Quality", enabled: true },
+  { key: "pcns", label: "OEM PCNs", enabled: true },
   { key: "meetings", label: "Meetings", enabled: true },
 ];
 
-const PLACEHOLDER_TABS: Tab[] = ["quotes", "projects", "pricing", "quality", "pcns"];
+const PLACEHOLDER_TABS: Tab[] = ["quotes", "projects", "pricing"];
 
 function tabLabel(t: Tab): string {
   return TABS.find((x) => x.key === t)?.label ?? t;

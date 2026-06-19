@@ -122,6 +122,14 @@ export const SparkIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const LibraryIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+    <path d="M9 7h7" />
+  </Svg>
+);
+
 export const SearchIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="11" cy="11" r="8" />

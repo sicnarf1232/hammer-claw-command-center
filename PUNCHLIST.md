@@ -244,3 +244,12 @@ vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
       log entry). Correct any misfiles in the vault.
 - [ ] OPTIONAL: the app reads series from any `/Rolling/` folder. If you keep
       rolling docs elsewhere, tell me and I will widen discovery.
+
+## Milestone 3 — Document library (2026-06-19)
+- [ ] PROVISION: create a Vercel Blob store in the project. `BLOB_READ_WRITE_TOKEN`
+      is then set automatically on deploy. Until it is set, /library and the
+      account Quality / OEM PCNs tabs show a setup notice (they do not crash).
+- [ ] APPLY MIGRATION: run `npm run db:push` (or apply `drizzle/0001_furry_odin.sql`)
+      so the `documents` table exists in Postgres.
+- [ ] VERIFY LIVE: upload a PDF on /library, confirm it lists, opens from Blob,
+      and that the brain (/ask) can answer a question from its text.

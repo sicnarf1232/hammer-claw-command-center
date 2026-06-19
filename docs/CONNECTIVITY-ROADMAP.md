@@ -70,16 +70,13 @@ Jordan's vision: the app should retain and surface reference material so it stop
 being buried in email and becomes widely reusable. Pieces, with the decisions
 each needs:
 
-1. **Document library**: upload + retain ISO docs, biocompatibility reports,
-   drawings, certificates, spec sheets, PCNs. These are mostly PDFs/binaries, not
-   markdown, so they need real storage. Proposed architecture: Vercel Blob for
-   the files + Postgres (already attached) for an index (filename, type, account,
-   uploaded date, extracted text), PDF text extraction on upload, and the brain
-   retrieves over the extracted text. UI: an upload + tag surface, plus a
-   Documents tab on each account and a global library. DECISION NEEDED: confirm
-   Blob + Postgres index (vs committing binaries to the vault git, not
-   recommended), and the tag taxonomy (ISO / biocomp / drawing / cert / PCN /
-   spec / other).
+1. **Document library** (DONE 2026-06-19): Vercel Blob (files) + Postgres
+   `documents` index + best-effort PDF text extraction (`unpdf`). Tag taxonomy
+   ISO / biocomp / drawing / cert / PCN / spec / other. Global `/library` page +
+   account Quality and OEM PCNs tabs (document-backed, scoped to the account) +
+   brain retrieval over extracted text. Needs a Blob store provisioned +
+   `npm run db:push` (PUNCHLIST). Follow-on: promote inbox attachments into the
+   library; a dedicated per-account Documents tab beyond Quality/PCNs if wanted.
 2. **Website ingestion (meritoem.com)**: fetch key pages on a schedule, extract
    text, store as knowledge the brain can cite. A cron + WebFetch pipeline into
    the same knowledge store, refreshed periodically. DECISION NEEDED: which

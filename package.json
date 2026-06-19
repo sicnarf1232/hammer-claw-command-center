@@ -17,11 +17,13 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@neondatabase/serverless": "^0.10.4",
     "@octokit/rest": "^21.1.1",
+    "@vercel/blob": "^2.4.1",
     "drizzle-orm": "^0.38.4",
     "next": "^15.5.19",
     "pdf-lib": "^1.17.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
+    "unpdf": "^1.6.2",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
