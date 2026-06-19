@@ -176,3 +176,9 @@ One line per phase boundary: what shipped and any decisions made.
 - `lib/accountEdit.ts` (pure, 8 tests): `applyAccountEdit` surgically edits the managed frontmatter fields, replaces the Overview body, and rebuilds the contacts section (creating it if absent); everything else in the note is preserved. Round-trips through the parser.
 - Account detail tabs expanded to the requested set: Overview, Contacts, **Quotes**, **Tasks**, **Open projects**, **Pricing**, **Quality**, **OEM PCNs**, Meetings. Tasks is wired (per-account open tasks); Quotes/Open projects/Pricing/Quality/OEM PCNs are clearly-labeled "coming soon" placeholders pending data sources.
 - 95 tests pass (8 new + parser), typecheck + production build clean.
+
+## Tasks expandable rows + contacts roster-filter (2026-06-19)
+
+- Tasks table rows are now clickable: a row expands in place to show the task's full description, notes, priority/workstream/thread chips, and source file. The title stays the simple parsed title (inline `[field:: ]` residue stripped); the detail lives in the expander. The complete checkbox and account link stop propagation so they do not toggle the row.
+- Fix: Merit co-workers were showing as customer contacts on accounts (e.g. teammates listed under Intuitive). The vault roster already classifies people by org, so `customerContacts(contacts, roster)` in `lib/accounts.ts` drops anyone the roster classifies "merit"; unknown people stay (treated as external). Applied in both `getAccountsHub` and `getAccountBySlug`, so the Contacts tab/dropdowns and the legacy detail route only show real customer contacts. Editing an account then rewrites the note without the misfiled teammates. (2 new tests; the Phase B auto-create already excluded Merit people.)
+- 97 tests pass (2 new), typecheck + production build clean.

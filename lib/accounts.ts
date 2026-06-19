@@ -1,7 +1,8 @@
 import { listMarkdownFiles, readFiles } from "@/lib/github";
 import { parseAccount, slugify } from "@/lib/vault/accounts";
-import { getAllTasks, getMeetingsIndex } from "@/lib/vault";
-import type { Account, Task } from "@/lib/vault/types";
+import { getAllTasks, getMeetingsIndex, getRoster } from "@/lib/vault";
+import { classifyName } from "@/lib/vault/roster";
+import type { Account, AccountContact, Roster, Task } from "@/lib/vault/types";
 
 const CUSTOMERS_DIR = "300 Merit/Customers";
 
@@ -50,6 +51,19 @@ function norm(s: string): string {
 function taskCustomerName(t: Task): string | null {
   if (!t.customer || t.customer === "internal") return null;
   return t.customer.basename;
+}
+
+// Drop Merit co-workers from an account's contact list: the vault roster already
+// classifies people by org, so anyone classified "merit" is an internal
+// teammate, not a customer contact, and should not appear on the account. People
+// the roster does not know stay (treated as external/customer by default).
+export function customerContacts(
+  contacts: AccountContact[],
+  roster: Roster,
+): AccountContact[] {
+  return contacts.filter(
+    (c) => classifyName(roster, c.name)?.classification !== "merit",
+  );
 }
 
 // All accounts with open-task stats joined from the live task scan.
@@ -103,9 +117,14 @@ export async function findAccountByName(
 export async function getAccountBySlug(
   slug: string,
 ): Promise<AccountDetail | null> {
-  const [accounts, tasks] = await Promise.all([listAccounts(), getAllTasks()]);
+  const [accounts, tasks, roster] = await Promise.all([
+    listAccounts(),
+    getAllTasks(),
+    getRoster().catch(() => new Map() as Roster),
+  ]);
   const account = accounts.find((a) => a.slug === slug);
   if (!account) return null;
+  account.contacts = customerContacts(account.contacts, roster); // hide Merit teammates
 
   const keys = new Set(matchKeys(account));
   const mine = tasks.filter((t) => {
@@ -160,16 +179,18 @@ export async function getAccountsHub(): Promise<{
   accounts: AccountHub[];
   today: string;
 }> {
-  const [accounts, tasks, meetings] = await Promise.all([
+  const [accounts, tasks, meetings, roster] = await Promise.all([
     listAccounts(),
     getAllTasks(),
     getMeetingsIndex().catch(() => []),
+    getRoster().catch(() => new Map() as Roster),
   ]);
   const today = new Date().toISOString().slice(0, 10);
 
   const byKey = new Map<string, AccountHub>();
   const hub: AccountHub[] = accounts.map((a) => ({
     ...a,
+    contacts: customerContacts(a.contacts, roster), // hide Merit teammates
     openTaskCount: 0,
     overdueCount: 0,
     openTasks: [],

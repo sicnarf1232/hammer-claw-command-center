@@ -43,6 +43,7 @@ export default function TasksTable({
   today: string;
 }) {
   const [rows, setRows] = useState(tasks);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [ws, setWs] = useState("merit");
   const [account, setAccount] = useState("all");
@@ -175,7 +176,16 @@ export default function TasksTable({
                 </td>
               </tr>
             ) : (
-              filtered.map((t) => <Row key={t.id} t={t} today={today} onComplete={() => complete(t)} />)
+              filtered.map((t) => (
+                <Row
+                  key={t.id}
+                  t={t}
+                  today={today}
+                  expanded={expanded === t.id}
+                  onToggle={() => setExpanded((id) => (id === t.id ? null : t.id))}
+                  onComplete={() => complete(t)}
+                />
+              ))
             )}
           </tbody>
         </table>
@@ -184,65 +194,136 @@ export default function TasksTable({
   );
 }
 
-function Row({ t, today, onComplete }: { t: TaskView; today: string; onComplete: () => void }) {
+function Row({
+  t,
+  today,
+  expanded,
+  onToggle,
+  onComplete,
+}: {
+  t: TaskView;
+  today: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onComplete: () => void;
+}) {
   const overdue = !!t.due && t.due < today;
   const dueToday = t.due === today;
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
-    <tr className="border-b align-top transition-colors hover:bg-surface2" style={{ borderColor: "var(--line)" }}>
-      <td className="py-2.5 pl-3 pr-1">
-        <button
-          type="button"
-          onClick={onComplete}
-          aria-label="Complete task"
-          className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-border text-transparent transition-colors hover:border-success hover:text-success"
-          title="Mark done"
-        >
-          ✓
-        </button>
-      </td>
-      <td className="max-w-[420px] py-2.5 pr-3">
-        <div className="text-fg">{cleanTitle(t.title)}</div>
-        {t.description && (
-          <div className="mt-0.5 truncate text-2xs text-muted">{t.description}</div>
-        )}
-      </td>
-      <td className="py-2.5 pr-3">
-        {t.customer && t.customer !== "internal" ? (
-          t.accountSlug ? (
-            <Link
-              href={`/accounts?a=${t.accountSlug}`}
-              className="font-medium hover:underline"
-              style={{ color: "var(--accent-2)" }}
+    <>
+      <tr
+        onClick={onToggle}
+        className="cursor-pointer border-b align-top transition-colors hover:bg-surface2"
+        style={{ borderColor: "var(--line)" }}
+      >
+        <td className="py-2.5 pl-3 pr-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              stop(e);
+              onComplete();
+            }}
+            aria-label="Complete task"
+            className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-border text-transparent transition-colors hover:border-success hover:text-success"
+            title="Mark done"
+          >
+            ✓
+          </button>
+        </td>
+        <td className="max-w-[420px] py-2.5 pr-3">
+          <div className="flex items-center gap-1.5 text-fg">
+            <span
+              className="text-ink3 transition-transform"
+              style={{ transform: expanded ? "rotate(90deg)" : "none" }}
             >
-              {t.customer}
-            </Link>
+              ›
+            </span>
+            <span>{cleanTitle(t.title)}</span>
+          </div>
+          {!expanded && t.description && (
+            <div className="mt-0.5 truncate pl-4 text-2xs text-muted">{t.description}</div>
+          )}
+        </td>
+        <td className="py-2.5 pr-3">
+          {t.customer && t.customer !== "internal" ? (
+            t.accountSlug ? (
+              <Link
+                href={`/accounts?a=${t.accountSlug}`}
+                onClick={stop}
+                className="font-medium hover:underline"
+                style={{ color: "var(--accent-2)" }}
+              >
+                {t.customer}
+              </Link>
+            ) : (
+              <span className="text-fg/80">{t.customer}</span>
+            )
           ) : (
-            <span className="text-fg/80">{t.customer}</span>
-          )
-        ) : (
-          <span className="text-muted">—</span>
-        )}
-      </td>
-      <td className="py-2.5 pr-3">
-        <span
-          className="chip whitespace-nowrap"
-          style={{ background: `${TYPE_HUE[t.type]}1a`, color: TYPE_HUE[t.type], borderColor: "transparent" }}
-        >
-          {t.type}
-        </span>
-      </td>
-      <td className="py-2.5 pr-3 text-fg/80">{statusLabel(t)}</td>
-      <td className="py-2.5 pr-3 tabular-nums text-muted">{t.start ?? "—"}</td>
-      <td className="py-2.5 pr-3 tabular-nums">
-        {t.due ? (
-          <span style={{ color: overdue ? "var(--due)" : dueToday ? "var(--warm)" : "var(--ink-2)" }}>
-            {t.due}
+            <span className="text-muted">—</span>
+          )}
+        </td>
+        <td className="py-2.5 pr-3">
+          <span
+            className="chip whitespace-nowrap"
+            style={{ background: `${TYPE_HUE[t.type]}1a`, color: TYPE_HUE[t.type], borderColor: "transparent" }}
+          >
+            {t.type}
           </span>
-        ) : (
-          <span className="text-muted">—</span>
+        </td>
+        <td className="py-2.5 pr-3 text-fg/80">{statusLabel(t)}</td>
+        <td className="py-2.5 pr-3 tabular-nums text-muted">{t.start ?? "—"}</td>
+        <td className="py-2.5 pr-3 tabular-nums">
+          {t.due ? (
+            <span style={{ color: overdue ? "var(--due)" : dueToday ? "var(--warm)" : "var(--ink-2)" }}>
+              {t.due}
+            </span>
+          ) : (
+            <span className="text-muted">—</span>
+          )}
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="border-b" style={{ borderColor: "var(--line)", background: "var(--surface-2)" }}>
+          <td />
+          <td colSpan={6} className="py-3 pr-4">
+            <TaskDetail t={t} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function TaskDetail({ t }: { t: TaskView }) {
+  return (
+    <div className="grid gap-2 text-sm">
+      {t.description ? (
+        <p className="whitespace-pre-wrap text-fg/90">{t.description}</p>
+      ) : (
+        <p className="text-muted">No additional detail captured for this task.</p>
+      )}
+      {t.notes && (
+        <p className="whitespace-pre-wrap text-xs text-muted">
+          <span className="font-semibold text-fg/70">Notes: </span>
+          {t.notes}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+        {t.priority && (
+          <span className="chip" style={{ borderColor: "var(--line-2)" }}>priority: {t.priority}</span>
         )}
-      </td>
-    </tr>
+        {t.workstream && (
+          <span className="chip" style={{ borderColor: "var(--line-2)" }}>{t.workstream}</span>
+        )}
+        {t.thread && (
+          <span className="chip" style={{ borderColor: "var(--line-2)" }}>thread: {t.thread}</span>
+        )}
+        <span className="chip font-mono text-2xs" style={{ borderColor: "var(--line-2)" }}>
+          {t.sourceFile.split("/").pop()}
+        </span>
+      </div>
+    </div>
   );
 }
 
