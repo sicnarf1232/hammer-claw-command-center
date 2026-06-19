@@ -58,10 +58,11 @@ in priority order:
    / Quality / OEM PCNs are "coming soon" placeholders pending data sources
    (Quotes via the price list; Pricing/Quality/PCNs likely need new vault data
    or the DB).
-5. **AI layer over the vault**: "informationalize" everything so the app can
-   answer questions and act as the OEM team's reference brain. Likely a
-   retrieval + `lib/ai` chat surface over the parsed vault. (Decide scope: ask
-   over tasks/accounts/meetings first.)
+5. **AI layer over the vault** (DONE 2026-06-19): the `/ask` brain. Grounded
+   chat over accounts/contacts/tasks/meetings (`lib/brain.ts` retrieval +
+   `answerVaultQuestion`). Follow-ons: broaden retrieval (price list, situations
+   depth), let it take actions (create/complete tasks, draft from a meeting),
+   and stream responses.
 6. **DB cutover**: once the above are trusted, the app becomes its own vault
    (Postgres already attached for email/queue) so it no longer depends on the
    Obsidian repo as the source of truth. Big architectural step; sequence last.

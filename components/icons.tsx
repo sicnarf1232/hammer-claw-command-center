@@ -114,6 +114,14 @@ export const ChevronDownIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A sparkle/brain glyph for the AI "Ask" surface.
+export const SparkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+    <path d="M12 8.5 13.2 11l2.5 1-2.5 1L12 15.5 10.8 13l-2.5-1 2.5-1L12 8.5Z" />
+  </Svg>
+);
+
 export const SearchIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="11" cy="11" r="8" />

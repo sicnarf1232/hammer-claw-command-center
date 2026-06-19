@@ -351,6 +351,58 @@ export async function updateSeries(
   return { logBullets: bullets, currentState };
 }
 
+// ---- Brain: answer a question grounded in the vault (Milestone 2 #5) ----
+
+export interface BrainTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// Answer Jordan's question as the Merit OEM team's assistant, grounded ONLY in
+// the supplied vault context. Prior turns give light conversational memory.
+export async function answerVaultQuestion(args: {
+  question: string;
+  context: string;
+  history?: BrainTurn[];
+}): Promise<string> {
+  const system = [
+    "You are the Film Room brain: the reference assistant for Jordan Francis and his Merit Medical OEM team.",
+    "Answer using ONLY the vault context provided in the first message. The context is the source of truth (accounts, contacts, open tasks, meetings).",
+    "If the answer is not in the context, say so plainly and suggest where it might live (a specific account, meeting, or task view). Do not invent facts, names, dates, prices, part numbers, or commitments.",
+    "Be concise and direct. Use short markdown: lead with the answer, then supporting bullets. Cite the account or meeting you drew from when relevant.",
+    "House style: never use em dashes. Use commas, colons, or periods.",
+  ].join("\n");
+
+  const messages: Anthropic.MessageParam[] = [];
+  messages.push({
+    role: "user",
+    content: `Vault context (source of truth):\n\n${args.context}\n\nAcknowledge and wait for the question.`,
+  });
+  messages.push({
+    role: "assistant",
+    content: "Ready. Ask your question and I will answer from the vault.",
+  });
+  for (const t of args.history ?? []) {
+    messages.push({ role: t.role, content: t.content });
+  }
+  messages.push({ role: "user", content: args.question });
+
+  const res = await client().messages.create({
+    model: model(),
+    max_tokens: 1500,
+    system,
+    messages,
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  return noEmDash(text);
+}
+
 // Generate a brief (morning brief, EOD recap, weekly review) from a context
 // blob the caller assembles. Returns markdown body (no frontmatter).
 export async function generateBrief(args: {

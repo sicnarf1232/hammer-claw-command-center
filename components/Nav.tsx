@@ -11,6 +11,7 @@ import {
   MeetingsIcon,
   QuoteIcon,
   ActivityIcon,
+  SparkIcon,
   type IconProps,
 } from "./icons";
 import ThemeToggle from "./ThemeToggle";
@@ -18,6 +19,7 @@ import ThemeToggle from "./ThemeToggle";
 const ITEMS: { href: string; label: string; Icon: ComponentType<IconProps> }[] =
   [
     { href: "/today", label: "Today", Icon: TodayIcon },
+    { href: "/ask", label: "Ask", Icon: SparkIcon },
     { href: "/tasks", label: "Tasks", Icon: TasksIcon },
     { href: "/inbox", label: "Inbox", Icon: InboxIcon },
     { href: "/accounts", label: "Accounts", Icon: AccountsIcon },
@@ -84,14 +86,6 @@ export default function Nav() {
             >
               <Icon className="h-[18px] w-[18px] shrink-0" />
               <span>{label}</span>
-              {href === "/inbox" && (
-                <span
-                  className="ml-auto rounded-full px-1.5 py-0.5 text-[10.5px] font-bold"
-                  style={{ color: "var(--accent)", background: "var(--accent-soft)" }}
-                >
-                  4
-                </span>
-              )}
             </Link>
           );
         })}
