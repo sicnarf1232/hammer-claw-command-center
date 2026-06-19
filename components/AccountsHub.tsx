@@ -57,9 +57,9 @@ export default function AccountsHub({
     accounts.find((a) => a.slug === slug) ?? filtered[0] ?? accounts[0] ?? null;
 
   return (
-    <div className="flex flex-col items-start gap-4 lg:flex-row">
+    <div className="flex flex-col items-start gap-5 lg:flex-row">
       {/* LIST */}
-      <div className="card w-full flex-none p-3.5 lg:w-[320px]">
+      <div className="card w-full flex-none p-3.5 lg:sticky lg:top-6 lg:w-[340px]">
         <div className="relative mb-1.5">
           <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
@@ -85,7 +85,7 @@ export default function AccountsHub({
             </button>
           ))}
         </div>
-        <div className="flex max-h-[620px] flex-col gap-0.5 overflow-y-auto">
+        <div className="flex max-h-[calc(100vh-220px)] flex-col gap-0.5 overflow-y-auto">
           {filtered.length === 0 ? (
             <p className="px-2 py-4 text-sm text-muted">No accounts match.</p>
           ) : (
@@ -419,63 +419,65 @@ function Contacts({ a }: { a: AccountHub }) {
   if (a.contacts.length === 0)
     return <p className="text-sm text-muted">No contacts listed on this account note. Use Edit to add one.</p>;
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="grid gap-3 sm:grid-cols-2">
       {a.contacts.map((c) => (
-        <ContactDropdown key={c.name} c={c} />
+        <ContactCard key={c.name} c={c} />
       ))}
     </div>
   );
 }
 
-// A contact rendered as a dropdown: the header row expands to show title, email,
-// and phone. Satisfies "contacts as a dropdown within the accounts tab."
-function ContactDropdown({ c }: { c: AccountHub["contacts"][number] }) {
-  const [open, setOpen] = useState(false);
+// A proper contact card: avatar + name, a role line, then labeled email/phone
+// rows, and any free-text detail as its own "Notes" block (not a parenthetical).
+function ContactCard({ c }: { c: AccountHub["contacts"][number] }) {
   const { hue, soft } = customerHue(c.name);
-  const subtitle = c.title ?? c.detail;
+  // The parser puts a job title in `title`; free text about the person sits in
+  // `detail`. Show the title as the role; show distinct detail as notes.
+  const role = c.title;
+  const notes = c.detail && c.detail !== c.title ? c.detail : undefined;
+  const tel = c.phone ? `tel:${c.phone.replace(/[^\d+]/g, "")}` : undefined;
   return (
-    <div className="rounded-[12px] border" style={{ borderColor: "var(--line)" }}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3.5 px-3.5 py-3 text-left"
-      >
+    <div className="rounded-[14px] border p-4" style={{ borderColor: "var(--line)", background: "var(--surface)" }}>
+      <div className="flex items-start gap-3">
         <span
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-lg text-[11px] font-bold"
+          className="flex h-11 w-11 flex-none items-center justify-center rounded-xl text-sm font-bold"
           style={{ background: soft, color: hue }}
         >
           {initials(c.name)}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-fg">{c.name}</div>
-          {subtitle && <div className="truncate text-xs text-ink3">{subtitle}</div>}
+          <div className="text-[15px] font-semibold leading-tight text-fg">{c.name}</div>
+          {role && <div className="mt-0.5 text-xs text-ink3">{role}</div>}
         </div>
-        <span className="text-ink3 transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }}>
-          ⌄
-        </span>
-      </button>
-      {open && (
-        <div className="grid gap-1.5 border-t px-3.5 py-3 text-[13px]" style={{ borderColor: "var(--line)" }}>
-          <Field label="Title" value={c.title} />
-          <Field label="Email" value={c.email} href={c.email ? `mailto:${c.email}` : undefined} />
-          <Field label="Phone" value={c.phone} href={c.phone ? `tel:${c.phone.replace(/[^\d+]/g, "")}` : undefined} />
+      </div>
+      <div className="mt-3 grid gap-1.5">
+        <ContactLine label="Email" value={c.email} href={c.email ? `mailto:${c.email}` : undefined} />
+        <ContactLine label="Phone" value={c.phone} href={tel} />
+      </div>
+      {notes && (
+        <div className="mt-3 border-t pt-2.5" style={{ borderColor: "var(--line)" }}>
+          <div className="eyebrow mb-1 text-ink3">Notes</div>
+          <p className="text-[13px] leading-relaxed text-fg/80">{notes}</p>
         </div>
       )}
     </div>
   );
 }
 
-function Field({ label, value, href }: { label: string; value?: string; href?: string }) {
+function ContactLine({ label, value, href }: { label: string; value?: string; href?: string }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-xs text-ink3">{label}</span>
+    <div className="flex items-baseline gap-2 text-[13px]">
+      <span className="w-12 flex-none text-2xs uppercase tracking-wide text-ink3">{label}</span>
       {value ? (
         href ? (
-          <a href={href} className="truncate font-medium" style={{ color: "var(--accent-2)" }}>{value}</a>
+          <a href={href} className="min-w-0 break-words font-medium" style={{ color: "var(--accent-2)" }}>
+            {value}
+          </a>
         ) : (
-          <span className="truncate font-medium text-fg">{value}</span>
+          <span className="min-w-0 break-words font-medium text-fg">{value}</span>
         )
       ) : (
-        <span className="text-muted">—</span>
+        <span className="text-muted">Not on file</span>
       )}
     </div>
   );
@@ -490,10 +492,10 @@ function ContactRow({
   compact?: boolean;
 }) {
   const { hue, soft } = customerHue(c.name);
-  const subtitle = c.title ?? c.detail;
+  const role = c.title;
   return (
     <div
-      className={`flex items-center gap-3.5 ${compact ? "py-2.5" : "border-b py-3.5"}`}
+      className={`flex items-center gap-3 ${compact ? "py-2" : "border-b py-3.5"}`}
       style={compact ? undefined : { borderColor: "var(--line)" }}
     >
       <span
@@ -504,17 +506,8 @@ function ContactRow({
       </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-fg">{c.name}</div>
-        {subtitle && <div className="truncate text-xs text-ink3">{subtitle}</div>}
+        {role && <div className="truncate text-xs text-ink3">{role}</div>}
       </div>
-      {c.email && (
-        <a
-          href={`mailto:${c.email}`}
-          className="hidden min-w-0 max-w-[40%] truncate text-[13px] sm:block"
-          style={{ color: "var(--accent-2)" }}
-        >
-          {c.email}
-        </a>
-      )}
     </div>
   );
 }

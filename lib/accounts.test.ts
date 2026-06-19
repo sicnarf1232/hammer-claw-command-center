@@ -20,20 +20,22 @@ const ROSTER = parseRoster(`
 `);
 
 const CONTACTS: AccountContact[] = [
-  { name: "Iris Zetah", title: "Quality Lead" },
-  { name: "Nick Patel", title: "Merit AE" }, // Merit teammate, misfiled
+  { name: "Iris Zetah", title: "Quality Lead", email: "iris@bsci.com" },
+  { name: "Nick Patel", title: "Merit AE" }, // roster-classified merit, misfiled
   { name: "Amy Carter" }, // Merit leadership, misfiled
-  { name: "Priya Shah" }, // unknown external
+  { name: "Dave Internal", email: "dave@merit.com" }, // not in roster, merit email
+  { name: "Priya Shah", email: "priya@example.com" }, // unknown external
 ];
 
 describe("customerContacts", () => {
-  it("drops Merit teammates, keeps customer and unknown people", () => {
+  it("drops Merit teammates (roster or merit email), keeps external people", () => {
     const out = customerContacts(CONTACTS, ROSTER).map((c) => c.name);
     expect(out).toEqual(["Iris Zetah", "Priya Shah"]);
   });
 
-  it("returns everyone when the roster is empty", () => {
-    const out = customerContacts(CONTACTS, new Map());
-    expect(out).toHaveLength(4);
+  it("still drops merit-email contacts when the roster is empty", () => {
+    const out = customerContacts(CONTACTS, new Map()).map((c) => c.name);
+    expect(out).not.toContain("Dave Internal");
+    expect(out).toContain("Iris Zetah");
   });
 });

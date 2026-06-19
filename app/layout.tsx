@@ -31,7 +31,7 @@ export default function RootLayout({
         <div className="flex">
           <Nav />
           <main className="min-w-0 flex-1">
-            <div className="mx-auto max-w-[1180px] animate-fade-in px-6 py-8 pb-24 sm:px-9">
+            <div className="mx-auto max-w-[1360px] animate-fade-in px-6 py-8 pb-24 sm:px-9">
               {children}
             </div>
           </main>

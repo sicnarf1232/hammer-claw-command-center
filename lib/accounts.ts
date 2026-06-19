@@ -53,17 +53,27 @@ function taskCustomerName(t: Task): string | null {
   return t.customer.basename;
 }
 
-// Drop Merit co-workers from an account's contact list: the vault roster already
-// classifies people by org, so anyone classified "merit" is an internal
-// teammate, not a customer contact, and should not appear on the account. People
-// the roster does not know stay (treated as external/customer by default).
+// Internal email domains: a contact with one of these is a Merit teammate, not
+// a customer contact, regardless of whether the roster lists them.
+const MERIT_DOMAINS = ["merit.com", "meritoem.com", "merit.net"];
+
+// True when a contact is a Merit teammate: classified "merit" by the roster, OR
+// carrying an internal email domain (catches people the roster does not list).
+export function isMeritContact(c: AccountContact, roster: Roster): boolean {
+  if (classifyName(roster, c.name)?.classification === "merit") return true;
+  const domain = c.email?.split("@")[1]?.toLowerCase();
+  return !!domain && MERIT_DOMAINS.some((d) => domain === d || domain.endsWith("." + d));
+}
+
+// Drop Merit co-workers from an account's contact list: the vault roster
+// classifies people by org, and Merit emails identify the rest, so internal
+// teammates do not appear as customer contacts. People who are neither stay
+// (treated as external/customer by default).
 export function customerContacts(
   contacts: AccountContact[],
   roster: Roster,
 ): AccountContact[] {
-  return contacts.filter(
-    (c) => classifyName(roster, c.name)?.classification !== "merit",
-  );
+  return contacts.filter((c) => !isMeritContact(c, roster));
 }
 
 // All accounts with open-task stats joined from the live task scan.
