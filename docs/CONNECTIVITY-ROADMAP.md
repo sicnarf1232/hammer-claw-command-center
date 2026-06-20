@@ -1,40 +1,61 @@
 # Connectivity Roadmap — meetings ↔ tasks ↔ accounts ↔ contacts
 
-## ▶ PICKUP — start here next session: Phase E (series as first-class)
+## ▶ PICKUP — start here next session
 
-Done so far: the **Film Room redesign**, **Phase A** (meetings carry real
-tasks), **Phase C** (editable meeting notes), **Phase D** (Film Room PDF +
-copy-for-email), the **Accounts master-detail redesign**, and **Phase B**
-(attendees → contacts, auto-create). Phase B resolves attendees against the
-account + roster and auto-creates missing customer contacts on the account note,
-via a "Sync contacts" button on a meeting and automatically during the Granola
-pull. `lib/contacts.ts` (resolution) + `lib/contactsWrite.ts` (write) +
-`addAccountContacts`; route `POST /api/meetings/sync-contacts`. See CHANGELOG.
+Last worked: 2026-06-19/20. HEAD = `ffc08b2` on `main`, pushed, working tree
+clean. 111 tests pass, typecheck + production build clean, deployed and Ready at
+https://hammer-claw-command-center.vercel.app.
 
-One core phase remains:
-- **Phase E — series as first-class**: widen series detection, let a series
-  carry an account, render the aggregated rollup (open actions / decisions /
-  numbers / watch-outs across sessions).
+### FIRST: two activation steps for the document library (Milestone 3 #1)
+The library is built and live but shows a setup notice until these are done
+(both need secrets that cannot be set from the agent):
+1. **Link a Blob store** (sets `BLOB_READ_WRITE_TOKEN`). Interactive, answer Y
+   then Enter to accept all envs:
+   `npx vercel blob create-store film-room-documents --access public --scope jordans-projects-255badbb`
+   (No store exists yet; earlier orphans were cleaned up.)
+2. **Create the `documents` table**: apply `drizzle/0001_furry_odin.sql` in the
+   Neon/Vercel Postgres query editor, or `npm run db:push` where `POSTGRES_URL`
+   is set. (`POSTGRES_URL` is sensitive and does not pull locally.)
+   After both: redeploy so the token takes effect, then upload a PDF on
+   `/library` and confirm `/ask` can answer from it. Tracked in PUNCHLIST.
 
-Phase B leftovers worth a follow-on: parse `300 Merit/People/` person notes into
-the contact directory (format not pinned in docs/02 — ask Jordan), and capture
-contact emails (Granola gives attendee names, not addresses).
+### Done (Milestone 2 — the Merit OEM brain) + Milestone 3 #1
+- **Tasks** (`/tasks`): sortable/filterable table (Task/Account/Type/Status/
+  Start/Due), Merit-default scope, Nextech dropped, derived OEM "type", rows
+  expand to full detail. `components/TasksTable.tsx`, `lib/taskType.ts`.
+- **Accounts** (`/accounts`): master-detail, editable (type/region/stage/status/
+  account#/overview/contacts → one commit), live contacts (title/email/phone) as
+  cards, Merit teammates filtered out (roster + `@merit.com` email). Tabs:
+  Overview, Contacts, Quotes*, Tasks, Open projects*, Pricing*, Quality, OEM
+  PCNs, Meetings (* = placeholder). `AccountsHub.tsx`, `lib/accountEdit.ts`,
+  `lib/accounts.ts:customerContacts`.
+- **Ask / the brain** (`/ask`): grounded chat over accounts/contacts/tasks/
+  meetings + pricing (quote catalog) + a vault-wide note scan + the document
+  library. `lib/brain.ts`, `lib/ai.ts:answerVaultQuestion`, `POST /api/ask`.
+- **Library** (`/library`): upload/browse docs (Blob + Postgres + PDF text);
+  account Quality/OEM PCNs tabs are document-backed. `lib/documents.ts`,
+  `components/DocumentLibrary.tsx`, `POST|GET|DELETE /api/documents`.
+- Polish: global `loading.tsx` + `error.tsx`; removed the fake inbox badge.
 
-Also done (2026-06-18): the **Accounts page** now matches the Film Room
-master-detail design (list + tabbed detail; `getAccountsHub` in
-`lib/accounts.ts`, `components/AccountsHub.tsx`). Phase B contacts wiring is the
-natural follow-on (resolve/auto-create contacts into the Contacts tab). Deferred
-in that UI: the Pricing tab (no per-account pricing data) and "+ Log activity".
+### NEXT candidates (pick one)
+- **Wire the remaining placeholder tabs**: Quotes (from the price-list catalog,
+  most data-ready), then Pricing / Open projects (need data sources).
+- **Brain takes actions**: create/complete tasks, draft from a meeting; stream
+  responses. (`/api/ask` is currently read-only.)
+- **Milestone 3 #2**: meritoem.com ingestion (cron + WebFetch into the doc/
+  knowledge index). #3: promote inbox attachments into the library.
+- **Phase E — series as first-class**: widen detection, account on a series,
+  cross-session rollup.
+- **Milestone 2 #6 — DB cutover**: app becomes its own source of truth.
 
-Operational note (2026-06-18): ran the Granola pull; `considered: 0` (nothing
-created after the newest indexed day 2026-06-17), so it was a no-op. Existing
-notes predate Phase A and stay tracking-only; only future meetings arrive in the
-dual-capture/flag format. Still pending: retire the Cowork Granola scheduler so
-there is one writer once the app pull is trusted. No em dashes in generated
-output (house style).
-
-Status: Phase D + Accounts redesign DONE (2026-06-18), typecheck + 78 tests +
-production build clean. Next: Phase B (contacts wiring) or Phase E (series).
+### Open follow-ons / decisions
+- Pricing/Quotes/Open-projects tab data sources (Quotes can use the catalog).
+- Contact emails: Granola gives names, not addresses (auto-created contacts are
+  name-only until enriched). `300 Merit/People/` note format not pinned.
+- Operational: retire the Cowork Granola scheduler once the app pull is trusted
+  (one writer per file). Existing meeting notes predate Phase A (tracking-only);
+  only future pulls get the dual-capture/flag format.
+- House style everywhere: no em dashes in generated output.
 
 ## Milestone 2 — App as the Merit OEM brain (captured 2026-06-18)
 
