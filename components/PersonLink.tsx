@@ -18,9 +18,11 @@ export default function PersonLink({
 }) {
   const { colors } = useBrandColors();
   const tint = tintFor(kind, colors);
+  // Only classified people get a team color; unknown people stay neutral gray so
+  // an unclassified person never looks like "a customer" (or any team).
   const avatarStyle = tint
     ? { background: `${tint}22`, color: tint }
-    : { background: "var(--accent-soft)", color: "var(--accent)" };
+    : { background: "var(--surface-2)", color: "var(--muted)" };
   return (
     <span className="group relative inline-flex">
       <Link

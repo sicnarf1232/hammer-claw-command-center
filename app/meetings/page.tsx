@@ -11,11 +11,14 @@ import {
   classifyName,
 } from "@/lib/vault";
 
-// Map a name to its team side via the roster, for color-coding chips.
+// Map a name to its team side via the roster, for color-coding chips. Jordan
+// (the app's single user) is always internal, even though he is not listed as a
+// roster contact.
 function personKind(
   roster: Roster,
   name: string,
 ): "internal" | "customer" | undefined {
+  if (personNameMatches(name, "Jordan Francis")) return "internal";
   const c = classifyName(roster, name)?.classification;
   return c === "merit" ? "internal" : c === "customer" ? "customer" : undefined;
 }
@@ -190,13 +193,16 @@ async function MeetingDetail({ path }: { path: string }) {
     note.customer && note.customer.display
       ? lookup.get(note.customer.display.trim().toLowerCase())
       : undefined;
-  // A person's company for the hover card: roster account first, else the
-  // meeting's customer.
+  // A person's company for the hover card, aligned with their classification:
+  // internal people are Merit, customer contacts get their account, and unknown
+  // people get nothing (never leak the meeting's customer onto an internal or
+  // unrecognized person, which is what mislabeled Jordan).
   const companyOf = (person: string): string | undefined => {
-    for (const e of roster.values()) {
-      if (e.account && personNameMatches(person, e.name)) return e.account;
-    }
-    return note.customer?.display;
+    if (personNameMatches(person, "Jordan Francis")) return "Merit Medical";
+    const entry = classifyName(roster, person);
+    if (entry?.classification === "merit") return "Merit Medical";
+    if (entry?.account) return entry.account;
+    return undefined;
   };
   // A task owner counts as an attendee. Merge owners the attendee list omits,
   // collapsing short names into the matching full-name attendee (e.g. an owner
