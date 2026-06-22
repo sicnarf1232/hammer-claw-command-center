@@ -2,6 +2,13 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Meetings Phase 3+4: people pages, classifier, hot/stats (2026-06-22)
+
+- People (#4): names are now interactive `PersonLink` chips (subtle hover zoom + a mini contact card showing their company) that click through to a new `/people/[name]` page aggregating their company (roster), the action items they own across all notes, and the meetings they attend. Wired into meeting attendees, series participants, and action-item owners. `getPersonProfile` + pure `personNameMatches` (`lib/vault/people.ts`, tested). Reassigning an owner is still done via Edit mode (deferred a dedicated inline reassign).
+- Link/internal classifier (#2b, #3): an inline control on the meeting note sets or clears the `customer:` link (mark internal), via a surgical frontmatter-only write (`setMeetingCustomer`, tested) behind `POST /api/meetings/classify`. Fixes "internal discussion about a customer" getting parsed as a customer meeting, and lets you link unlinked notes without full edit mode. (Note: this changes the frontmatter link, not the note's folder.)
+- Hot + stats (#7): the All view now opens with a "Jump back in" quick-reference (5 most recent meetings) and a "By the numbers" panel (totals, this month, busiest customer, pace/week, top series) instead of the customer tile rail. Approximated from recency/activity, no visit tracking.
+- 139 tests pass, typecheck + production build clean.
+
 ## Series: detect recurring meetings + one-click create (2026-06-22)
 
 - New "Suggested series" on Meetings → Series: scans every meeting note file (not just the 30-row index), clusters recurring meetings by a normalized title key (2+ meetings on 2+ distinct dates), and excludes anything an existing series already covers. Against the live vault it surfaces the 7 real recurring series; Mike/Nick are filtered out (they already have docs). `lib/vault/seriesDetect.ts` (+tests).

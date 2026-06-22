@@ -289,3 +289,47 @@ function yamlList(items: string[]): string {
     .filter(Boolean)
     .join(", ")}]`;
 }
+
+// Surgically set (or clear) just the `customer:` frontmatter line, leaving the
+// body untouched. Used by the quick link / internal classifier so a misfiled
+// "internal about a customer" note can be relinked without a full re-emit.
+// account = null clears the link (marks the note internal at the frontmatter
+// level). Returns the original string unchanged when there is no frontmatter.
+export function setMeetingCustomer(
+  content: string,
+  account: string | null,
+): string {
+  const text = content.replace(/\r\n/g, "\n");
+  const lines = text.split("\n");
+  if (lines[0]?.trim() !== "---") return content;
+  let close = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1) return content;
+
+  let idx = -1;
+  for (let i = 1; i < close; i++) {
+    if (/^customer\s*:/.test(lines[i])) {
+      idx = i;
+      break;
+    }
+  }
+  const newLine = account ? `customer: ${yamlString(`[[${account}]]`)}` : null;
+
+  if (idx >= 0) {
+    if (newLine) lines[idx] = newLine;
+    else lines.splice(idx, 1);
+  } else if (newLine) {
+    // Insert after the attendees line when present, else just before the fence.
+    let insertAt = close;
+    for (let i = 1; i < close; i++) {
+      if (/^attendees\s*:/.test(lines[i])) insertAt = i + 1;
+    }
+    lines.splice(insertAt, 0, newLine);
+  }
+  return lines.join("\n");
+}

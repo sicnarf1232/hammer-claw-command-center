@@ -1,6 +1,10 @@
 import { getFile, writeFile } from "@/lib/github";
 import { todayISO } from "@/lib/dates";
-import { applyMeetingEdit, type MeetingEdit } from "@/lib/meetingEdit";
+import {
+  applyMeetingEdit,
+  setMeetingCustomer,
+  type MeetingEdit,
+} from "@/lib/meetingEdit";
 import { addContactsToNote, type NewContact } from "@/lib/contactsWrite";
 import { applyAccountEdit, type AccountEdit } from "@/lib/accountEdit";
 
@@ -116,6 +120,30 @@ export async function editMeetingNote(
     path,
     content: next,
     message: `app: edit meeting note ${name} ${todayISO()}`,
+  });
+}
+
+// Quick link / internal classifier: set or clear just the `customer:`
+// frontmatter line on a meeting note (account = null marks it internal). Body
+// untouched. Lets a misfiled "internal about a customer" note be relinked
+// without a full edit.
+export async function setMeetingClassification(
+  path: string,
+  account: string | null,
+): Promise<{ commitSha: string; path: string }> {
+  const file = await getFile(path);
+  if (!file) throw new WriteBackError(`Meeting note not found: ${path}`);
+
+  const next = setMeetingCustomer(file.content, account);
+  if (next === file.content.replace(/\r\n/g, "\n")) {
+    return { commitSha: "", path }; // no-op
+  }
+
+  const name = path.split("/").pop()!.replace(/\.md$/, "");
+  return writeFile({
+    path,
+    content: next,
+    message: `app: ${account ? `link ${account}` : "mark internal"} ${name} ${todayISO()}`,
   });
 }
 

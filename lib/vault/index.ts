@@ -12,6 +12,7 @@ import { parseTasks } from "./tasks";
 import { parseRoster } from "./roster";
 import { parseMeetingNote, parseMeetingsIndex } from "./meetings";
 import { parseWikilinkBody, basenameOf } from "./wikilink";
+import { personNameMatches } from "./people";
 import { parseSeriesDoc, SERIES_DIR_MARKER, type Series } from "./series";
 import {
   detectSeriesCandidates,
@@ -236,6 +237,88 @@ export async function getSeriesOutstanding(series: Series): Promise<Task[]> {
 }
 
 export type { SeriesCandidate } from "./seriesDetect";
+
+// ---- People ----
+
+export interface PersonItem {
+  text: string;
+  done: boolean;
+  due?: string;
+  meetingTitle: string;
+  meetingDate?: string;
+  sourceFile: string;
+  sourceLine: number;
+  task?: Task; // present when it's a real (Jordan) task, for an interactive row
+}
+export interface PersonMeeting {
+  title: string;
+  date?: string;
+  path: string;
+  bucket: string;
+}
+export interface PersonProfile {
+  name: string;
+  company?: string; // from the roster, when known
+  meetings: PersonMeeting[]; // newest first
+  items: PersonItem[]; // action items owned by this person (open first)
+}
+
+// Aggregate everything the vault knows about a person: their company (roster),
+// the meetings they attend, and the action items they own across all notes.
+export async function getPersonProfile(name: string): Promise<PersonProfile> {
+  if (!isVaultConfigured()) return { name, meetings: [], items: [] };
+
+  const roster = await getRoster().catch(() => new Map() as Roster);
+  let company: string | undefined;
+  for (const e of roster.values()) {
+    if (e.account && personNameMatches(name, e.name)) {
+      company = e.account;
+      break;
+    }
+  }
+
+  const files = (await listMarkdownFiles()).filter(
+    (f) => f.path.includes("/Meetings/") && !f.path.includes(SERIES_DIR_MARKER),
+  );
+  const contents = await readFiles(files);
+
+  const meetings: PersonMeeting[] = [];
+  const items: PersonItem[] = [];
+  for (const f of contents) {
+    if (!f) continue;
+    const note = parseMeetingNote(f.content, f.path);
+    if (note.attendees.some((a) => personNameMatches(name, a))) {
+      meetings.push({
+        title: note.title,
+        date: note.date,
+        path: f.path,
+        bucket: indexRowFromPath(f.path)?.bucket ?? "",
+      });
+    }
+    for (const ai of note.actionItems) {
+      const owner = ai.owner ?? (ai.isJordans ? "Jordan Francis" : undefined);
+      if (!owner || !personNameMatches(name, owner)) continue;
+      items.push({
+        text: ai.text,
+        done: ai.done,
+        due: ai.due,
+        meetingTitle: note.title,
+        meetingDate: note.date,
+        sourceFile: ai.sourceFile,
+        sourceLine: ai.sourceLine,
+        task: ai.task,
+      });
+    }
+  }
+
+  meetings.sort((a, b) => ((a.date ?? "") < (b.date ?? "") ? 1 : -1));
+  items.sort(
+    (a, b) =>
+      Number(a.done) - Number(b.done) ||
+      (b.meetingDate ?? "").localeCompare(a.meetingDate ?? ""),
+  );
+  return { name, company, meetings, items };
+}
 
 // Recurring meetings that are not yet a series. Scans every meeting note file
 // (the index is only a curated 30-row slice), derives a title/date/bucket from

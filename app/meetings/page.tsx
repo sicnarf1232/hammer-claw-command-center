@@ -15,7 +15,9 @@ import {
   defaultParticipants,
 } from "@/lib/vault/seriesCreate";
 import type { Roster, ActionItem } from "@/lib/vault/types";
-import { Attendee } from "@/components/Attendee";
+import PersonLink from "@/components/PersonLink";
+import MeetingClassifier from "@/components/MeetingClassifier";
+import { personNameMatches } from "@/lib/vault/people";
 import { PriorityChip } from "@/components/chips";
 import SetupNotice from "@/components/SetupNotice";
 import PullFromGranola from "@/components/PullFromGranola";
@@ -109,6 +111,7 @@ export default async function MeetingsPage({
             latest: s.updated,
           }))}
           accountNames={accounts.map((a) => a.name)}
+          today={todayISO()}
           candidates={candidates.map((c) => {
             const bucket = dominantBucket(c.buckets);
             return {
@@ -177,6 +180,14 @@ async function MeetingDetail({ path }: { path: string }) {
     note.customer && note.customer.display
       ? lookup.get(note.customer.display.trim().toLowerCase())
       : undefined;
+  // A person's company for the hover card: roster account first, else the
+  // meeting's customer.
+  const companyOf = (person: string): string | undefined => {
+    for (const e of roster.values()) {
+      if (e.account && personNameMatches(person, e.name)) return e.account;
+    }
+    return note.customer?.display;
+  };
 
   return (
     <Shell>
@@ -221,6 +232,13 @@ async function MeetingDetail({ path }: { path: string }) {
           )}
           {note.series && <SeriesPill name={note.series} />}
         </div>
+        <div className="mt-2.5">
+          <MeetingClassifier
+            path={path}
+            current={note.customer?.display ?? null}
+            accounts={accounts.map((a) => a.name)}
+          />
+        </div>
         {note.topic && (
           <p className="mt-2 text-sm text-ink2">
             <span className="font-semibold text-fg">Topic:</span> {note.topic}
@@ -232,7 +250,7 @@ async function MeetingDetail({ path }: { path: string }) {
             <p className="eyebrow mb-2 text-muted">Attendees</p>
             <div className="flex flex-wrap gap-1.5">
               {note.attendees.map((a) => (
-                <Attendee key={a} name={a} roster={roster} />
+                <PersonLink key={a} name={a} company={companyOf(a)} />
               ))}
             </div>
           </div>
@@ -473,7 +491,7 @@ async function SeriesDetail({ path }: { path: string }) {
                 <p className="eyebrow mb-2 text-muted">People involved</p>
                 <div className="flex flex-wrap gap-1.5">
                   {series.participants.map((p) => (
-                    <PersonChip key={p} name={p} />
+                    <PersonLink key={p} name={p} />
                   ))}
                 </div>
               </section>
@@ -742,8 +760,8 @@ function ActionItemRow({ item }: { item: ActionItem }) {
         <div className="min-w-0 flex-1">
           <div className="text-sm text-fg/90">
             {item.owner && (
-              <span className="font-semibold" style={{ color: "var(--accent-2)" }}>
-                {item.owner}:{" "}
+              <span className="mr-1 inline-flex align-middle">
+                <PersonLink name={item.owner} />
               </span>
             )}
             {item.text}

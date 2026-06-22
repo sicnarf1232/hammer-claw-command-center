@@ -40,11 +40,13 @@ export default function MeetingsHub({
   series = [],
   candidates = [],
   accountNames = [],
+  today = "",
 }: {
   rows: HubRow[];
   series?: HubSeries[];
   candidates?: HubCandidate[];
   accountNames?: string[];
+  today?: string;
 }) {
   const [view, setView] = useState<View>("all");
   const [query, setQuery] = useState("");
@@ -133,6 +135,11 @@ export default function MeetingsHub({
         />
       </div>
 
+      {/* All view: a quick-reference of recent meetings + fun stats */}
+      {view === "all" && !query && (
+        <HotAndStats rows={rows} series={series} customers={customers} today={today} />
+      )}
+
       {/* Suggested series: recurring meetings not yet a rolling series */}
       {view === "series" && <SuggestedSeries candidates={candidates} />}
 
@@ -150,6 +157,113 @@ export default function MeetingsHub({
 
       {/* Feed */}
       <Feed view={view} rows={filtered} series={series} tile={tile} linked={linkedSet} />
+    </div>
+  );
+}
+
+function HotAndStats({
+  rows,
+  series,
+  customers,
+  today,
+}: {
+  rows: HubRow[];
+  series: HubSeries[];
+  customers: string[];
+  today: string;
+}) {
+  const recent = useMemo(
+    () => [...rows].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5),
+    [rows],
+  );
+  const stats = useMemo(() => {
+    const ym = today.slice(0, 7);
+    const thisMonth = ym ? rows.filter((r) => r.date.startsWith(ym)).length : 0;
+    // busiest customer (exclude internal)
+    const byCust = new Map<string, number>();
+    for (const r of rows) {
+      if (isInternalBucket(r.bucket)) continue;
+      byCust.set(r.bucket, (byCust.get(r.bucket) ?? 0) + 1);
+    }
+    let busiest = "—";
+    let busiestN = 0;
+    for (const [c, n] of byCust) if (n > busiestN) ((busiest = c), (busiestN = n));
+    // span in weeks for a rough cadence
+    const dates = rows.map((r) => r.date).sort();
+    let perWeek = 0;
+    if (dates.length > 1) {
+      const days =
+        (Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / 86400000;
+      perWeek = days > 0 ? rows.length / (days / 7) : 0;
+    }
+    const topSeries = [...series].sort((a, b) => b.sessions - a.sessions)[0];
+    return { thisMonth, busiest, busiestN, perWeek, topSeries };
+  }, [rows, series, today]);
+
+  return (
+    <div className="mb-6 grid gap-4 lg:grid-cols-3">
+      {/* Jump back in */}
+      <section className="card p-4 lg:col-span-2">
+        <p className="eyebrow mb-2.5 text-muted">Jump back in</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {recent.map((r, i) => {
+            const { hue } = customerHue(r.bucket);
+            const inner = (
+              <div className="card lift flex items-center gap-3 p-2.5" style={{ borderLeft: `3px solid ${hue}` }}>
+                <div className="w-11 shrink-0 text-center">
+                  <div className="text-xs font-bold leading-tight" style={{ color: hue }}>{monthDay(r.date)}</div>
+                  <div className="text-2xs text-muted">{year(r.date)}</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="eyebrow text-[10px]" style={{ color: hue }}>{isInternalBucket(r.bucket) ? "Internal" : r.bucket}</div>
+                  <div className="truncate text-[13px] font-semibold text-fg">{r.title}</div>
+                </div>
+              </div>
+            );
+            return r.notePath ? (
+              <Link key={`${r.date}-${i}`} href={`/meetings?note=${encodeURIComponent(r.notePath)}`}>{inner}</Link>
+            ) : (
+              <div key={`${r.date}-${i}`}>{inner}</div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Fun stats */}
+      <section className="card p-4">
+        <p className="eyebrow mb-2.5 text-muted">By the numbers</p>
+        <div className="grid grid-cols-2 gap-2.5 text-center">
+          <FactBox value={rows.length} label="meetings" />
+          <FactBox value={stats.thisMonth} label="this month" />
+          <FactBox value={customers.length} label="customers" />
+          <FactBox value={series.length} label="series" />
+        </div>
+        <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-xs">
+          <FactRow label="Busiest customer" value={stats.busiest === "—" ? "—" : `${stats.busiest} (${stats.busiestN})`} />
+          <FactRow label="Pace" value={stats.perWeek ? `${stats.perWeek.toFixed(1)} / week` : "—"} />
+          {stats.topSeries && (
+            <FactRow label="Top series" value={`${stats.topSeries.name} (${stats.topSeries.sessions})`} />
+          )}
+        </dl>
+      </section>
+    </div>
+  );
+}
+
+function FactBox({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="rounded-[10px] p-2" style={{ background: "var(--surface-2)" }}>
+      <div className="text-xl font-bold" style={{ color: "var(--accent-2)" }}>{value}</div>
+      <div className="text-2xs text-muted">{label}</div>
+    </div>
+  );
+}
+
+function FactRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-muted">{label}</dt>
+      <dd className="truncate text-right font-medium text-fg">{value}</dd>
     </div>
   );
 }

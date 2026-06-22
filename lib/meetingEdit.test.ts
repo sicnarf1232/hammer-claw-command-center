@@ -3,9 +3,40 @@ import {
   applyMeetingEdit,
   meetingNoteToEditable,
   serializeActionItems,
+  setMeetingCustomer,
   type MeetingEdit,
 } from "./meetingEdit";
 import { parseMeetingNote } from "./vault/meetings";
+
+describe("setMeetingCustomer", () => {
+  const base = `---\ntype: meeting\nattendees: [Jordan Francis, Nick Francis]\ncustomer: "[[Stryker]]"\n---\n\n# A meeting\n\n## TL;DR\nbody stays.\n`;
+
+  it("replaces an existing customer link, body untouched", () => {
+    const out = setMeetingCustomer(base, "Intuitive Surgical");
+    expect(out).toContain('customer: "[[Intuitive Surgical]]"');
+    expect(out).not.toContain("[[Stryker]]");
+    expect(out).toContain("body stays.");
+    expect(parseMeetingNote(out).customer?.basename).toBe("Intuitive Surgical");
+  });
+
+  it("clears the link when account is null (mark internal)", () => {
+    const out = setMeetingCustomer(base, null);
+    expect(out).not.toMatch(/^customer\s*:/m);
+    expect(parseMeetingNote(out).customer).toBeUndefined();
+    expect(out).toContain("body stays.");
+  });
+
+  it("adds a customer line after attendees when none exists", () => {
+    const noCust = `---\ntype: meeting\nattendees: [Jordan Francis]\n---\n\n# A meeting\n`;
+    const out = setMeetingCustomer(noCust, "Stryker");
+    expect(out).toContain('customer: "[[Stryker]]"');
+    expect(parseMeetingNote(out).customer?.basename).toBe("Stryker");
+  });
+
+  it("is a no-op without frontmatter", () => {
+    expect(setMeetingCustomer("# no fm\n", "Stryker")).toBe("# no fm\n");
+  });
+});
 
 // A realistic canonical note (Granola-pull / Meeting Notes App Handoff shape).
 const NOTE = `---
