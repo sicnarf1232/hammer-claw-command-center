@@ -19,6 +19,9 @@ import {
   type MeetingRow,
 } from "@/lib/meetingFormat";
 import { slugify } from "@/lib/vault/accounts";
+import { setPersonOverride } from "@/lib/vault/roster";
+
+const ROSTER_PATH = "memory/context/merit.md";
 import { addContactsToNote, type NewContact } from "@/lib/contactsWrite";
 import { applyAccountEdit, type AccountEdit } from "@/lib/accountEdit";
 
@@ -138,6 +141,37 @@ export async function editMeetingNote(
 }
 
 const MEETINGS_INDEX_PATH = "100 Periodics/Meetings-Index.md";
+
+// Set a person's authoritative classification (internal vs customer) and, for
+// customers, their account, by writing a Team Override into the roster. This is
+// the in-app "edit person" action; it then drives colors, contact grouping, and
+// company labels everywhere on the next read.
+export async function setPersonClassification(
+  name: string,
+  classification: "merit" | "customer",
+  account: string | null,
+): Promise<{ commitSha: string }> {
+  const clean = name.trim();
+  if (!clean) throw new WriteBackError("A person name is required.");
+  const file = await getFile(ROSTER_PATH);
+  if (!file) throw new WriteBackError(`Roster not found: ${ROSTER_PATH}`);
+
+  const next = setPersonOverride(
+    file.content,
+    clean,
+    classification,
+    classification === "customer" ? account ?? undefined : undefined,
+  );
+  if (next === file.content.replace(/\r\n/g, "\n")) {
+    return { commitSha: "" };
+  }
+  const res = await writeFile({
+    path: ROSTER_PATH,
+    content: next,
+    message: `app: set ${clean} = ${classification}${account && classification === "customer" ? ` (${account})` : ""}`,
+  });
+  return { commitSha: res.commitSha };
+}
 
 // Create a minimal customer account note (300 Merit/Customers/<Name>.md) so a
 // meeting can be linked to a brand-new account. Returns the slug for redirect.

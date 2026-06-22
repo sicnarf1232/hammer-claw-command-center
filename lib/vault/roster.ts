@@ -28,23 +28,87 @@ export function parseRoster(content: string): Roster {
     setEntry(roster, { name, classification: "customer", account });
   }
 
-  // Team Overrides last: "Name = merit|customer" (name may be a wikilink).
+  // Team Overrides last: "Name = merit|customer", with an optional account for
+  // customers: "Name = customer ([[Account]])". Name may be a wikilink. Applied
+  // authoritatively, so this is what the in-app person editor writes.
   for (const line of sections.get("Team Overrides") ?? []) {
-    const m = line.match(/^[-*]?\s*(.+?)\s*=\s*(merit|customer)\s*$/);
+    const m = line.match(
+      /^[-*]?\s*(.+?)\s*=\s*(merit|customer)\s*(?:\(\s*\[\[([^\]]+)\]\]\s*\))?\s*$/,
+    );
     if (!m) continue;
     let name = m[1].trim();
     const linkMatch = name.match(/\[\[([^\]]+)\]\]/);
     if (linkMatch) name = basenameOf(linkMatch[1]);
     const classification = m[2] as "merit" | "customer";
+    const overrideAccount = m[3] ? basenameOf(m[3]) : undefined;
     const existing = roster.get(name);
     setEntry(roster, {
       name,
       classification,
-      account: existing?.account,
+      account:
+        classification === "customer"
+          ? (overrideAccount ?? existing?.account)
+          : undefined,
     });
   }
 
   return roster;
+}
+
+// Add or update a person's authoritative Team Override line (classification and,
+// for customers, their account). Pure: takes the roster file content, returns
+// the new content. Used by the in-app person editor.
+export function setPersonOverride(
+  content: string,
+  name: string,
+  classification: "merit" | "customer",
+  account?: string,
+): string {
+  const text = content.replace(/\r\n/g, "\n");
+  const lines = text.split("\n");
+  const newLine = `- ${name} = ${classification}${
+    classification === "customer" && account ? ` ([[${account}]])` : ""
+  }`;
+
+  let heading = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^##\s+Team Overrides/i.test(lines[i])) {
+      heading = i;
+      break;
+    }
+  }
+  if (heading === -1) {
+    return text.replace(/\n*$/, "\n") + `\n## Team Overrides\n${newLine}\n`;
+  }
+
+  let end = lines.length;
+  for (let i = heading + 1; i < lines.length; i++) {
+    if (/^##\s+/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+
+  const matchesName = (line: string): boolean => {
+    const mm = line.match(/^[-*]?\s*(.+?)\s*=\s*(merit|customer)\b/);
+    if (!mm) return false;
+    let ln = mm[1].trim();
+    const lk = ln.match(/\[\[([^\]]+)\]\]/);
+    if (lk) ln = basenameOf(lk[1]);
+    return ln.toLowerCase() === name.toLowerCase();
+  };
+
+  let lastOverride = -1;
+  for (let i = heading + 1; i < end; i++) {
+    if (matchesName(lines[i])) {
+      lines[i] = newLine;
+      return lines.join("\n");
+    }
+    if (/^[-*]?\s*.+?\s*=\s*(merit|customer)\b/.test(lines[i])) lastOverride = i;
+  }
+  const insertAt = lastOverride >= 0 ? lastOverride + 1 : heading + 1;
+  lines.splice(insertAt, 0, newLine);
+  return lines.join("\n");
 }
 
 function setEntry(roster: Roster, entry: RosterEntry): void {

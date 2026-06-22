@@ -1,10 +1,17 @@
 import Link from "next/link";
-import { vaultConfigured, getPersonProfile } from "@/lib/vault";
+import {
+  vaultConfigured,
+  getPersonProfile,
+  getRoster,
+  classifyName,
+} from "@/lib/vault";
+import { personNameMatches } from "@/lib/vault/people";
 import { listAccounts } from "@/lib/accounts";
 import { buildAccountLookup, toTaskView } from "@/lib/taskView";
 import { todayISO } from "@/lib/dates";
 import { initials } from "@/lib/customerHues";
 import TaskRow from "@/components/TaskRow";
+import PersonClassifier from "@/components/PersonClassifier";
 import SetupNotice from "@/components/SetupNotice";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +29,10 @@ export default async function PersonPage({
     return <SetupNotice missing={["GITHUB_TOKEN", "VAULT_REPO"]} />;
   }
 
-  const [profile, accounts] = await Promise.all([
+  const [profile, accounts, roster] = await Promise.all([
     getPersonProfile(name).catch(() => null),
     listAccounts().catch(() => []),
+    getRoster().catch(() => new Map()),
   ]);
 
   if (!profile) {
@@ -41,6 +49,10 @@ export default async function PersonPage({
     ? lookup.get(profile.company.trim().toLowerCase())
     : undefined;
   const open = profile.items.filter((i) => !i.done);
+  const entry = classifyName(roster, name);
+  const currentClass = personNameMatches(name, "Jordan Francis")
+    ? "merit"
+    : (entry?.classification ?? null);
 
   return (
     <article className="panel texture mx-auto max-w-5xl overflow-hidden p-6 sm:p-9">
@@ -73,6 +85,14 @@ export default async function PersonPage({
               )}
             </p>
           )}
+          <div className="mt-2">
+            <PersonClassifier
+              name={name}
+              classification={currentClass}
+              account={entry?.account}
+              accounts={accounts.map((a) => a.name)}
+            />
+          </div>
         </div>
       </div>
 
