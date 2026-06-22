@@ -76,7 +76,9 @@ export function parseSeriesDoc(content: string, path = ""): Series {
     : deriveMatchRules(name, participants, tags);
 
   const lines = body.split("\n");
-  const currentState = sectionBody(lines, /^##\s+Current State/i).trim();
+  const currentState = sectionBody(lines, (l) =>
+    isH2Named(l, "current state"),
+  ).trim();
   const log = parseLog(lines);
 
   return {
@@ -195,7 +197,7 @@ function replaceCurrentState(
 ): string[] {
   let start = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+Current State/i.test(lines[i])) {
+    if (isH2Named(lines[i], "current state")) {
       start = i;
       break;
     }
@@ -232,7 +234,7 @@ function replaceCurrentState(
 function prependLogEntry(lines: string[], entry: string): string[] {
   let idx = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+Meeting Log/i.test(lines[i])) {
+    if (isH2Named(lines[i], "meeting log")) {
       idx = i;
       break;
     }
@@ -272,10 +274,22 @@ function renderLogEntry(entry: NewLogEntry): string {
 
 // ---- parsing helpers ----
 
-function sectionBody(lines: string[], heading: RegExp): string {
+// Is this an H2 heading whose text contains `keyword`? Tolerant of an emoji or
+// other decorative prefix between "## " and the words (Jordan's real docs use
+// "## 📍 Current State" and "## 📅 Meeting Log"), which a strict
+// `/^##\s+Current State/` would miss. Matches "##" but not "###" log entries.
+function isH2Named(line: string, keyword: string): boolean {
+  if (!/^##\s+/.test(line) || /^###/.test(line)) return false;
+  return line.toLowerCase().includes(keyword.toLowerCase());
+}
+
+function sectionBody(
+  lines: string[],
+  match: (line: string) => boolean,
+): string {
   let start = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (heading.test(lines[i])) {
+    if (match(lines[i])) {
       start = i + 1;
       break;
     }
@@ -294,7 +308,7 @@ function sectionBody(lines: string[], heading: RegExp): string {
 function parseLog(lines: string[]): SeriesLogEntry[] {
   let start = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+Meeting Log/i.test(lines[i])) {
+    if (isH2Named(lines[i], "meeting log")) {
       start = i + 1;
       break;
     }

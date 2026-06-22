@@ -2,6 +2,11 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Fix — rolling-series notes vanished on emoji headings (2026-06-22)
+
+- Bug: a rolling-series doc whose section headings carry an emoji (`## 📍 Current State`, `## 📅 Meeting Log`, as in the real `Nick 1on1.md`) rendered with zero sessions and an empty TL;DR. The series still listed (from frontmatter) but "none of the actual notes" showed. Cause: the parser matched headings starting exactly with the keyword, so the emoji prefix made it skip both sections. `Mike 1on1.md` (plain headings) was unaffected, which masked it; fixtures also used plain headings.
+- Fix: `lib/vault/series.ts` now matches any `##` heading that contains the keyword (`isH2Named`), applied to reading Current State, parsing the Meeting Log, and both pull-time write-back helpers (so future Granola pulls update the emoji sections in place, not append duplicate H2s). Verified against the live Nick doc: 0 → 3 sessions, full Current State restored. 114 tests pass (3 new emoji-heading regression tests), typecheck clean.
+
 ## Phase 0 — Scaffold + vault on the web
 
 - Next.js (App Router) + TypeScript strict + Tailwind scaffold; builds clean, no type errors.
