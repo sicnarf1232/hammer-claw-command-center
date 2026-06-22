@@ -8,7 +8,17 @@ import {
   getSeriesByPath,
   getSeriesCandidates,
   getSeriesOutstanding,
+  classifyName,
 } from "@/lib/vault";
+
+// Map a name to its team side via the roster, for color-coding chips.
+function personKind(
+  roster: Roster,
+  name: string,
+): "internal" | "customer" | undefined {
+  const c = classifyName(roster, name)?.classification;
+  return c === "merit" ? "internal" : c === "customer" ? "customer" : undefined;
+}
 import {
   dominantBucket,
   seriesFolderForBucket,
@@ -264,7 +274,12 @@ async function MeetingDetail({ path }: { path: string }) {
             <p className="eyebrow mb-2 text-muted">Attendees</p>
             <div className="flex flex-wrap gap-1.5">
               {effectiveAttendees.map((a) => (
-                <PersonLink key={a} name={a} company={companyOf(a)} />
+                <PersonLink
+                  key={a}
+                  name={a}
+                  company={companyOf(a)}
+                  kind={personKind(roster, a)}
+                />
               ))}
             </div>
           </div>
@@ -289,7 +304,11 @@ async function MeetingDetail({ path }: { path: string }) {
                 ai.isJordans && ai.task ? (
                   <TaskRow key={i} task={toTaskView(ai.task, lookup)} today={today} />
                 ) : (
-                  <ActionItemRow key={i} item={ai} />
+                  <ActionItemRow
+                    key={i}
+                    item={ai}
+                    ownerKind={ai.owner ? personKind(roster, ai.owner) : undefined}
+                  />
                 ),
               )}
             </div>
@@ -376,13 +395,15 @@ async function SeriesDetail({ path }: { path: string }) {
   let series: Awaited<ReturnType<typeof getSeriesByPath>> = null;
   let outstanding: Awaited<ReturnType<typeof getSeriesOutstanding>> = [];
   let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
+  let roster: Roster = new Map();
   let error: string | null = null;
   try {
     series = await getSeriesByPath(path);
     if (series) {
-      [outstanding, accounts] = await Promise.all([
+      [outstanding, accounts, roster] = await Promise.all([
         getSeriesOutstanding(series).catch(() => []),
         listAccounts().catch(() => []),
+        getRoster().catch(() => new Map() as Roster),
       ]);
     }
   } catch (e) {
@@ -505,7 +526,7 @@ async function SeriesDetail({ path }: { path: string }) {
                 <p className="eyebrow mb-2 text-muted">People involved</p>
                 <div className="flex flex-wrap gap-1.5">
                   {series.participants.map((p) => (
-                    <PersonLink key={p} name={p} />
+                    <PersonLink key={p} name={p} kind={personKind(roster, p)} />
                   ))}
                 </div>
               </section>
@@ -747,7 +768,13 @@ function FullNotesSection({ index, body }: { index: number; body: string }) {
   );
 }
 
-function ActionItemRow({ item }: { item: ActionItem }) {
+function ActionItemRow({
+  item,
+  ownerKind,
+}: {
+  item: ActionItem;
+  ownerKind?: "internal" | "customer";
+}) {
   const customer =
     item.task?.customer && item.task.customer !== "internal"
       ? item.task.customer.display
@@ -775,7 +802,7 @@ function ActionItemRow({ item }: { item: ActionItem }) {
           <div className="text-sm text-fg/90">
             {item.owner && (
               <span className="mr-1 inline-flex align-middle">
-                <PersonLink name={item.owner} />
+                <PersonLink name={item.owner} kind={ownerKind} />
               </span>
             )}
             {item.text}

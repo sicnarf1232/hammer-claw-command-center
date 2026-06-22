@@ -2,6 +2,12 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Contacts directory + team color-coding (2026-06-22)
+
+- Color-code people by side: attendee / owner / participant chips are now colored by roster classification (internal team vs customer contact), with a browser-saved palette selector to match branding (defaults: internal red, customer blue). `components/BrandColors` (localStorage context + swatch selector); `PersonLink` takes a `kind`.
+- New Contacts directory (`/contacts`, added to the nav): everyone in the vault grouped into Internal team and Customers (collapsible per account), each name linking to their `/people` profile. Houses the team-color selector.
+- 142 tests pass, typecheck + production build clean.
+
 ## Meetings: account creation, owner=attendee, full reclassification (2026-06-22)
 
 - Create accounts inline (#1): the link control offers "Create new account", which scaffolds `300 Merit/Customers/<Name>.md`, links the meeting, and drops you on the new account page to fill in details. `createAccount` in `lib/writeback`.

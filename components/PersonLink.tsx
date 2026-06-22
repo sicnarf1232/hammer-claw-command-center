@@ -2,26 +2,35 @@
 
 import Link from "next/link";
 import { initials } from "@/lib/customerHues";
+import { useBrandColors, tintFor } from "@/components/BrandColors";
 
 // A person's name as an interactive chip: subtle zoom on hover, a mini contact
 // card (name + company) on hover, and a click through to their /people profile.
+// `kind` colors the chip by side (internal vs customer) using the brand colors.
 export default function PersonLink({
   name,
   company,
+  kind,
 }: {
   name: string;
   company?: string;
+  kind?: "internal" | "customer";
 }) {
+  const { colors } = useBrandColors();
+  const tint = tintFor(kind, colors);
+  const avatarStyle = tint
+    ? { background: `${tint}22`, color: tint }
+    : { background: "var(--accent-soft)", color: "var(--accent)" };
   return (
     <span className="group relative inline-flex">
       <Link
         href={`/people/${encodeURIComponent(name)}`}
         className="chip origin-left transition-transform duration-150 hover:scale-[1.06]"
-        style={{ borderColor: "var(--line-2)" }}
+        style={{ borderColor: tint ?? "var(--line-2)" }}
       >
         <span
           className="flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold"
-          style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+          style={avatarStyle}
         >
           {initials(name)}
         </span>

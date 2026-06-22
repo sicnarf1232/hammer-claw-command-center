@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Nav from "@/components/Nav";
+import { BrandColorsProvider } from "@/components/BrandColors";
 
 export const metadata: Metadata = {
   title: "Film Room — Meeting Intelligence",
@@ -28,14 +29,16 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        <div className="flex">
-          <Nav />
-          <main className="min-w-0 flex-1">
-            <div className="mx-auto max-w-[1360px] animate-fade-in px-6 py-8 pb-24 sm:px-9">
-              {children}
-            </div>
-          </main>
-        </div>
+        <BrandColorsProvider>
+          <div className="flex">
+            <Nav />
+            <main className="min-w-0 flex-1">
+              <div className="mx-auto max-w-[1360px] animate-fade-in px-6 py-8 pb-24 sm:px-9">
+                {children}
+              </div>
+            </main>
+          </div>
+        </BrandColorsProvider>
       </body>
     </html>
   );
