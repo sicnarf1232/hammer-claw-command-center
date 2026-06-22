@@ -6,7 +6,14 @@ import {
   getRoster,
   getSeriesList,
   getSeriesByPath,
+  getSeriesCandidates,
+  getSeriesOutstanding,
 } from "@/lib/vault";
+import {
+  dominantBucket,
+  seriesFolderForBucket,
+  defaultParticipants,
+} from "@/lib/vault/seriesCreate";
 import type { Roster, ActionItem } from "@/lib/vault/types";
 import { Attendee } from "@/components/Attendee";
 import { PriorityChip } from "@/components/chips";
@@ -20,7 +27,9 @@ import { listAccounts } from "@/lib/accounts";
 import MeetingEditor from "@/components/MeetingEditor";
 import MeetingShareButtons from "@/components/MeetingShareButtons";
 import SyncContactsButton from "@/components/SyncContactsButton";
-import { needsDueDate } from "@/lib/dates";
+import { needsDueDate, todayISO } from "@/lib/dates";
+import TaskRow from "@/components/TaskRow";
+import { toTaskView, buildAccountLookup } from "@/lib/taskView";
 import {
   meetingToShareDoc,
   seriesToShareDoc,
@@ -62,6 +71,8 @@ export default async function MeetingsPage({
     error = e instanceof Error ? e.message : "Failed to read the meetings index.";
   }
   const seriesList = await getSeriesList().catch(() => []);
+  const candidates = await getSeriesCandidates().catch(() => []);
+  const accounts = await listAccounts().catch(() => []);
 
   return (
     <div>
@@ -97,6 +108,28 @@ export default async function MeetingsPage({
             sessions: s.log.length,
             latest: s.updated,
           }))}
+          accountNames={accounts.map((a) => a.name)}
+          candidates={candidates.map((c) => {
+            const bucket = dominantBucket(c.buckets);
+            return {
+              key: c.key,
+              suggestedName: c.suggestedName,
+              isOneOnOne: c.isOneOnOne,
+              count: c.count,
+              firstDate: c.firstDate,
+              lastDate: c.lastDate,
+              buckets: c.buckets,
+              bucket,
+              folder: seriesFolderForBucket(bucket),
+              participants: defaultParticipants(c.suggestedName, c.isOneOnOne),
+              meetings: c.meetings.map((m) => ({
+                date: m.date,
+                title: m.title,
+                noteBasename: m.noteBasename,
+                notePath: m.notePath ?? null,
+              })),
+            };
+          })}
         />
       )}
     </div>
@@ -108,11 +141,13 @@ export default async function MeetingsPage({
 async function MeetingDetail({ path }: { path: string }) {
   let note: Awaited<ReturnType<typeof getMeetingNoteByPath>> = null;
   let roster: Roster = new Map();
+  let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
   let error: string | null = null;
   try {
-    [note, roster] = await Promise.all([
+    [note, roster, accounts] = await Promise.all([
       getMeetingNoteByPath(path),
       getRoster().catch(() => new Map() as Roster),
+      listAccounts().catch(() => []),
     ]);
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to read the meeting note.";
@@ -136,10 +171,16 @@ async function MeetingDetail({ path }: { path: string }) {
   const { hue } = customerHue(note.customer?.display ?? "Internal");
   const sections = orderedSections(note.sections);
   const shareDoc = meetingToShareDoc(note);
+  const lookup = buildAccountLookup(accounts);
+  const today = todayISO();
+  const linkedAccount =
+    note.customer && note.customer.display
+      ? lookup.get(note.customer.display.trim().toLowerCase())
+      : undefined;
 
   return (
     <Shell>
-      <article className="panel texture mx-auto max-w-3xl overflow-hidden p-6 sm:p-9">
+      <article className="panel texture mx-auto max-w-5xl overflow-hidden p-6 sm:p-9">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BackLink />
           <div className="flex items-center gap-2">
@@ -163,8 +204,19 @@ async function MeetingDetail({ path }: { path: string }) {
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink2">
           <span className="tabular-nums">{note.date}</span>
           {note.customer && (
-            <span className="eyebrow text-[11px]" style={{ color: hue }}>
-              {note.customer.display}
+            <span className="inline-flex items-center gap-1 eyebrow text-[11px]" style={{ color: hue }}>
+              {linkedAccount ? (
+                <Link href={`/accounts/${linkedAccount.slug}`} className="hover:underline">
+                  {note.customer.display}
+                </Link>
+              ) : (
+                note.customer.display
+              )}
+              {linkedAccount ? (
+                <span title={`Linked to ${linkedAccount.name}`} style={{ color: "var(--ok)" }}>✓</span>
+              ) : (
+                <span title="Not linked to an account" style={{ color: "var(--ink-3)" }}>○</span>
+              )}
             </span>
           )}
           {note.series && <SeriesPill name={note.series} />}
@@ -201,11 +253,19 @@ async function MeetingDetail({ path }: { path: string }) {
             <p className="text-sm text-muted">None captured.</p>
           ) : (
             <div className="grid gap-2">
-              {note.actionItems.map((ai, i) => (
-                <ActionItemRow key={i} item={ai} />
-              ))}
+              {note.actionItems.map((ai, i) =>
+                ai.isJordans && ai.task ? (
+                  <TaskRow key={i} task={toTaskView(ai.task, lookup)} today={today} />
+                ) : (
+                  <ActionItemRow key={i} item={ai} />
+                ),
+              )}
             </div>
           )}
+          <p className="mt-2 text-2xs text-muted">
+            Your items check off here and stay in sync with the Tasks view (same
+            source line). Other owners are tracking-only.
+          </p>
         </div>
 
         {sections.map((s, i) =>
@@ -282,9 +342,17 @@ async function EditMeeting({ path }: { path: string }) {
 
 async function SeriesDetail({ path }: { path: string }) {
   let series: Awaited<ReturnType<typeof getSeriesByPath>> = null;
+  let outstanding: Awaited<ReturnType<typeof getSeriesOutstanding>> = [];
+  let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
   let error: string | null = null;
   try {
     series = await getSeriesByPath(path);
+    if (series) {
+      [outstanding, accounts] = await Promise.all([
+        getSeriesOutstanding(series).catch(() => []),
+        listAccounts().catch(() => []),
+      ]);
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to read the series.";
   }
@@ -305,10 +373,12 @@ async function SeriesDetail({ path }: { path: string }) {
   }
 
   const seriesShareDoc = seriesToShareDoc(series);
+  const lookup = buildAccountLookup(accounts);
+  const today = todayISO();
 
   return (
     <Shell>
-      <article className="panel texture mx-auto max-w-3xl overflow-hidden p-6 sm:p-9">
+      <article className="panel texture mx-auto max-w-5xl overflow-hidden p-6 sm:p-9">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BackLink />
           <MeetingShareButtons
@@ -332,61 +402,172 @@ async function SeriesDetail({ path }: { path: string }) {
           {series.updated ? ` · latest ${series.updated}` : ""}
         </p>
 
-        {series.participants.length > 0 && (
-          <div className="mt-5">
-            <p className="eyebrow mb-2 text-muted">People involved</p>
-            <div className="flex flex-wrap gap-1.5">
-              {series.participants.map((p) => (
-                <PersonChip key={p} name={p} />
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi value={series.log.length} label="Sessions" />
-          <Kpi value={series.participants.length} label="People" />
+          <Kpi value={outstanding.length} label="Open items" />
           <Kpi value={series.cadence ?? "—"} label="Cadence" />
           <Kpi value={series.updated ?? "—"} label="Latest" />
         </div>
 
-        <div
-          className="mt-6 rounded-[14px] p-5"
-          style={{ background: "var(--warm-soft)", borderLeft: "4px solid var(--warm)" }}
-        >
-          <p className="eyebrow mb-2" style={{ color: "var(--warm)" }}>
-            Rolling TL;DR
-          </p>
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-fg/90">
-            {series.currentState || "(none yet)"}
-          </div>
-        </div>
+        <div className="mt-7 grid gap-7 lg:grid-cols-3">
+          {/* Main column: status + carried-forward tasks + the log */}
+          <div className="space-y-7 lg:col-span-2">
+            <section>
+              <SectionHeader title="Latest status" />
+              <div
+                className="rounded-[14px] p-5"
+                style={{ background: "var(--warm-soft)", borderLeft: "4px solid var(--warm)" }}
+              >
+                <RollingNotes md={series.currentState} />
+              </div>
+            </section>
 
-        <div>
-          <SectionHeader title="Sessions" />
-          {series.log.length === 0 ? (
-            <p className="text-sm text-muted">No entries yet.</p>
-          ) : (
-            <div className="grid gap-2">
-              {series.log.map((e, i) => (
-                <div
-                  key={i}
-                  className="card lift p-4"
-                  style={{ borderLeft: "3px solid var(--accent)" }}
-                >
-                  <div className="text-sm font-bold text-fg">{e.heading}</div>
-                  <div className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-fg/70">
-                    {e.text.trim()}
-                  </div>
+            <section>
+              <SectionHeader title={`Outstanding items · ${outstanding.length}`} />
+              {outstanding.length === 0 ? (
+                <p className="text-sm text-muted">
+                  Nothing open. Items you leave unchecked in this series&apos; meetings
+                  surface here until done.
+                </p>
+              ) : (
+                <div className="grid gap-2">
+                  {outstanding.map((t) => (
+                    <TaskRow
+                      key={`${t.sourceFile}:${t.sourceLine}`}
+                      task={toTaskView(t, lookup)}
+                      today={today}
+                      showAccount={false}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
+            </section>
+
+            <section>
+              <SectionHeader title={`Meeting log · ${series.log.length}`} />
+              {series.log.length === 0 ? (
+                <p className="text-sm text-muted">No entries yet.</p>
+              ) : (
+                <div className="grid gap-3">
+                  {series.log.map((e, i) => (
+                    <div
+                      key={i}
+                      className="card p-4"
+                      style={{ borderLeft: "3px solid var(--accent)" }}
+                    >
+                      <div className="text-sm font-bold text-fg">{e.heading}</div>
+                      <div className="mt-1.5">
+                        <RollingNotes md={e.text} muted />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Side rail: people + at-a-glance, using the reclaimed width */}
+          <aside className="space-y-6">
+            {series.participants.length > 0 && (
+              <section className="card p-4">
+                <p className="eyebrow mb-2 text-muted">People involved</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {series.participants.map((p) => (
+                    <PersonChip key={p} name={p} />
+                  ))}
+                </div>
+              </section>
+            )}
+            <section className="card p-4">
+              <p className="eyebrow mb-3 text-muted">At a glance</p>
+              <dl className="space-y-2 text-sm">
+                <MetaRow label="Cadence" value={series.cadence ?? "—"} />
+                <MetaRow label="Sessions" value={String(series.log.length)} />
+                <MetaRow label="Open items" value={String(outstanding.length)} />
+                <MetaRow label="Latest" value={series.updated ?? "—"} />
+                {series.status && <MetaRow label="Status" value={series.status} />}
+              </dl>
+            </section>
+          </aside>
         </div>
 
         <Footer seriesName={null} />
       </article>
     </Shell>
+  );
+}
+
+// Light markdown render for rolling-series prose: bold lead-ins, bullet lists,
+// and [[wikilinks]] shown as their display text. Keeps the series reading like
+// a real note instead of a pre-wrapped blob.
+function RollingNotes({ md, muted = false }: { md: string; muted?: boolean }) {
+  const lines = (md || "").replace(/\r\n/g, "\n").split("\n");
+  const blocks: React.ReactNode[] = [];
+  let bullets: string[] = [];
+  const flushBullets = (key: string) => {
+    if (!bullets.length) return;
+    const items = bullets;
+    bullets = [];
+    blocks.push(
+      <ul key={`ul-${key}`} className="ml-4 list-disc space-y-1">
+        {items.map((b, j) => (
+          <li key={j}>{renderInline(b)}</li>
+        ))}
+      </ul>,
+    );
+  };
+  lines.forEach((raw, i) => {
+    const line = raw.trimEnd();
+    if (/^\s*[-*]\s+/.test(line)) {
+      bullets.push(line.replace(/^\s*[-*]\s+/, ""));
+      return;
+    }
+    flushBullets(String(i));
+    if (!line.trim() || line.trim() === "---") return;
+    blocks.push(<p key={i}>{renderInline(line)}</p>);
+  });
+  flushBullets("end");
+  if (!blocks.length) {
+    return <p className="text-sm text-muted">(none yet)</p>;
+  }
+  return (
+    <div className={`space-y-2 text-sm leading-relaxed ${muted ? "text-fg/70" : "text-fg/90"}`}>
+      {blocks}
+    </div>
+  );
+}
+
+// Inline markdown: **bold** and [[wikilink]] (shown as the display/basename).
+function renderInline(text: string): React.ReactNode {
+  const cleaned = text.replace(/\[\[([^\]]+)\]\]/g, (_, inner: string) => {
+    const parts = inner.split("|");
+    const target = (parts[1] ?? parts[0]).trim();
+    return target.split("/").pop() ?? target;
+  });
+  const nodes: React.ReactNode[] = [];
+  const re = /\*\*([^*]+)\*\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let k = 0;
+  while ((m = re.exec(cleaned))) {
+    if (m.index > last) nodes.push(cleaned.slice(last, m.index));
+    nodes.push(
+      <strong key={k++} className="font-semibold text-fg">
+        {m[1]}
+      </strong>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < cleaned.length) nodes.push(cleaned.slice(last));
+  return nodes;
+}
+
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-muted">{label}</dt>
+      <dd className="text-right font-medium text-fg">{value}</dd>
+    </div>
   );
 }
 
@@ -615,9 +796,15 @@ function PersonChip({ name }: { name: string }) {
 }
 
 function Kpi({ value, label }: { value: string | number; label: string }) {
+  // Numbers stay large; text values (cadence, dates) shrink and wrap so they
+  // are never clipped.
+  const isNumeric = typeof value === "number" || /^\d+$/.test(String(value));
   return (
-    <div className="card lift p-4 text-center">
-      <div className="truncate text-2xl font-bold" style={{ color: "var(--accent-2)" }}>
+    <div className="card lift flex min-h-[88px] flex-col items-center justify-center p-4 text-center">
+      <div
+        className={`font-bold leading-tight break-words ${isNumeric ? "text-2xl" : "text-base"}`}
+        style={{ color: "var(--accent-2)" }}
+      >
         {value}
       </div>
       <div className="eyebrow mt-1 text-muted">{label}</div>

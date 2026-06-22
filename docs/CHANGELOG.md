@@ -2,6 +2,19 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Series: detect recurring meetings + one-click create (2026-06-22)
+
+- New "Suggested series" on Meetings → Series: scans every meeting note file (not just the 30-row index), clusters recurring meetings by a normalized title key (2+ meetings on 2+ distinct dates), and excludes anything an existing series already covers. Against the live vault it surfaces the 7 real recurring series; Mike/Nick are filtered out (they already have docs). `lib/vault/seriesDetect.ts` (+tests).
+- One-click create: auto-places the new rolling-series doc by bucket (`300 Merit/Meetings/<bucket>/Rolling`), scaffolds frontmatter + emoji headings, then folds each existing matching meeting in oldest to newest using the same `updateSeries` AI summarizer the Granola pull uses, committing one new file. `lib/vault/seriesCreate.ts` (+tests), `lib/createSeries.ts`, `POST /api/series`, `components/SuggestedSeries.tsx`. Inert until the user clicks Create.
+
+## Meetings Phase 1+2: task sync, linked badges, rolling-series overhaul (2026-06-22)
+
+- Task checkoff inside a meeting note now uses the same `TaskRow` as the Tasks view; both write the one markdown checkbox by source file + line, so they stay 1:1. Tracking-only (other-owner) items stay read-only.
+- Linked-account badge: a green check next to a company on the meetings list when its bucket matches a real account, and on the note page (links to the account; shows a hollow circle when the customer is set but unmatched).
+- Views reordered to All, Customers, Series, Month (default All). KPI boxes no longer clip cadence/date values. Meeting + series detail widened from max-w-3xl to max-w-5xl.
+- Rolling-series overhaul: two-column note-style layout, Latest status rendered as real markdown (bold, bullets, wikilinks), and an Outstanding items list that pulls incomplete Jordan action items forward from the series' source meetings (deduped, checkable inline and synced). `getSeriesOutstanding` in `lib/vault/index.ts`.
+- 130 tests pass, typecheck + production build clean.
+
 ## Fix — rolling-series notes vanished on emoji headings (2026-06-22)
 
 - Bug: a rolling-series doc whose section headings carry an emoji (`## 📍 Current State`, `## 📅 Meeting Log`, as in the real `Nick 1on1.md`) rendered with zero sessions and an empty TL;DR. The series still listed (from frontmatter) but "none of the actual notes" showed. Cause: the parser matched headings starting exactly with the keyword, so the emoji prefix made it skip both sections. `Mike 1on1.md` (plain headings) was unaffected, which masked it; fixtures also used plain headings.

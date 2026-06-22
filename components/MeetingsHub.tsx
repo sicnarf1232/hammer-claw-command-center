@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { customerHue, initials, isInternalBucket } from "@/lib/customerHues";
+import SuggestedSeries, { type HubCandidate } from "@/components/SuggestedSeries";
 
 export interface HubRow {
   date: string; // YYYY-MM-DD
@@ -18,13 +19,15 @@ export interface HubSeries {
   latest?: string;
 }
 
-type View = "customers" | "series" | "month" | "all";
+type View = "all" | "customers" | "series" | "month";
 const VIEWS: { key: View; label: string }[] = [
+  { key: "all", label: "All" },
   { key: "customers", label: "Customers" },
   { key: "series", label: "Series" },
   { key: "month", label: "Month" },
-  { key: "all", label: "All" },
 ];
+
+const normName = (s: string) => s.trim().toLowerCase();
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -35,13 +38,22 @@ const monthLabel = (ym: string) => `${MONTHS_LONG[Number(ym.slice(5, 7)) - 1] ??
 export default function MeetingsHub({
   rows,
   series = [],
+  candidates = [],
+  accountNames = [],
 }: {
   rows: HubRow[];
   series?: HubSeries[];
+  candidates?: HubCandidate[];
+  accountNames?: string[];
 }) {
-  const [view, setView] = useState<View>("customers");
+  const [view, setView] = useState<View>("all");
   const [query, setQuery] = useState("");
   const [tile, setTile] = useState<string>("all"); // active tile key
+
+  const linkedSet = useMemo(
+    () => new Set(accountNames.map(normName)),
+    [accountNames],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -121,6 +133,9 @@ export default function MeetingsHub({
         />
       </div>
 
+      {/* Suggested series: recurring meetings not yet a rolling series */}
+      {view === "series" && <SuggestedSeries candidates={candidates} />}
+
       {/* Tile rail */}
       {view !== "all" && (
         <TileRail
@@ -134,7 +149,7 @@ export default function MeetingsHub({
       )}
 
       {/* Feed */}
-      <Feed view={view} rows={filtered} series={series} tile={tile} />
+      <Feed view={view} rows={filtered} series={series} tile={tile} linked={linkedSet} />
     </div>
   );
 }
@@ -269,11 +284,13 @@ function Feed({
   rows,
   series,
   tile,
+  linked,
 }: {
   view: View;
   rows: HubRow[];
   series: HubSeries[];
   tile: string;
+  linked: Set<string>;
 }) {
   if (view === "series") {
     return (
@@ -329,7 +346,7 @@ function Feed({
             )}
             <div className="grid gap-2">
               {g.rows.map((r, i) => (
-                <MeetingRow key={`${r.date}-${i}`} row={r} />
+                <MeetingRow key={`${r.date}-${i}`} row={r} linked={linked} />
               ))}
             </div>
           </section>
@@ -339,10 +356,11 @@ function Feed({
   );
 }
 
-function MeetingRow({ row }: { row: HubRow }) {
+function MeetingRow({ row, linked }: { row: HubRow; linked: Set<string> }) {
   const { hue } = customerHue(row.bucket);
   const internal = isInternalBucket(row.bucket);
   const kicker = internal ? "Internal" : row.bucket;
+  const isLinked = !internal && linked.has(normName(row.bucket));
   const body = (
     <div className="group card relative flex items-center gap-4 p-3.5 transition-all hover:translate-x-[3px] hover:bg-surface2" style={{ borderLeft: `3px solid ${hue}` }}>
       <div className="w-14 shrink-0 text-center">
@@ -350,7 +368,12 @@ function MeetingRow({ row }: { row: HubRow }) {
         <div className="text-2xs text-muted">{year(row.date)}</div>
       </div>
       <div className="min-w-0 flex-1">
-        <div className="eyebrow text-[10px]" style={{ color: hue }}>{kicker}</div>
+        <div className="eyebrow flex items-center gap-1 text-[10px]" style={{ color: hue }}>
+          {kicker}
+          {isLinked && (
+            <span title={`Linked to ${row.bucket}`} className="text-success" style={{ color: "var(--ok)" }}>✓</span>
+          )}
+        </div>
         <div className="mt-0.5 truncate text-sm font-semibold text-fg">{row.title}</div>
       </div>
       <span className="shrink-0 text-[12.5px] font-semibold" style={{ color: "var(--ink-3)" }}>

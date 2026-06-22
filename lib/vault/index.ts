@@ -11,7 +11,14 @@ import {
 import { parseTasks } from "./tasks";
 import { parseRoster } from "./roster";
 import { parseMeetingNote, parseMeetingsIndex } from "./meetings";
+import { parseWikilinkBody, basenameOf } from "./wikilink";
 import { parseSeriesDoc, SERIES_DIR_MARKER, type Series } from "./series";
+import {
+  detectSeriesCandidates,
+  type SeriesCandidate,
+  type DetectMeetingInput,
+} from "./seriesDetect";
+import { indexRowFromPath } from "@/lib/meetingFormat";
 import { splitFrontmatter } from "./frontmatter";
 import { todayISO, isISODate, isOnOrBefore } from "@/lib/dates";
 import type {
@@ -185,4 +192,72 @@ export async function getSeriesByPath(path: string): Promise<Series | null> {
   const file = await getFile(path);
   if (!file) return null;
   return parseSeriesDoc(file.content, path);
+}
+
+// Incomplete "Jordan" action items pulled forward from the meetings a series
+// logs (via each entry's "Source: [[note]]" link), deduped by source line. This
+// is how outstanding work keeps surfacing on the rolling-series view.
+export async function getSeriesOutstanding(series: Series): Promise<Task[]> {
+  const basenames = new Set<string>();
+  const re = /Source:\s*\[\[([^\]]+)\]\]/gi;
+  for (const entry of series.log) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(entry.text))) {
+      basenames.add(basenameOf(parseWikilinkBody(m[1]).target));
+    }
+  }
+  if (!basenames.size) return [];
+
+  const files = await listMarkdownFiles();
+  const byBase = new Map<string, string>();
+  for (const f of files) {
+    if (!f.path.includes("/Meetings/")) continue;
+    const base = f.path.split("/").pop()!.replace(/\.md$/, "");
+    if (!byBase.has(base)) byBase.set(base, f.path);
+  }
+
+  const tasks: Task[] = [];
+  const seen = new Set<string>();
+  for (const base of basenames) {
+    const path = byBase.get(base);
+    if (!path) continue;
+    const file = await getFile(path);
+    if (!file) continue;
+    const note = parseMeetingNote(file.content, path);
+    for (const ai of note.actionItems) {
+      if (!ai.isJordans || !ai.task || ai.task.done) continue;
+      const key = `${ai.task.sourceFile}:${ai.task.sourceLine}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      tasks.push(ai.task);
+    }
+  }
+  return tasks;
+}
+
+export type { SeriesCandidate } from "./seriesDetect";
+
+// Recurring meetings that are not yet a series. Scans every meeting note file
+// (the index is only a curated 30-row slice), derives a title/date/bucket from
+// each filename, and clusters them, excluding anything an existing series
+// already covers. Cheap: file listing only, no note reads.
+export async function getSeriesCandidates(): Promise<SeriesCandidate[]> {
+  if (!isVaultConfigured()) return [];
+  const files = await listMarkdownFiles();
+  const meetings: DetectMeetingInput[] = [];
+  for (const f of files) {
+    if (!f.path.includes("/Meetings/")) continue;
+    if (f.path.includes(SERIES_DIR_MARKER)) continue; // skip the series docs
+    const row = indexRowFromPath(f.path);
+    if (!row) continue;
+    meetings.push({
+      date: row.date,
+      bucket: row.bucket,
+      title: row.title,
+      noteBasename: row.basename,
+      notePath: f.path,
+    });
+  }
+  const existing = await getSeriesList().catch(() => []);
+  return detectSeriesCandidates(meetings, existing);
 }
