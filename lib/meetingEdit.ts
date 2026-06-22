@@ -333,3 +333,22 @@ export function setMeetingCustomer(
   }
   return lines.join("\n");
 }
+
+// Set or strip the "<Title> -- <Account>" suffix on the note's H1, matching the
+// suffix convention applyMeetingEdit uses. account = null removes the suffix.
+// Used by full reclassification so the visible title follows the account.
+export function setMeetingTitleAccount(
+  content: string,
+  account: string | null,
+): string {
+  const text = content.replace(/\r\n/g, "\n");
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^#\s+(.+?)\s*$/);
+    if (!m) continue;
+    const base = m[1].replace(/\s+--\s+.*$/, "").trim();
+    lines[i] = account ? `# ${base} -- ${account}` : `# ${base}`;
+    break;
+  }
+  return lines.join("\n");
+}

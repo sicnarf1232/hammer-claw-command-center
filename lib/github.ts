@@ -233,6 +233,35 @@ export async function writeFile(args: {
   };
 }
 
+// Delete a file via a commit. No-op (returns "") when the file is absent, so a
+// move (writeFile new + deleteFile old) is safe to retry.
+export async function deleteFile(args: {
+  path: string;
+  message: string;
+}): Promise<{ commitSha: string }> {
+  const ref = getRepoRef();
+  const octokit = getOctokit();
+  const fullPath = joinPath(ref.root, args.path);
+
+  const existing = await getFile(args.path);
+  if (!existing) return { commitSha: "" };
+
+  const res = await octokit.repos.deleteFile({
+    owner: ref.owner,
+    repo: ref.repo,
+    path: fullPath,
+    branch: ref.branch,
+    message: args.message,
+    sha: existing.sha,
+  });
+  try {
+    revalidateTag(VAULT_TREE_TAG);
+  } catch {
+    // outside a request scope; cache TTL handles it
+  }
+  return { commitSha: res.data.commit.sha ?? "" };
+}
+
 // ---- helpers ----
 
 function stripRoot(fullPath: string, root: string): string {

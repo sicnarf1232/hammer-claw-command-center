@@ -4,9 +4,27 @@ import {
   meetingNoteToEditable,
   serializeActionItems,
   setMeetingCustomer,
+  setMeetingTitleAccount,
   type MeetingEdit,
 } from "./meetingEdit";
 import { parseMeetingNote } from "./vault/meetings";
+
+describe("setMeetingTitleAccount", () => {
+  it("replaces an existing ' -- Account' suffix", () => {
+    const out = setMeetingTitleAccount("# Weekly Sync -- Stryker\n\nbody", "Intuitive Surgical");
+    expect(out).toContain("# Weekly Sync -- Intuitive Surgical");
+  });
+  it("adds a suffix when none exists", () => {
+    expect(setMeetingTitleAccount("# Weekly Sync\n", "Stryker")).toContain(
+      "# Weekly Sync -- Stryker",
+    );
+  });
+  it("strips the suffix when account is null", () => {
+    expect(setMeetingTitleAccount("# Weekly Sync -- Stryker\n", null)).toContain(
+      "# Weekly Sync\n",
+    );
+  });
+});
 
 describe("setMeetingCustomer", () => {
   const base = `---\ntype: meeting\nattendees: [Jordan Francis, Nick Francis]\ncustomer: "[[Stryker]]"\n---\n\n# A meeting\n\n## TL;DR\nbody stays.\n`;

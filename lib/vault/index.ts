@@ -287,17 +287,11 @@ export async function getPersonProfile(name: string): Promise<PersonProfile> {
   for (const f of contents) {
     if (!f) continue;
     const note = parseMeetingNote(f.content, f.path);
-    if (note.attendees.some((a) => personNameMatches(name, a))) {
-      meetings.push({
-        title: note.title,
-        date: note.date,
-        path: f.path,
-        bucket: indexRowFromPath(f.path)?.bucket ?? "",
-      });
-    }
+    let owns = false;
     for (const ai of note.actionItems) {
       const owner = ai.owner ?? (ai.isJordans ? "Jordan Francis" : undefined);
       if (!owner || !personNameMatches(name, owner)) continue;
+      owns = true;
       items.push({
         text: ai.text,
         done: ai.done,
@@ -307,6 +301,17 @@ export async function getPersonProfile(name: string): Promise<PersonProfile> {
         sourceFile: ai.sourceFile,
         sourceLine: ai.sourceLine,
         task: ai.task,
+      });
+    }
+    // Owning an action item counts as attending the meeting, even when the
+    // attendee list omits them.
+    const isAttendee = note.attendees.some((a) => personNameMatches(name, a));
+    if (isAttendee || owns) {
+      meetings.push({
+        title: note.title,
+        date: note.date,
+        path: f.path,
+        bucket: indexRowFromPath(f.path)?.bucket ?? "",
       });
     }
   }

@@ -188,6 +188,20 @@ async function MeetingDetail({ path }: { path: string }) {
     }
     return note.customer?.display;
   };
+  // A task owner counts as an attendee. Merge owners the attendee list omits,
+  // collapsing short names into the matching full-name attendee (e.g. an owner
+  // "Jordan" folds into attendee "Jordan Francis").
+  const ownerNames = Array.from(
+    new Set(
+      note.actionItems
+        .map((ai) => ai.owner ?? (ai.isJordans ? "Jordan Francis" : ""))
+        .filter(Boolean),
+    ),
+  );
+  const extraOwners = ownerNames.filter(
+    (o) => !note.attendees.some((a) => personNameMatches(a, o)),
+  );
+  const effectiveAttendees = [...note.attendees, ...extraOwners];
 
   return (
     <Shell>
@@ -245,11 +259,11 @@ async function MeetingDetail({ path }: { path: string }) {
           </p>
         )}
 
-        {note.attendees.length > 0 && (
+        {effectiveAttendees.length > 0 && (
           <div className="mt-5">
             <p className="eyebrow mb-2 text-muted">Attendees</p>
             <div className="flex flex-wrap gap-1.5">
-              {note.attendees.map((a) => (
+              {effectiveAttendees.map((a) => (
                 <PersonLink key={a} name={a} company={companyOf(a)} />
               ))}
             </div>

@@ -2,6 +2,13 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Meetings: account creation, owner=attendee, full reclassification (2026-06-22)
+
+- Create accounts inline (#1): the link control offers "Create new account", which scaffolds `300 Merit/Customers/<Name>.md`, links the meeting, and drops you on the new account page to fill in details. `createAccount` in `lib/writeback`.
+- Owner counts as attendee (#2): a task owner is treated as a meeting attendee everywhere the app reads, collapsing short names into the matching full-name attendee (owner "Jordan" folds into attendee "Jordan Francis"). In-app only, no files rewritten; person profiles also count owned-item meetings as attended.
+- Full reclassification (#3): changing a meeting's account/internal now propagates (fixes the bug where only the frontmatter changed). `reclassifyMeeting` sets the customer link + H1 ` -- Account` suffix, moves the note into the correct folder (customer folder, or Internal when cleared), and rebuilds the meetings index so the list name, badges, and links all follow. Adds `deleteFile` to the github client and `setMeetingTitleAccount` (tested); the classifier follows the note to its new path.
+- 142 tests pass, typecheck + production build clean.
+
 ## Meetings Phase 3+4: people pages, classifier, hot/stats (2026-06-22)
 
 - People (#4): names are now interactive `PersonLink` chips (subtle hover zoom + a mini contact card showing their company) that click through to a new `/people/[name]` page aggregating their company (roster), the action items they own across all notes, and the meetings they attend. Wired into meeting attendees, series participants, and action-item owners. `getPersonProfile` + pure `personNameMatches` (`lib/vault/people.ts`, tested). Reassigning an owner is still done via Edit mode (deferred a dedicated inline reassign).

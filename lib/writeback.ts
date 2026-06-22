@@ -1,10 +1,24 @@
-import { getFile, writeFile } from "@/lib/github";
+import {
+  getFile,
+  writeFile,
+  deleteFile,
+  listMarkdownFiles,
+} from "@/lib/github";
 import { todayISO } from "@/lib/dates";
 import {
   applyMeetingEdit,
   setMeetingCustomer,
+  setMeetingTitleAccount,
   type MeetingEdit,
 } from "@/lib/meetingEdit";
+import {
+  meetingFolder,
+  indexRowFromPath,
+  rebuildMeetingsIndex,
+  sanitizeForFilename,
+  type MeetingRow,
+} from "@/lib/meetingFormat";
+import { slugify } from "@/lib/vault/accounts";
 import { addContactsToNote, type NewContact } from "@/lib/contactsWrite";
 import { applyAccountEdit, type AccountEdit } from "@/lib/accountEdit";
 
@@ -123,28 +137,95 @@ export async function editMeetingNote(
   });
 }
 
-// Quick link / internal classifier: set or clear just the `customer:`
-// frontmatter line on a meeting note (account = null marks it internal). Body
-// untouched. Lets a misfiled "internal about a customer" note be relinked
-// without a full edit.
-export async function setMeetingClassification(
+const MEETINGS_INDEX_PATH = "100 Periodics/Meetings-Index.md";
+
+// Create a minimal customer account note (300 Merit/Customers/<Name>.md) so a
+// meeting can be linked to a brand-new account. Returns the slug for redirect.
+export async function createAccount(
+  name: string,
+): Promise<{ path: string; slug: string; created: boolean }> {
+  const clean = name.trim();
+  if (!clean) throw new WriteBackError("An account name is required.");
+  const fileBase = sanitizeForFilename(clean) || clean;
+  const path = `300 Merit/Customers/${fileBase}.md`;
+  const slug = slugify(fileBase);
+  if (await getFile(path)) return { path, slug, created: false }; // already exists
+
+  const content = [
+    "---",
+    "type: Customer",
+    "status: Prospect",
+    "workstream: merit",
+    `created: ${todayISO()}`,
+    "---",
+    "",
+    `# ${clean}`,
+    "",
+    "## Overview",
+    "",
+    "## Key contacts",
+    "",
+    "## Active Situations",
+    "",
+    "## Links",
+    "",
+  ].join("\n");
+  await writeFile({ path, content, message: `app: create account ${clean}` });
+  return { path, slug, created: true };
+}
+
+// Full reclassification: set/clear the customer link AND propagate it so the
+// whole app follows. Updates frontmatter + the H1 suffix, moves the note into
+// the correct folder (customer folder, or Internal when cleared), and rebuilds
+// the meetings index so the list name, badges, and links all update. account =
+// null marks the note internal. Returns the (possibly new) path.
+export async function reclassifyMeeting(
   path: string,
   account: string | null,
-): Promise<{ commitSha: string; path: string }> {
+): Promise<{ commitSha: string; path: string; moved: boolean }> {
   const file = await getFile(path);
   if (!file) throw new WriteBackError(`Meeting note not found: ${path}`);
 
-  const next = setMeetingCustomer(file.content, account);
-  if (next === file.content.replace(/\r\n/g, "\n")) {
-    return { commitSha: "", path }; // no-op
+  let content = setMeetingCustomer(file.content, account);
+  content = setMeetingTitleAccount(content, account);
+
+  // Decide the destination folder. These notes are all the merit workstream.
+  const filename = path.split("/").pop()!;
+  const folder = meetingFolder("merit", account, account ? undefined : "Internal");
+  const newPath = `${folder}/${filename}`;
+
+  const moved = newPath !== path;
+  const res = await writeFile({
+    path: newPath,
+    content,
+    message: `app: ${account ? `link ${account}` : "mark internal"} ${filename.replace(/\.md$/, "")}`,
+  });
+  if (moved) {
+    await deleteFile({ path, message: `app: move ${filename} to ${folder}` });
   }
 
-  const name = path.split("/").pop()!.replace(/\.md$/, "");
-  return writeFile({
-    path,
-    content: next,
-    message: `app: ${account ? `link ${account}` : "mark internal"} ${name} ${todayISO()}`,
-  });
+  // Rebuild the index from the post-move file list so the list/buckets follow.
+  await rebuildIndex();
+
+  return { commitSha: res.commitSha, path: newPath, moved };
+}
+
+async function rebuildIndex(): Promise<void> {
+  const indexFile = await getFile(MEETINGS_INDEX_PATH);
+  if (!indexFile) return;
+  const files = await listMarkdownFiles();
+  const rows = files
+    .map((f) => indexRowFromPath(f.path))
+    .filter((r): r is MeetingRow => r !== null);
+  const stamp = `${todayISO()} (app reclassify: ${rows.length} meetings indexed)`;
+  const updated = rebuildMeetingsIndex(indexFile.content, rows, stamp);
+  if (updated !== indexFile.content) {
+    await writeFile({
+      path: MEETINGS_INDEX_PATH,
+      content: updated,
+      message: `app: rebuild meetings index ${todayISO()}`,
+    });
+  }
 }
 
 // Milestone 2: edit an account note in-app (frontmatter fields, overview, and
