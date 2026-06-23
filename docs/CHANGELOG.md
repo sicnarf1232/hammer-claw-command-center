@@ -2,6 +2,13 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Series UX: deny suggestions, preview members, restructured detail (2026-06-23)
+
+- Suggested series are now expandable: "Review" shows the member meetings with dates (clickable to open each), a cross-bucket warning, and a "Not a series" deny that persists (browser localStorage) so bad clusters clear out. Create moved behind the review step.
+- Series detail restructured: Outstanding items (tasks) listed first, Latest status condensed into a collapsible block, and "Meetings in this series" below with each session clickable through to its source note (`getSeriesView` resolves each log entry's Source link). 
+- A meeting note's internal label now reads "Internal · Merit" (the meeting type stays "internal" on the list/series).
+- Meetings list now shows every meeting (not the 30-row index) via `getAllMeetings`.
+
 ## Contacts directory + team color-coding (2026-06-22)
 
 - Color-code people by side: attendee / owner / participant chips are now colored by roster classification (internal team vs customer contact), with a browser-saved palette selector to match branding (defaults: internal red, customer blue). `components/BrandColors` (localStorage context + swatch selector); `PersonLink` takes a `kind`.

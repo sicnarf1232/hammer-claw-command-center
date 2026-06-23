@@ -7,7 +7,7 @@ import {
   getSeriesList,
   getSeriesByPath,
   getSeriesCandidates,
-  getSeriesOutstanding,
+  getSeriesView,
   classifyName,
 } from "@/lib/vault";
 
@@ -407,15 +407,15 @@ async function EditMeeting({ path }: { path: string }) {
 
 async function SeriesDetail({ path }: { path: string }) {
   let series: Awaited<ReturnType<typeof getSeriesByPath>> = null;
-  let outstanding: Awaited<ReturnType<typeof getSeriesOutstanding>> = [];
+  let view: Awaited<ReturnType<typeof getSeriesView>> = { outstanding: [], sessions: [] };
   let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
   let roster: Roster = new Map();
   let error: string | null = null;
   try {
     series = await getSeriesByPath(path);
     if (series) {
-      [outstanding, accounts, roster] = await Promise.all([
-        getSeriesOutstanding(series).catch(() => []),
+      [view, accounts, roster] = await Promise.all([
+        getSeriesView(series).catch(() => ({ outstanding: [], sessions: [] })),
         listAccounts().catch(() => []),
         getRoster().catch(() => new Map() as Roster),
       ]);
@@ -471,34 +471,24 @@ async function SeriesDetail({ path }: { path: string }) {
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi value={series.log.length} label="Sessions" />
-          <Kpi value={outstanding.length} label="Open items" />
+          <Kpi value={view.outstanding.length} label="Open items" />
           <Kpi value={series.cadence ?? "—"} label="Cadence" />
           <Kpi value={series.updated ?? "—"} label="Latest" />
         </div>
 
         <div className="mt-7 grid gap-7 lg:grid-cols-3">
-          {/* Main column: status + carried-forward tasks + the log */}
+          {/* Main column: tasks first, condensed status, then the meetings */}
           <div className="space-y-7 lg:col-span-2">
             <section>
-              <SectionHeader title="Latest status" />
-              <div
-                className="rounded-[14px] p-5"
-                style={{ background: "var(--warm-soft)", borderLeft: "4px solid var(--warm)" }}
-              >
-                <RollingNotes md={series.currentState} />
-              </div>
-            </section>
-
-            <section>
-              <SectionHeader title={`Outstanding items · ${outstanding.length}`} />
-              {outstanding.length === 0 ? (
+              <SectionHeader title={`Outstanding items · ${view.outstanding.length}`} />
+              {view.outstanding.length === 0 ? (
                 <p className="text-sm text-muted">
                   Nothing open. Items you leave unchecked in this series&apos; meetings
                   surface here until done.
                 </p>
               ) : (
                 <div className="grid gap-2">
-                  {outstanding.map((t) => (
+                  {view.outstanding.map((t) => (
                     <TaskRow
                       key={`${t.sourceFile}:${t.sourceLine}`}
                       task={toTaskView(t, lookup)}
@@ -511,21 +501,46 @@ async function SeriesDetail({ path }: { path: string }) {
             </section>
 
             <section>
-              <SectionHeader title={`Meeting log · ${series.log.length}`} />
-              {series.log.length === 0 ? (
+              <details open className="rounded-[12px] p-3" style={{ background: "var(--warm-soft)", borderLeft: "3px solid var(--warm)" }}>
+                <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide" style={{ color: "var(--warm)" }}>
+                  Latest status
+                </summary>
+                <div className="mt-2 text-[13px] leading-snug">
+                  <RollingNotes md={series.currentState} />
+                </div>
+              </details>
+            </section>
+
+            <section>
+              <SectionHeader title={`Meetings in this series · ${view.sessions.length}`} />
+              {view.sessions.length === 0 ? (
                 <p className="text-sm text-muted">No entries yet.</p>
               ) : (
-                <div className="grid gap-3">
-                  {series.log.map((e, i) => (
+                <div className="grid gap-2">
+                  {view.sessions.map((s, i) => (
                     <div
                       key={i}
-                      className="card p-4"
+                      className="card p-3.5"
                       style={{ borderLeft: "3px solid var(--accent)" }}
                     >
-                      <div className="text-sm font-bold text-fg">{e.heading}</div>
-                      <div className="mt-1.5">
-                        <RollingNotes md={e.text} muted />
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-bold text-fg">{s.heading}</div>
+                        {s.notePath && (
+                          <Link
+                            href={`/meetings?note=${encodeURIComponent(s.notePath)}`}
+                            className="shrink-0 text-[12px] font-semibold hover:underline"
+                            style={{ color: "var(--accent)" }}
+                          >
+                            Open note →
+                          </Link>
+                        )}
                       </div>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-2xs text-muted">details</summary>
+                        <div className="mt-1.5">
+                          <RollingNotes md={s.text} muted />
+                        </div>
+                      </details>
                     </div>
                   ))}
                 </div>
@@ -550,7 +565,7 @@ async function SeriesDetail({ path }: { path: string }) {
               <dl className="space-y-2 text-sm">
                 <MetaRow label="Cadence" value={series.cadence ?? "—"} />
                 <MetaRow label="Sessions" value={String(series.log.length)} />
-                <MetaRow label="Open items" value={String(outstanding.length)} />
+                <MetaRow label="Open items" value={String(view.outstanding.length)} />
                 <MetaRow label="Latest" value={series.updated ?? "—"} />
                 {series.status && <MetaRow label="Status" value={series.status} />}
               </dl>

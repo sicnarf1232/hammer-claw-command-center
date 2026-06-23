@@ -210,20 +210,20 @@ export async function getSeriesByPath(path: string): Promise<Series | null> {
   return parseSeriesDoc(file.content, path);
 }
 
-// Incomplete "Jordan" action items pulled forward from the meetings a series
-// logs (via each entry's "Source: [[note]]" link), deduped by source line. This
-// is how outstanding work keeps surfacing on the rolling-series view.
-export async function getSeriesOutstanding(series: Series): Promise<Task[]> {
-  const basenames = new Set<string>();
-  const re = /Source:\s*\[\[([^\]]+)\]\]/gi;
-  for (const entry of series.log) {
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(entry.text))) {
-      basenames.add(basenameOf(parseWikilinkBody(m[1]).target));
-    }
-  }
-  if (!basenames.size) return [];
+export interface SeriesSession {
+  heading: string;
+  text: string;
+  notePath: string | null; // resolved from the entry's "Source: [[note]]" link
+}
+export interface SeriesView {
+  outstanding: Task[]; // incomplete Jordan items, carried forward, deduped
+  sessions: SeriesSession[]; // log entries with their source note resolved
+}
 
+// Resolve a series' log into clickable sessions and pull its outstanding
+// (incomplete Jordan) action items forward. Lists files once for basename->path,
+// then reads only the series' own source notes.
+export async function getSeriesView(series: Series): Promise<SeriesView> {
   const files = await listMarkdownFiles();
   const byBase = new Map<string, string>();
   for (const f of files) {
@@ -232,7 +232,25 @@ export async function getSeriesOutstanding(series: Series): Promise<Task[]> {
     if (!byBase.has(base)) byBase.set(base, f.path);
   }
 
-  const tasks: Task[] = [];
+  const firstSource = (text: string): string | undefined => {
+    const m = text.match(/Source:\s*\[\[([^\]]+)\]\]/i);
+    return m ? basenameOf(parseWikilinkBody(m[1]).target) : undefined;
+  };
+
+  const sessions: SeriesSession[] = series.log.map((e) => {
+    const base = firstSource(e.text);
+    return { heading: e.heading, text: e.text, notePath: base ? byBase.get(base) ?? null : null };
+  });
+
+  const basenames = new Set<string>();
+  const re = /Source:\s*\[\[([^\]]+)\]\]/gi;
+  for (const entry of series.log) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(entry.text))) {
+      basenames.add(basenameOf(parseWikilinkBody(m[1]).target));
+    }
+  }
+  const outstanding: Task[] = [];
   const seen = new Set<string>();
   for (const base of basenames) {
     const path = byBase.get(base);
@@ -245,10 +263,10 @@ export async function getSeriesOutstanding(series: Series): Promise<Task[]> {
       const key = `${ai.task.sourceFile}:${ai.task.sourceLine}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      tasks.push(ai.task);
+      outstanding.push(ai.task);
     }
   }
-  return tasks;
+  return { outstanding, sessions };
 }
 
 export type { SeriesCandidate } from "./seriesDetect";

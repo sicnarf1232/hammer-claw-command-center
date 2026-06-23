@@ -75,7 +75,7 @@ export default function MeetingClassifier({
         style={{ borderColor: "var(--line-2)" }}
         title="Link an account, create one, or mark this meeting internal"
       >
-        <span className="text-muted">{current ? "Customer:" : "Internal"}</span>
+        <span className="text-muted">{current ? "Customer:" : "Internal · Merit"}</span>
         {current && <span className="font-medium text-fg">{current}</span>}
         <span style={{ color: "var(--accent)" }}>edit</span>
       </button>
