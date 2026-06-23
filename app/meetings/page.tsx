@@ -11,6 +11,18 @@ import {
   classifyName,
 } from "@/lib/vault";
 
+const MONTHS_LONG = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+// Format an ISO date as "June 23, 2026".
+function longDate(iso?: string): string {
+  if (!iso) return "";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  return `${MONTHS_LONG[Number(m[2]) - 1] ?? ""} ${Number(m[3])}, ${m[1]}`;
+}
+
 // Map a name to its team side via the roster, for color-coding chips. Jordan
 // (the app's single user) is always internal, even though he is not listed as a
 // roster contact.
@@ -251,7 +263,7 @@ async function MeetingDetail({ path }: { path: string }) {
           {note.title}
         </h1>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink2">
-          <span className="tabular-nums">{note.date}</span>
+          <span>{longDate(note.date)}</span>
           {note.customer && (
             <span className="inline-flex items-center gap-1 eyebrow text-[11px]" style={{ color: hue }}>
               {linkedAccount ? (
@@ -407,7 +419,13 @@ async function EditMeeting({ path }: { path: string }) {
 
 async function SeriesDetail({ path }: { path: string }) {
   let series: Awaited<ReturnType<typeof getSeriesByPath>> = null;
-  let view: Awaited<ReturnType<typeof getSeriesView>> = { outstanding: [], sessions: [] };
+  const emptyView: Awaited<ReturnType<typeof getSeriesView>> = {
+    outstanding: [],
+    closed: [],
+    sessions: [],
+    stats: { attendance: [], sessions: 0, actionsOpen: 0, actionsClosed: 0, decisions: 0 },
+  };
+  let view = emptyView;
   let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
   let roster: Roster = new Map();
   let error: string | null = null;
@@ -415,7 +433,7 @@ async function SeriesDetail({ path }: { path: string }) {
     series = await getSeriesByPath(path);
     if (series) {
       [view, accounts, roster] = await Promise.all([
-        getSeriesView(series).catch(() => ({ outstanding: [], sessions: [] })),
+        getSeriesView(series).catch(() => emptyView),
         listAccounts().catch(() => []),
         getRoster().catch(() => new Map() as Roster),
       ]);
@@ -464,114 +482,114 @@ async function SeriesDetail({ path }: { path: string }) {
           </h1>
         </div>
         <p className="eyebrow mt-2 text-muted">
-          Rolling notes · {series.log.length} session
-          {series.log.length === 1 ? "" : "s"}
-          {series.updated ? ` · latest ${series.updated}` : ""}
+          Rolling notes · {series.cadence ?? "no set cadence"}
         </p>
 
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Kpi value={series.log.length} label="Sessions" />
-          <Kpi value={view.outstanding.length} label="Open items" />
-          <Kpi value={series.cadence ?? "—"} label="Cadence" />
-          <Kpi value={series.updated ?? "—"} label="Latest" />
-        </div>
-
-        <div className="mt-7 grid gap-7 lg:grid-cols-3">
-          {/* Main column: tasks first, condensed status, then the meetings */}
-          <div className="space-y-7 lg:col-span-2">
-            <section>
-              <SectionHeader title={`Outstanding items · ${view.outstanding.length}`} />
-              {view.outstanding.length === 0 ? (
-                <p className="text-sm text-muted">
-                  Nothing open. Items you leave unchecked in this series&apos; meetings
-                  surface here until done.
-                </p>
-              ) : (
-                <div className="grid gap-2">
-                  {view.outstanding.map((t) => (
-                    <TaskRow
-                      key={`${t.sourceFile}:${t.sourceLine}`}
-                      task={toTaskView(t, lookup)}
-                      today={today}
-                      showAccount={false}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section>
-              <details open className="rounded-[12px] p-3" style={{ background: "var(--warm-soft)", borderLeft: "3px solid var(--warm)" }}>
-                <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide" style={{ color: "var(--warm)" }}>
-                  Latest status
-                </summary>
-                <div className="mt-2 text-[13px] leading-snug">
-                  <RollingNotes md={series.currentState} />
-                </div>
-              </details>
-            </section>
-
-            <section>
-              <SectionHeader title={`Meetings in this series · ${view.sessions.length}`} />
-              {view.sessions.length === 0 ? (
-                <p className="text-sm text-muted">No entries yet.</p>
-              ) : (
-                <div className="grid gap-2">
-                  {view.sessions.map((s, i) => (
-                    <div
-                      key={i}
-                      className="card p-3.5"
-                      style={{ borderLeft: "3px solid var(--accent)" }}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-bold text-fg">{s.heading}</div>
-                        {s.notePath && (
-                          <Link
-                            href={`/meetings?note=${encodeURIComponent(s.notePath)}`}
-                            className="shrink-0 text-[12px] font-semibold hover:underline"
-                            style={{ color: "var(--accent)" }}
-                          >
-                            Open note →
-                          </Link>
-                        )}
-                      </div>
-                      <details className="mt-1">
-                        <summary className="cursor-pointer text-2xs text-muted">details</summary>
-                        <div className="mt-1.5">
-                          <RollingNotes md={s.text} muted />
-                        </div>
-                      </details>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+        {/* People involved, with rolling attendance counts */}
+        {view.stats.attendance.length > 0 && (
+          <div className="mt-5">
+            <p className="eyebrow mb-2 text-muted">People involved</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {view.stats.attendance.map((a) => (
+                <span key={a.name} className="inline-flex items-center gap-1">
+                  <PersonLink name={a.name} kind={personKind(roster, a.name)} />
+                  <span className="text-2xs font-semibold text-muted">{a.count}×</span>
+                </span>
+              ))}
+            </div>
           </div>
+        )}
 
-          {/* Side rail: people + at-a-glance, using the reclaimed width */}
-          <aside className="space-y-6">
-            {series.participants.length > 0 && (
-              <section className="card p-4">
-                <p className="eyebrow mb-2 text-muted">People involved</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {series.participants.map((p) => (
-                    <PersonLink key={p} name={p} kind={personKind(roster, p)} />
-                  ))}
-                </div>
-              </section>
-            )}
-            <section className="card p-4">
-              <p className="eyebrow mb-3 text-muted">At a glance</p>
-              <dl className="space-y-2 text-sm">
-                <MetaRow label="Cadence" value={series.cadence ?? "—"} />
-                <MetaRow label="Sessions" value={String(series.log.length)} />
-                <MetaRow label="Open items" value={String(view.outstanding.length)} />
-                <MetaRow label="Latest" value={series.updated ?? "—"} />
-                {series.status && <MetaRow label="Status" value={series.status} />}
-              </dl>
-            </section>
-          </aside>
+        {/* Stat band */}
+        <div className="mt-5 grid grid-cols-3 gap-3 sm:grid-cols-5">
+          <Kpi value={view.stats.sessions} label="Sessions" />
+          <Kpi value={view.stats.actionsOpen} label="Items open" />
+          <Kpi value={view.stats.actionsClosed} label="Items closed" />
+          <Kpi value={view.stats.decisions} label="Decisions" />
+          <Kpi value={view.stats.latestDate ? longDate(view.stats.latestDate) : "—"} label="Latest" />
         </div>
+
+        {/* Rolling TL;DR — the comprehensive scope */}
+        <section className="mt-7">
+          <SectionHeader title="Rolling TL;DR" />
+          <div
+            className="rounded-[14px] p-5"
+            style={{ background: "var(--warm-soft)", borderLeft: "4px solid var(--warm)" }}
+          >
+            <RollingNotes md={series.currentState} />
+          </div>
+        </section>
+
+        {/* Action items: open (interactive) then closed */}
+        <section className="mt-7">
+          <SectionHeader title={`Open action items · ${view.outstanding.length}`} />
+          {view.outstanding.length === 0 ? (
+            <p className="text-sm text-muted">Nothing open.</p>
+          ) : (
+            <div className="grid gap-2">
+              {view.outstanding.map((t) => (
+                <TaskRow
+                  key={`${t.sourceFile}:${t.sourceLine}`}
+                  task={toTaskView(t, lookup)}
+                  today={today}
+                  showAccount={false}
+                />
+              ))}
+            </div>
+          )}
+          {view.closed.length > 0 && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs font-semibold text-muted">
+                {view.closed.length} closed
+              </summary>
+              <div className="mt-2 grid gap-1">
+                {view.closed.map((c, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm text-muted">
+                    <span style={{ color: "var(--ok)" }}>☑</span>
+                    <span className="line-through">{c.text}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </section>
+
+        {/* Meetings in this series */}
+        <section className="mt-7">
+          <SectionHeader title={`Meetings in this series · ${view.sessions.length}`} />
+          {view.sessions.length === 0 ? (
+            <p className="text-sm text-muted">No entries yet.</p>
+          ) : (
+            <div className="grid gap-2">
+              {view.sessions.map((s, i) => (
+                <div
+                  key={i}
+                  className="card p-3.5"
+                  style={{ borderLeft: "3px solid var(--accent)" }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-bold text-fg">{s.heading}</div>
+                    {s.notePath && (
+                      <Link
+                        href={`/meetings?note=${encodeURIComponent(s.notePath)}`}
+                        className="shrink-0 text-[12px] font-semibold hover:underline"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        Open note →
+                      </Link>
+                    )}
+                  </div>
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-2xs text-muted">details</summary>
+                    <div className="mt-1.5">
+                      <RollingNotes md={s.text} muted />
+                    </div>
+                  </details>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         <Footer seriesName={null} />
       </article>

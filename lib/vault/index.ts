@@ -215,9 +215,19 @@ export interface SeriesSession {
   text: string;
   notePath: string | null; // resolved from the entry's "Source: [[note]]" link
 }
+export interface SeriesStats {
+  attendance: { name: string; count: number }[]; // per participant, rolling
+  sessions: number;
+  actionsOpen: number;
+  actionsClosed: number;
+  decisions: number;
+  latestDate?: string;
+}
 export interface SeriesView {
   outstanding: Task[]; // incomplete Jordan items, carried forward, deduped
+  closed: { text: string; date?: string }[]; // completed Jordan items
   sessions: SeriesSession[]; // log entries with their source note resolved
+  stats: SeriesStats;
 }
 
 // Resolve a series' log into clickable sessions and pull its outstanding
@@ -251,22 +261,64 @@ export async function getSeriesView(series: Series): Promise<SeriesView> {
     }
   }
   const outstanding: Task[] = [];
+  const closed: { text: string; date?: string }[] = [];
   const seen = new Set<string>();
+  const attendance = new Map<string, number>();
+  for (const p of series.participants) attendance.set(p, 0);
+  let actionsOpen = 0;
+  let actionsClosed = 0;
+  let decisions = 0;
+  let latestDate: string | undefined;
+  let sessionCount = 0;
+
   for (const base of basenames) {
     const path = byBase.get(base);
     if (!path) continue;
     const file = await getFile(path);
     if (!file) continue;
     const note = parseMeetingNote(file.content, path);
+    sessionCount++;
+    if (note.date && (!latestDate || note.date > latestDate)) latestDate = note.date;
+
+    for (const p of series.participants) {
+      if (note.attendees.some((a) => personNameMatches(p, a))) {
+        attendance.set(p, (attendance.get(p) ?? 0) + 1);
+      }
+    }
     for (const ai of note.actionItems) {
-      if (!ai.isJordans || !ai.task || ai.task.done) continue;
-      const key = `${ai.task.sourceFile}:${ai.task.sourceLine}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      outstanding.push(ai.task);
+      if (ai.done) actionsClosed++;
+      else actionsOpen++;
+      if (ai.isJordans && ai.task) {
+        const key = `${ai.task.sourceFile}:${ai.task.sourceLine}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          if (ai.task.done) closed.push({ text: ai.text, date: note.date });
+          else outstanding.push(ai.task);
+        }
+      }
+    }
+    // Decisions: bullets under any "...Decisions" section.
+    for (const [heading, body] of Object.entries(note.sections)) {
+      if (!/decision/i.test(heading)) continue;
+      decisions += body.split("\n").filter((l) => /^\s*[-*]\s+/.test(l)).length;
     }
   }
-  return { outstanding, sessions };
+
+  return {
+    outstanding,
+    closed,
+    sessions,
+    stats: {
+      attendance: series.participants
+        .map((name) => ({ name, count: attendance.get(name) ?? 0 }))
+        .sort((a, b) => b.count - a.count),
+      sessions: sessionCount,
+      actionsOpen,
+      actionsClosed,
+      decisions,
+      latestDate: latestDate ?? series.updated,
+    },
+  };
 }
 
 export type { SeriesCandidate } from "./seriesDetect";

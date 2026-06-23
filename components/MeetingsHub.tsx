@@ -406,6 +406,36 @@ function Feed({
   tile: string;
   linked: Set<string>;
 }) {
+  // All view: a month accordion — newest month open, older months collapsed.
+  if (view === "all") {
+    const months = monthsOf(rows).filter(Boolean);
+    if (!months.length) {
+      return <div className="card max-w-2xl p-6 text-center text-sm text-muted">No meetings match.</div>;
+    }
+    return (
+      <div className="grid gap-3">
+        {months.map((ym, i) => {
+          const mrows = rows
+            .filter((r) => r.date.startsWith(ym))
+            .sort((a, b) => (a.date < b.date ? 1 : -1));
+          return (
+            <details key={ym} open={i === 0} className="card overflow-hidden p-0">
+              <summary className="flex cursor-pointer items-center gap-2 p-3.5 text-sm font-bold text-fg">
+                {monthLabel(`${ym}-01`)}
+                <span className="chip" style={{ borderColor: "var(--line-2)" }}>{mrows.length}</span>
+              </summary>
+              <div className="grid gap-2 px-3.5 pb-3.5">
+                {mrows.map((r, j) => (
+                  <MeetingRow key={`${r.date}-${j}`} row={r} linked={linked} />
+                ))}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (view === "series") {
     return (
       <div className="grid gap-2">
@@ -436,7 +466,7 @@ function Feed({
 
   const visible = tile === "all" ? rows : rows.filter((r) => (view === "customers" ? r.bucket === tile : r.date.startsWith(tile)));
   const groups = groupRows(visible, view, tile);
-  const groupingLabel = view === "all" ? "newest first" : `grouped by ${view}`;
+  const groupingLabel = `grouped by ${view}`;
 
   if (groups.length === 0) {
     return <div className="card max-w-2xl p-6 text-center text-sm text-muted">No meetings match.</div>;

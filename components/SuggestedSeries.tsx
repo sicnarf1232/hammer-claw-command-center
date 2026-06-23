@@ -108,10 +108,11 @@ export default function SuggestedSeries({
 
               {expandedKey === c.key && (
                 <div className="border-t border-border px-3.5 pb-3.5 pt-3">
-                  {c.buckets.length > 1 && (
+                  {c.buckets.filter((b) => !/^(internal|unfiled)$/i.test(b)).length > 1 && (
                     <p className="mb-2 text-2xs" style={{ color: "var(--warm)" }}>
-                      ⚠ Spans {c.buckets.join(" + ")} — if those are different customers, this is
-                      probably not one series.
+                      ⚠ Spans{" "}
+                      {c.buckets.filter((b) => !/^(internal|unfiled)$/i.test(b)).join(" + ")} — if
+                      those are different customers, this is probably not one series.
                     </p>
                   )}
                   <div className="grid gap-1">

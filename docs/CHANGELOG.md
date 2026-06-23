@@ -2,6 +2,15 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Cutover Stage 1 apply + series header + parser fix (2026-06-23)
+
+- Cutover: `applySeed` writes the reconciled vault into the DB (idempotent reload of the cutover tables only); `POST /api/cutover/apply` (gated on POSTGRES_URL + confirm). Runs once the DB is provisioned.
+- Bug fix: meeting notes with emoji section headings (`## 📌 TL;DR`, `## ✅ Action Items`, `## 🎯 Key Decisions`) parsed empty and dropped their action items — the parser keyed on the raw heading. Now strips the leading emoji so sections, TL;DR, and action items parse. (+test.) This was the "empty notes" on e.g. New Sales Ops Role Offer.
+- Series detail redesigned: a stat band across the top (people involved with rolling N× attendance, sessions, items open, items closed, decisions logged, latest date), then the Rolling TL;DR, then open action items (interactive) + a collapsible closed list, then the clickable meetings. `getSeriesView` now also returns attendance/action/decision stats and the closed items.
+- Suggested-series cross-customer warning now fires only for 2+ distinct customers (Internal + a customer is normal, no warning).
+- Dates render as "June 23, 2026" on the meeting note.
+- Main meetings list is a month accordion: newest month expanded, older months collapsed (click to open).
+
 ## Series UX: deny suggestions, preview members, restructured detail (2026-06-23)
 
 - Suggested series are now expandable: "Review" shows the member meetings with dates (clickable to open each), a cross-bucket warning, and a "Not a series" deny that persists (browser localStorage) so bad clusters clear out. Create moved behind the review step.

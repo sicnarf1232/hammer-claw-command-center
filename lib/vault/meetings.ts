@@ -79,7 +79,10 @@ function splitBodySections(
     const h = allLines[i].match(/^##\s+(.+?)\s*$/);
     if (h) {
       flush(i);
-      currentHeading = h[1].trim();
+      // Strip a leading emoji / decoration so "## 📌 TL;DR" keys as "TL;DR" and
+      // "## ✅ Action Items" is recognized as action items (Jordan's notes use
+      // emoji headings; without this, sections and action items parse empty).
+      currentHeading = h[1].trim().replace(/^[^\p{L}\p{N}]+/u, "").trim();
       currentStart = i + 1;
     }
   }

@@ -6,6 +6,21 @@ import { parseMeetingNote, parseMeetingsIndex } from "./meetings";
 const fx = (name: string) =>
   readFileSync(join(__dirname, "__fixtures__", name), "utf8");
 
+describe("meeting note parser — emoji-decorated headings", () => {
+  const note = parseMeetingNote(
+    `---\ntype: Internal Meeting\ndate: 2026-04-20\nattendees: [Jordan Francis, Mike]\nworkstream: merit\n---\n\n# New Sales Ops Role Offer\n\n## 📌 TL;DR\nNew role offered.\n\n## ✅ Action Items\n- [ ] **Jordan: Decide on role** — ASAP\n  [due:: 2026-04-25] [priority:: high]\n\n## 🎯 Key Decisions\n- Reports to leadership\n`,
+    "300 Merit/Meetings/Internal/2026-04-20 - New Sales Ops Role Offer.md",
+  );
+  it("keys sections without the emoji prefix", () => {
+    expect(note.sections["TL;DR"]).toContain("New role offered.");
+    expect(note.sections["Key Decisions"]).toContain("Reports to leadership");
+  });
+  it("recognizes the emoji Action Items heading and parses Jordan's task", () => {
+    expect(note.actionItems.length).toBeGreaterThan(0);
+    expect(note.actionItems[0].isJordans).toBe(true);
+  });
+});
+
 describe("meeting note parser", () => {
   const note = parseMeetingNote(
     fx("meeting.md"),
