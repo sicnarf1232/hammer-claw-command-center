@@ -11,10 +11,12 @@ export default function PersonLink({
   name,
   company,
   kind,
+  count,
 }: {
   name: string;
   company?: string;
   kind?: "internal" | "customer";
+  count?: number; // e.g. rolling attendance, shown as "N×" inside the chip
 }) {
   const { colors } = useBrandColors();
   const tint = tintFor(kind, colors);
@@ -37,6 +39,14 @@ export default function PersonLink({
           {initials(name)}
         </span>
         <span className="font-normal text-fg">{name}</span>
+        {count != null && (
+          <span
+            className="ml-0.5 rounded-full px-1.5 text-[10px] font-bold"
+            style={tint ? { background: `${tint}22`, color: tint } : { background: "var(--surface-2)", color: "var(--muted)" }}
+          >
+            {count}×
+          </span>
+        )}
       </Link>
       <span
         className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden w-52 rounded-[12px] border p-3 shadow-lg group-hover:block"

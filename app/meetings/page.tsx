@@ -42,6 +42,7 @@ import {
 import { indexRowFromPath } from "@/lib/meetingFormat";
 import type { Roster, ActionItem } from "@/lib/vault/types";
 import PersonLink from "@/components/PersonLink";
+import CondensedStatus from "@/components/CondensedStatus";
 import MeetingClassifier from "@/components/MeetingClassifier";
 import { personNameMatches } from "@/lib/vault/people";
 import { PriorityChip } from "@/components/chips";
@@ -491,10 +492,12 @@ async function SeriesDetail({ path }: { path: string }) {
             <p className="eyebrow mb-2 text-muted">People involved</p>
             <div className="flex flex-wrap items-center gap-1.5">
               {view.stats.attendance.map((a) => (
-                <span key={a.name} className="inline-flex items-center gap-1">
-                  <PersonLink name={a.name} kind={personKind(roster, a.name)} />
-                  <span className="text-2xs font-semibold text-muted">{a.count}×</span>
-                </span>
+                <PersonLink
+                  key={a.name}
+                  name={a.name}
+                  kind={personKind(roster, a.name)}
+                  count={a.count}
+                />
               ))}
             </div>
           </div>
@@ -516,7 +519,9 @@ async function SeriesDetail({ path }: { path: string }) {
             className="rounded-[14px] p-5"
             style={{ background: "var(--warm-soft)", borderLeft: "4px solid var(--warm)" }}
           >
-            <RollingNotes md={series.currentState} />
+            <CondensedStatus>
+              <RollingNotes md={series.currentState} />
+            </CondensedStatus>
           </div>
         </section>
 
