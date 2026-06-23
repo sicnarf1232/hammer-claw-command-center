@@ -159,6 +159,135 @@ export const documents = pgTable(
   }),
 );
 
+// ---- Cutover tables: the app becomes the source of truth (docs/DB-CUTOVER.md).
+// These RETAIN EVERYTHING (no 30-row index cap); the vault is seed-in/export-out.
+
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    type: text("type"),
+    region: text("region"),
+    stage: text("stage"),
+    status: text("status"),
+    accountNumber: text("account_number"),
+    workstream: text("workstream").notNull().default("merit"),
+    overview: text("overview"),
+    sourcePath: text("source_path"), // original vault path, for export
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ slugUx: uniqueIndex("accounts_slug_ux").on(t.slug) }),
+);
+
+// Unified identity: a "contact" is just a person with classification=customer
+// and an accountId. Short names fold into one person via person_aliases.
+export const people = pgTable(
+  "people",
+  {
+    id: serial("id").primaryKey(),
+    fullName: text("full_name").notNull(),
+    classification: text("classification").notNull().default("unknown"), // internal | customer | unknown
+    accountId: integer("account_id").references(() => accounts.id),
+    title: text("title"),
+    email: text("email"),
+    phone: text("phone"),
+    isSelf: boolean("is_self").notNull().default(false), // Jordan
+    needsReview: boolean("needs_review").notNull().default(false),
+    sourcePaths: jsonb("source_paths").$type<string[]>().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    classIdx: index("people_classification_idx").on(t.classification),
+    reviewIdx: index("people_needs_review_idx").on(t.needsReview),
+  }),
+);
+
+export const personAliases = pgTable(
+  "person_aliases",
+  {
+    id: serial("id").primaryKey(),
+    personId: integer("person_id").notNull().references(() => people.id),
+    alias: text("alias").notNull(),
+  },
+  (t) => ({ aliasUx: uniqueIndex("person_aliases_alias_ux").on(t.alias) }),
+);
+
+export const series = pgTable("series", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  cadence: text("cadence"),
+  accountId: integer("account_id").references(() => accounts.id),
+  status: text("status").notNull().default("active"),
+  currentState: text("current_state"),
+  sourcePath: text("source_path"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const meetings = pgTable(
+  "meetings",
+  {
+    id: serial("id").primaryKey(),
+    date: text("date"), // YYYY-MM-DD
+    title: text("title").notNull(),
+    accountId: integer("account_id").references(() => accounts.id), // null => internal
+    isInternal: boolean("is_internal").notNull().default(false),
+    topic: text("topic"),
+    granolaId: text("granola_id"),
+    bodyMarkdown: text("body_markdown"),
+    sections: jsonb("sections").$type<Record<string, string>>(),
+    seriesId: integer("series_id").references(() => series.id),
+    sourcePath: text("source_path"), // original vault path, for export
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    dateIdx: index("meetings_date_idx").on(t.date),
+    accountIdx: index("meetings_account_idx").on(t.accountId),
+    sourceUx: uniqueIndex("meetings_source_path_ux").on(t.sourcePath),
+  }),
+);
+
+export const meetingAttendees = pgTable(
+  "meeting_attendees",
+  {
+    meetingId: integer("meeting_id").notNull().references(() => meetings.id),
+    personId: integer("person_id").notNull().references(() => people.id),
+  },
+  (t) => ({ pk: uniqueIndex("meeting_attendees_pk").on(t.meetingId, t.personId) }),
+);
+
+// Unifies Jordan's tasks and tracking-only action items.
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: serial("id").primaryKey(),
+    meetingId: integer("meeting_id").references(() => meetings.id),
+    ownerPersonId: integer("owner_person_id").references(() => people.id),
+    accountId: integer("account_id").references(() => accounts.id),
+    text: text("text").notNull(),
+    done: boolean("done").notNull().default(false),
+    due: text("due"),
+    priority: text("priority"),
+    status: text("status"),
+    isJordans: boolean("is_jordans").notNull().default(false),
+    description: text("description"),
+    notes: text("notes"),
+    sourcePath: text("source_path"),
+    sourceLine: integer("source_line"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    doneIdx: index("tasks_done_idx").on(t.done),
+    ownerIdx: index("tasks_owner_idx").on(t.ownerPersonId),
+  }),
+);
+
 // Key-value for sync bookkeeping (last sync time, etc.).
 export const appMeta = pgTable("app_meta", {
   key: text("key").primaryKey(),

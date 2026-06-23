@@ -154,6 +154,21 @@ export async function getMeetingsIndex(): Promise<ResolvedMeeting[]> {
   }));
 }
 
+// Every meeting note in the vault (under */Meetings/, excluding rolling-series
+// docs), parsed. The Meetings-Index is a curated 30-row table; this retains
+// EVERY meeting ever pulled. Used by the cutover seed and the full meetings list.
+export async function getAllMeetings(): Promise<MeetingNote[]> {
+  if (!isVaultConfigured()) return [];
+  const files = (await listMarkdownFiles()).filter(
+    (f) => f.path.includes("/Meetings/") && !f.path.includes(SERIES_DIR_MARKER),
+  );
+  const contents = await readFiles(files);
+  return contents
+    .filter(Boolean)
+    .map((f) => parseMeetingNote(f.content, f.path))
+    .sort((a, b) => (a.date ?? "") < (b.date ?? "") ? 1 : -1);
+}
+
 export async function getMeetingNoteByPath(
   path: string,
 ): Promise<MeetingNote | null> {
