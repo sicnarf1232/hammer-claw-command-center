@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   vaultConfigured,
-  getMeetingsIndex,
+  getAllMeetings,
   getMeetingNoteByPath,
   getRoster,
   getSeriesList,
@@ -27,6 +27,7 @@ import {
   seriesFolderForBucket,
   defaultParticipants,
 } from "@/lib/vault/seriesCreate";
+import { indexRowFromPath } from "@/lib/meetingFormat";
 import type { Roster, ActionItem } from "@/lib/vault/types";
 import PersonLink from "@/components/PersonLink";
 import MeetingClassifier from "@/components/MeetingClassifier";
@@ -78,12 +79,20 @@ export default async function MeetingsPage({
     return <SeriesDetail path={sp.series} />;
   }
 
-  let rows: Awaited<ReturnType<typeof getMeetingsIndex>> = [];
+  // Every meeting ever pulled (not the curated 30-row index), so nothing drops
+  // off the list as new meetings come in.
+  let rows: { date: string; bucket: string; title: string; notePath: string | null }[] = [];
   let error: string | null = null;
   try {
-    rows = await getMeetingsIndex();
+    const all = await getAllMeetings();
+    rows = all.map((m) => ({
+      date: m.date ?? "",
+      bucket: indexRowFromPath(m.path)?.bucket ?? m.customer?.display ?? "Internal",
+      title: m.title,
+      notePath: m.path,
+    }));
   } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to read the meetings index.";
+    error = e instanceof Error ? e.message : "Failed to read meetings.";
   }
   const seriesList = await getSeriesList().catch(() => []);
   const candidates = await getSeriesCandidates().catch(() => []);
@@ -104,8 +113,7 @@ export default async function MeetingsPage({
         <div className="card max-w-2xl p-8 text-center">
           <div className="text-sm font-medium text-fg">No meetings yet</div>
           <p className="mt-1 text-sm text-muted">
-            Nothing found in{" "}
-            <code className="font-mono">100 Periodics/Meetings-Index.md</code>.
+            No meeting notes found under the vault&apos;s Meetings folders.
           </p>
         </div>
       ) : (
