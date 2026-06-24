@@ -27,6 +27,10 @@ export function parseMeetingNote(content: string, path = ""): MeetingNote {
     ...meta.attendees,
   ]);
   const customer = parseCustomerLink(frontmatter.raw.customer);
+  // "About" accounts (📎) and the teams (🏢) involved. Lets an internal meeting
+  // be recognized as internal while still recording the customer(s) it concerns.
+  const relatedAccounts = meta.relatedAccounts;
+  const teams = meta.teams;
   const series = asString(frontmatter.raw.series);
   const topic =
     asString(frontmatter.raw.topic) ??
@@ -52,6 +56,8 @@ export function parseMeetingNote(content: string, path = ""): MeetingNote {
     date,
     customer,
     attendees,
+    relatedAccounts,
+    teams,
     series,
     topic,
     granolaId,
@@ -260,9 +266,16 @@ function extractMetaTopic(
 function parseEmojiMeta(
   allLines: string[],
   bodyStart: number,
-): { attendees: string[]; topic?: string } {
+): { attendees: string[]; topic?: string; relatedAccounts: string[]; teams: string[] } {
   const META = /(🗓️|🗓|🏢|📍|📎|👥)\s*([^🗓🏢📍📎👥]*)/gu;
+  const splitNames = (text: string) =>
+    text
+      .split(/[,;]/)
+      .map((s) => s.replace(/\([^)]*\)/g, "").trim()) // drop "(title)"/"(secondary)"
+      .filter(Boolean);
   let attendees: string[] = [];
+  let relatedAccounts: string[] = [];
+  let teams: string[] = [];
   let topic: string | undefined;
   for (let i = bodyStart; i < allLines.length; i++) {
     if (/^##\s+/.test(allLines[i])) break;
@@ -272,17 +285,14 @@ function parseEmojiMeta(
     while ((m = META.exec(line))) {
       const tag = m[1];
       const text = m[2].replace(/[️]/g, "").trim(); // drop stray variation selector
-      if (tag === "👥" && text) {
-        attendees = text
-          .split(/[,;]/)
-          .map((s) => s.replace(/\([^)]*\)/g, "").trim())
-          .filter(Boolean);
-      } else if (tag === "📍" && text && !topic) {
-        topic = text;
-      }
+      if (tag === "👥" && text) attendees = splitNames(text);
+      else if (tag === "📎" && text) relatedAccounts = splitNames(text); // entity/customer it is about
+      else if (tag === "🏢" && text)
+        teams = text.split(/[/,;]/).map((s) => s.trim()).filter(Boolean); // teams/companies involved
+      else if (tag === "📍" && text && !topic) topic = text;
     }
   }
-  return { attendees, topic };
+  return { attendees, topic, relatedAccounts, teams };
 }
 
 function dedupNames(names: string[]): string[] {

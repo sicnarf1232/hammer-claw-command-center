@@ -23,6 +23,10 @@ describe("meeting note parser — Granola emoji meta line (attendees/topic)", ()
   it("reads the topic from the 📍 segment", () => {
     expect(note.topic).toBe("Sample Build Strategy / PCN & Kit Transfer");
   });
+  it("captures the 📎 'about' accounts (incl. secondary) and 🏢 teams", () => {
+    expect(note.relatedAccounts).toEqual(["Microvention", "Penumbra"]);
+    expect(note.teams).toEqual(["Merit OEM", "Merit Tijuana MX"]);
+  });
 });
 
 describe("meeting note parser — emoji-decorated headings", () => {

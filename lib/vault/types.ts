@@ -85,6 +85,8 @@ export interface MeetingNote {
   date?: string;
   customer?: Wikilink;
   attendees: string[];
+  relatedAccounts?: string[]; // 📎 entities the meeting is ABOUT (incl. secondary)
+  teams?: string[]; // 🏢 teams/companies involved (often internal Merit teams)
   series?: string;
   topic?: string;
   granolaId?: string;

@@ -295,6 +295,33 @@ async function MeetingDetail({ path }: { path: string }) {
             <span className="font-semibold text-fg">Topic:</span> {note.topic}
           </p>
         )}
+        {note.relatedAccounts && note.relatedAccounts.length > 0 && (
+          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-ink2">
+            <span className="font-semibold text-fg">About:</span>
+            {note.relatedAccounts.map((name) => {
+              const a = accounts.find(
+                (x) =>
+                  x.name.toLowerCase().includes(name.toLowerCase()) ||
+                  name.toLowerCase().includes(x.name.toLowerCase()),
+              );
+              return a ? (
+                <Link key={name} href={`/accounts/${a.slug}`} className="chip hover:underline" style={{ borderColor: "var(--line-2)" }}>
+                  {name} ✓
+                </Link>
+              ) : (
+                <span key={name} className="chip" style={{ borderColor: "var(--line-2)" }}>{name}</span>
+              );
+            })}
+          </p>
+        )}
+        {note.teams && note.teams.length > 0 && (
+          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-ink2">
+            <span className="font-semibold text-fg">Teams:</span>
+            {note.teams.map((t) => (
+              <span key={t} className="chip" style={{ borderColor: "var(--line-2)" }}>{t}</span>
+            ))}
+          </p>
+        )}
 
         {effectiveAttendees.length > 0 && (
           <div className="mt-5">
