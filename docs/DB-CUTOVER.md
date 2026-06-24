@@ -173,6 +173,32 @@ must run with no live vault dependency. Writes go to the DB; the vault is writte
 only by the explicit export, gated by `VAULT_MODE`." Keep the workstream-identity
 and no-em-dash rules. I'll make this edit when stage 3 lands, not before.
 
+## Email linkage (added 2026-06-24)
+
+Two more tables back "email actions from tasks" (built after the seed): `emails`
+(authoritative copy, seeded from `email_queue` + the live pipeline; keeps
+`bodyText` so the AI can use the thread as drafting context) and `task_emails`
+(many-to-many task ↔ email link). Migration `drizzle/0003`.
+
+## How to run the cutover (operator steps)
+
+Stage 1 (seed) is ready. Run in order:
+
+1. **Provision Postgres.** Vercel dashboard → Storage → Create Database →
+   Postgres (Neon). It sets `POSTGRES_URL` in the project env automatically.
+2. **Create the tables.** Either `vercel env pull .env.local` then `npm run
+   db:push` locally, or run the generated SQL (`drizzle/0002`, `0003`) in the
+   Neon query editor. (`db:push` reads `lib/db/schema.ts`.)
+3. **Redeploy** so the running app sees `POSTGRES_URL`.
+4. **Dry run (no writes).** Open `https://<app>/api/cutover/dry-run`. Review
+   `counts`, `aliasMerges`, `needsReview`, and `unresolvedNames` — the who-is-who
+   confirmations. Nothing is authoritative yet.
+5. **Seed.** `POST https://<app>/api/cutover/apply` with body `{"confirm":true}`
+   (e.g. from the browser console or curl with the app's auth cookie). It reloads
+   only the cutover tables; re-runnable.
+6. Tell me it's seeded — I verify the apply against the live data and proceed to
+   Stage 2 (dual-read).
+
 ## Needs Jordan
 
 - Set **`POSTGRES_URL`** (Vercel Postgres / Neon) so the schema + seed can run.

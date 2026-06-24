@@ -288,6 +288,48 @@ export const tasks = pgTable(
   }),
 );
 
+// Emails as a first-class entity (authoritative copy; seeded from email_queue
+// and the live pipeline). bodyText is kept so the AI can use the thread as
+// context when drafting a reply from a linked task.
+export const emails = pgTable(
+  "emails",
+  {
+    id: serial("id").primaryKey(),
+    messageId: text("message_id"), // Outlook internet message id (reply key)
+    threadId: text("thread_id"), // conversation id when available
+    direction: text("direction").notNull().default("inbound"), // inbound | outbound
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    fromName: text("from_name"),
+    fromEmail: text("from_email"),
+    toAddrs: jsonb("to_addrs").$type<string[]>().default([]),
+    cc: jsonb("cc").$type<string[]>().default([]),
+    subject: text("subject"),
+    bodyPreview: text("body_preview"),
+    bodyText: text("body_text"), // for AI drafting context
+    webLink: text("web_link"),
+    accountId: integer("account_id").references(() => accounts.id),
+    personId: integer("person_id").references(() => people.id), // resolved sender
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    messageIdIdx: index("emails_message_id_idx").on(t.messageId),
+    threadIdx: index("emails_thread_idx").on(t.threadId),
+  }),
+);
+
+// Many-to-many task <-> email link: a task can reference several emails and an
+// email can spawn/relate to several tasks. Drives "reply from a task with the
+// thread as AI context" and "create task from email".
+export const taskEmails = pgTable(
+  "task_emails",
+  {
+    taskId: integer("task_id").notNull().references(() => tasks.id),
+    emailId: integer("email_id").notNull().references(() => emails.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ pk: uniqueIndex("task_emails_pk").on(t.taskId, t.emailId) }),
+);
+
 // Key-value for sync bookkeeping (last sync time, etc.).
 export const appMeta = pgTable("app_meta", {
   key: text("key").primaryKey(),
