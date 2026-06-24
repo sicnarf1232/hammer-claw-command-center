@@ -45,6 +45,10 @@ import { appTimezone, todayISO } from "@/lib/dates";
 const MEETINGS_INDEX_PATH = "100 Periodics/Meetings-Index.md";
 // Safety bound on a single pull (first pull on an empty index could be large).
 const MAX_PER_PULL = 50;
+// Re-scan this many days before the newest indexed day on every pull, so
+// intra-day and late-finalized Granola notes are not stranded. Basename dedup
+// makes re-listing already-filed days a no-op.
+const OVERLAP_DAYS = 4;
 // Soft wall-clock budget per request. Serverless has a hard cap (60s on Vercel
 // Hobby), so we stop starting new meetings well before it and return partial
 // progress with `truncated: true`. The user (or cron) just runs it again.
@@ -94,13 +98,13 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   }
   const startedAt = Date.now();
 
-  // 1) Determine the pull window from the newest date already in the index.
-  // The window is EXCLUSIVE of the newest indexed day: we only fetch notes
-  // created on a later day. This makes re-pulls safe, the app never re-fetches
-  // a day it has already filed, so it cannot recreate duplicates even when an
-  // existing note (e.g. one filed by another tool) carries a different title or
-  // id. The trade-off is no intra-day incremental pull, which fits the daily
-  // end-of-day workflow. (Granola created_at approximates the meeting day.)
+  // 1) Determine the pull window. We re-scan a rolling overlap of recent days
+  // (starting OVERLAP_DAYS before the newest indexed day) rather than jumping
+  // past it. This is what makes intra-day re-pulls work: a meeting created later
+  // the same day (or a note Granola finalizes hours/days late) is re-listed and
+  // filed, instead of being stranded behind an exclusive day cursor. Re-listing
+  // is safe because filing dedupes by basename (date + title) below, so an
+  // already-filed meeting is skipped, never duplicated.
   const indexFile = await getFile(MEETINGS_INDEX_PATH);
   const indexRows = indexFile ? parseMeetingsIndex(indexFile.content) : [];
   const newestDate = indexRows.reduce(
@@ -108,7 +112,7 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
     "",
   );
   const createdAfter = newestDate
-    ? isoStartOfDayAfter(newestDate)
+    ? isoStartOfDay(newestDate, OVERLAP_DAYS)
     : isoDaysAgo(30);
 
   // 2) List candidates, oldest first so the index ends up newest-first.
@@ -454,10 +458,9 @@ function isoDaysAgo(days: number): string {
   return new Date(ms).toISOString();
 }
 
-// Start of the day AFTER the given ISO date (UTC). Add an hour cushion so a
-// late-evening meeting in Mountain Time (which lands on the next UTC day) on the
-// newest indexed day is still treated as already covered, not re-pulled.
-function isoStartOfDayAfter(isoDate: string): string {
-  const ms = Date.parse(`${isoDate}T00:00:00Z`) + 24 * 3600000 + 7 * 3600000;
+// Start of (isoDate minus backDays), UTC. Used as an inclusive, overlapping
+// lower bound for the pull window so recent days are re-scanned.
+function isoStartOfDay(isoDate: string, backDays = 0): string {
+  const ms = Date.parse(`${isoDate}T00:00:00Z`) - backDays * 86400000;
   return new Date(ms).toISOString();
 }
