@@ -6,6 +6,25 @@ import { parseMeetingNote, parseMeetingsIndex } from "./meetings";
 const fx = (name: string) =>
   readFileSync(join(__dirname, "__fixtures__", name), "utf8");
 
+describe("meeting note parser — Granola emoji meta line (attendees/topic)", () => {
+  const note = parseMeetingNote(
+    `---\ntype: Internal Meeting\ndate: 2026-06-24\nworkstream: merit\n---\n\n# 📝 Urgent: Microvention Kits\n\n🗓 06|24|26 🏢 Merit OEM / Merit Tijuana MX 📍 Sample Build Strategy / PCN & Kit Transfer 📎 Microvention (customer); Penumbra (secondary) 👥 Jordan Francis (OEM Business Dev Manager), Ben Skousen (Director OEM Eng), Haley Nelson (OEM PCN Project Manager), Nima Moazeni PhD (Director Global Extrusion Dev), Scott Taylor (OEM Engineer)\n\n## 📝 Notes\nbody\n`,
+    "300 Merit/Meetings/Microvention/2026-06-24 - Urgent Microvention Kits.md",
+  );
+  it("pulls every attendee from the 👥 line, titles stripped", () => {
+    expect(note.attendees).toEqual([
+      "Jordan Francis",
+      "Ben Skousen",
+      "Haley Nelson",
+      "Nima Moazeni PhD",
+      "Scott Taylor",
+    ]);
+  });
+  it("reads the topic from the 📍 segment", () => {
+    expect(note.topic).toBe("Sample Build Strategy / PCN & Kit Transfer");
+  });
+});
+
 describe("meeting note parser — emoji-decorated headings", () => {
   const note = parseMeetingNote(
     `---\ntype: Internal Meeting\ndate: 2026-04-20\nattendees: [Jordan Francis, Mike]\nworkstream: merit\n---\n\n# New Sales Ops Role Offer\n\n## 📌 TL;DR\nNew role offered.\n\n## ✅ Action Items\n- [ ] **Jordan: Decide on role** — ASAP\n  [due:: 2026-04-25] [priority:: high]\n\n## 🎯 Key Decisions\n- Reports to leadership\n`,

@@ -18,11 +18,20 @@ export function parseMeetingNote(content: string, path = ""): MeetingNote {
 
   const sections = splitBodySections(allLines, bodyStart);
 
-  const attendees = toStringArray(frontmatter.raw.attendees);
+  // Granola's template puts attendees on a "👥 ..." body line (with titles in
+  // parens), and the topic on a "📍 ..." segment, not in frontmatter. Read both
+  // and merge with any frontmatter attendees.
+  const meta = parseEmojiMeta(allLines, bodyStart);
+  const attendees = dedupNames([
+    ...toStringArray(frontmatter.raw.attendees),
+    ...meta.attendees,
+  ]);
   const customer = parseCustomerLink(frontmatter.raw.customer);
   const series = asString(frontmatter.raw.series);
   const topic =
-    asString(frontmatter.raw.topic) ?? extractMetaTopic(allLines, bodyStart);
+    asString(frontmatter.raw.topic) ??
+    extractMetaTopic(allLines, bodyStart) ??
+    meta.topic;
   const granolaId = asString(frontmatter.raw.granola_id);
   const date = frontmatter.date ?? asString(frontmatter.raw.date);
   const title = firstHeading(allLines, bodyStart) ?? basenameOf(path).replace(/\.md$/, "");
@@ -243,6 +252,49 @@ function extractMetaTopic(
     if (m) return m[1].trim();
   }
   return undefined;
+}
+
+// Parse Granola's emoji meta line(s) between the H1 and the first H2:
+// "🗓 .. 🏢 .. 📍 <topic> 📎 .. 👥 <Name (title), Name (title), ...>".
+// Returns the attendees (titles stripped) and the topic (📍 segment).
+function parseEmojiMeta(
+  allLines: string[],
+  bodyStart: number,
+): { attendees: string[]; topic?: string } {
+  const META = /(🗓️|🗓|🏢|📍|📎|👥)\s*([^🗓🏢📍📎👥]*)/gu;
+  let attendees: string[] = [];
+  let topic: string | undefined;
+  for (let i = bodyStart; i < allLines.length; i++) {
+    if (/^##\s+/.test(allLines[i])) break;
+    const line = allLines[i];
+    if (!/[🗓🏢📍📎👥]/u.test(line)) continue;
+    let m: RegExpExecArray | null;
+    while ((m = META.exec(line))) {
+      const tag = m[1];
+      const text = m[2].replace(/[️]/g, "").trim(); // drop stray variation selector
+      if (tag === "👥" && text) {
+        attendees = text
+          .split(/[,;]/)
+          .map((s) => s.replace(/\([^)]*\)/g, "").trim())
+          .filter(Boolean);
+      } else if (tag === "📍" && text && !topic) {
+        topic = text;
+      }
+    }
+  }
+  return { attendees, topic };
+}
+
+function dedupNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const n of names) {
+    const key = n.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(n.trim());
+  }
+  return out;
 }
 
 function firstHeading(allLines: string[], from: number): string | undefined {
