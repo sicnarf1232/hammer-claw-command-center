@@ -1,23 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-// Phase D: share a meeting note (or series) as a branded Film Room PDF, or copy
-// a clean HTML version for pasting into an email body. PDF is the primary path.
+// Phase 3: share a meeting note (or series) as a branded PDF, or copy a clean,
+// client-branded HTML version for pasting into an email body. The HTML and the
+// PDF both come from the one shared template (no drift). The email HTML is
+// prefetched on mount so the clipboard write stays inside the click gesture.
 export default function MeetingShareButtons({
   path,
   seriesPath,
   filename,
-  emailHtml,
 }: {
   path?: string;
   seriesPath?: string;
   filename: string;
-  emailHtml: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const htmlRef = useRef<string | null>(null);
+
+  const targetBody = JSON.stringify(seriesPath ? { seriesPath } : { path });
+
+  // Prefetch the rendered email HTML so "Copy" can write synchronously.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/meetings/share-html", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: targetBody,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.html) htmlRef.current = data.html as string;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [targetBody]);
 
   async function downloadPdf() {
     setBusy(true);
@@ -26,7 +47,7 @@ export default function MeetingShareButtons({
       const res = await fetch("/api/meetings/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(seriesPath ? { seriesPath } : { path }),
+        body: targetBody,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -51,14 +72,32 @@ export default function MeetingShareButtons({
 
   async function copyForEmail() {
     setErr(null);
-    const plain = emailHtml.replace(/<[^>]+>/g, "").replace(/\n{2,}/g, "\n").trim();
+    let html = htmlRef.current;
+    if (!html) {
+      // Not prefetched yet (slow network): fetch now, best effort.
+      try {
+        const res = await fetch("/api/meetings/share-html", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: targetBody,
+        });
+        const data = res.ok ? await res.json() : null;
+        html = data?.html ?? null;
+        if (html) htmlRef.current = html;
+      } catch {
+        /* fall through to error below */
+      }
+    }
+    if (!html) {
+      setErr("Could not prepare the email. Try the PDF instead.");
+      return;
+    }
+    const plain = html.replace(/<[^>]+>/g, "").replace(/\n{2,}/g, "\n").trim();
     try {
-      // Rich copy (text/html) so pasting into an email keeps the formatting;
-      // fall back to plain text if ClipboardItem is unavailable or blocked.
       try {
         await navigator.clipboard.write([
           new ClipboardItem({
-            "text/html": new Blob([emailHtml], { type: "text/html" }),
+            "text/html": new Blob([html], { type: "text/html" }),
             "text/plain": new Blob([plain], { type: "text/plain" }),
           }),
         ]);
@@ -79,7 +118,7 @@ export default function MeetingShareButtons({
           onClick={downloadPdf}
           disabled={busy}
           className="btn btn-primary px-3 py-1 text-xs disabled:opacity-60"
-          title="Download a branded Film Room PDF"
+          title="Download a branded PDF"
         >
           {busy ? "Building PDF…" : "Download PDF"}
         </button>

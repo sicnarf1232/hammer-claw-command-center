@@ -2,6 +2,14 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 3 PART A step 1: one shared meeting/series template (2026-06-24)
+
+- New `lib/meetingTemplate.tsx`: ONE themed document (`DocModel` content + `DocTheme` tokens + the `MeetingDoc` component) renders the in-app meeting/series detail AND the Copy-for-email export, so they cannot drift. Sections: brand eyebrow (`MERIT MEDICAL OEM · MEETING/ROLLING NOTES`, replacing the old "FILM ROOM" eyebrow), title, meta, team-colored people chips (with rolling N× on series), stat cards, brand-tinted TL;DR callout with a brand left-border, action-item cards (Jordan's checkable + synced via source line; other owners tracking-only with a due pill), collapsible closed actions, decision/number/watch sections, full-notes, footer with the brand line + logo slot.
+- Two-layer branding: the in-app view uses the APP semantic tokens (`appDocTheme`, so dark mode + the palette keep working); exports use the resolved CLIENT brand (`clientDocTheme(resolveBrandKit(workstream))`, fallback APP_NEUTRAL) themed via `brandToCssVars` as `var(--brand-x, #literal)` so it colors even in mail clients that strip custom properties. The rest of the app UI is untouched.
+- Decision: Next's App Router bans `react-dom/server` anywhere in its build graph, so the export HTML is produced by a tiny element-tree serializer in `lib/meetingExport.tsx` (the `MeetingDoc` element tree -> string). One template, no `react-dom/server`. The email HTML is served by `POST /api/meetings/share-html` and prefetched by `MeetingShareButtons` so the clipboard write stays in-gesture.
+- `app/meetings/page.tsx` meeting + series detail refactored onto `MeetingDoc` (interactive bits injected via slots: `TaskRow`, `PersonLink`, About links, session links). (+ `lib/meetingTemplate.test.ts`.)
+- Next: step 2 makes the Download PDF render from this same HTML (today `lib/meetingPdf.ts` still uses the separate pdf-lib layout).
+
 ## Cutover Stage 1 apply + series header + parser fix (2026-06-23)
 
 - Cutover: `applySeed` writes the reconciled vault into the DB (idempotent reload of the cutover tables only); `POST /api/cutover/apply` (gated on POSTGRES_URL + confirm). Runs once the DB is provisioned.
