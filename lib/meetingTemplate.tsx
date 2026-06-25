@@ -428,10 +428,12 @@ export function MeetingDoc({
   model,
   theme,
   slots = {},
+  expandClosed = false,
 }: {
   model: DocModel;
   theme: DocTheme;
   slots?: MeetingDocSlots;
+  expandClosed?: boolean; // print/PDF: render closed actions expanded
 }) {
   const t = theme;
   return (
@@ -551,7 +553,7 @@ export function MeetingDoc({
           </div>
         )}
         {model.closedActions.length > 0 && (
-          <details style={{ marginTop: 10 }}>
+          <details style={{ marginTop: 10 }} open={expandClosed || undefined}>
             <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: t.muted }}>
               {model.closedActions.length} closed
             </summary>

@@ -1,6 +1,22 @@
 import React from "react";
-import { MeetingDoc, clientDocTheme, EXPORT_FONT, type DocModel } from "@/lib/meetingTemplate";
-import { type BrandKit, brandStyleAttr } from "@/lib/branding";
+import {
+  MeetingDoc,
+  clientDocTheme,
+  meetingToDoc,
+  seriesToDoc,
+  EXPORT_FONT,
+  type DocModel,
+} from "@/lib/meetingTemplate";
+import { type BrandKit, brandStyleAttr, resolveBrandKit } from "@/lib/branding";
+import {
+  getMeetingNoteByPath,
+  getSeriesByPath,
+  getSeriesView,
+  getRoster,
+} from "@/lib/vault";
+import type { Roster } from "@/lib/vault/types";
+import { listAccounts } from "@/lib/accounts";
+import { workstreamFromPath } from "@/lib/taskView";
 
 // The shared template rendered to an HTML string for Copy-for-email and the PDF
 // (step 2). Next's App Router bans react-dom/server anywhere in its build graph,
@@ -67,8 +83,12 @@ function serialize(node: React.ReactNode): string {
       }
       for (const [k, v] of Object.entries(rest)) {
         if (v == null || v === false) continue;
-        if (typeof v !== "string" && typeof v !== "number") continue;
         const name = ATTR_RENAME[k] ?? k;
+        if (v === true) {
+          attrs += ` ${name}`; // bare boolean attribute, e.g. <details open>
+          continue;
+        }
+        if (typeof v !== "string" && typeof v !== "number") continue;
         attrs += ` ${name}="${escapeAttr(String(v))}"`;
       }
       if (VOID_TAGS.has(type)) return `<${type}${attrs}/>`;
@@ -78,12 +98,63 @@ function serialize(node: React.ReactNode): string {
   return "";
 }
 
+// Load a meeting or series, resolve its client brand by workstream, and render
+// the shared template to HTML. One loader behind both the email-copy route and
+// the print/PDF route, so the email and the PDF cannot drift.
+export async function buildShareHtml(
+  target: { path?: string; seriesPath?: string },
+  opts: { expandClosed?: boolean } = {},
+): Promise<{ html: string; filename: string } | null> {
+  const [accounts, roster] = await Promise.all([
+    listAccounts().catch(() => []),
+    getRoster().catch(() => new Map() as Roster),
+  ]);
+
+  if (target.seriesPath) {
+    const series = await getSeriesByPath(target.seriesPath);
+    if (!series) return null;
+    const view = await getSeriesView(series).catch(() => ({
+      outstanding: [],
+      closed: [],
+      sessions: [],
+      stats: { attendance: [], sessions: 0, actionsOpen: 0, actionsClosed: 0, decisions: 0 },
+    }));
+    const brand = await resolveBrandKit(workstreamFromPath(series.path));
+    const model = seriesToDoc(series, view, {
+      roster,
+      accounts,
+      eyebrowLead: brand.workstreamKey ? brand.name : "Film Room",
+    });
+    return { html: renderShareHtml(model, brand, opts), filename: model.filenameBase };
+  }
+
+  if (target.path) {
+    const note = await getMeetingNoteByPath(target.path);
+    if (!note) return null;
+    const brand = await resolveBrandKit(workstreamFromPath(note.path));
+    const model = meetingToDoc(note, {
+      roster,
+      accounts,
+      eyebrowLead: brand.workstreamKey ? brand.name : "Film Room",
+    });
+    return { html: renderShareHtml(model, brand, opts), filename: model.filenameBase };
+  }
+
+  return null;
+}
+
 // Sets the brand CSS vars on the root via brandStyleAttr so the var() tokens
 // resolve; the literal fallbacks baked into clientDocTheme keep it colored in
 // clients that strip custom properties.
-export function renderShareHtml(model: DocModel, brand: BrandKit): string {
+export function renderShareHtml(
+  model: DocModel,
+  brand: BrandKit,
+  opts: { expandClosed?: boolean } = {},
+): string {
   const theme = clientDocTheme(brand);
-  const inner = serialize(React.createElement(MeetingDoc, { model, theme }));
+  const inner = serialize(
+    React.createElement(MeetingDoc, { model, theme, expandClosed: opts.expandClosed }),
+  );
   return (
     `<div style="${brandStyleAttr(brand)};max-width:680px;margin:0 auto;padding:8px 12px;` +
     `background:#ffffff;font-family:${EXPORT_FONT};font-size:15px;line-height:1.55;color:#1f2733">` +

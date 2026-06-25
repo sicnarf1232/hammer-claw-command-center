@@ -224,7 +224,7 @@ async function MeetingDetail({ path }: { path: string }) {
               Edit
             </Link>
             {note.customer && <SyncContactsButton notePath={path} />}
-            <MeetingShareButtons path={path} filename={appModel.filenameBase} />
+            <MeetingShareButtons path={path} />
           </div>
         </div>
 
@@ -387,7 +387,7 @@ async function SeriesDetail({ path }: { path: string }) {
       <article className="panel texture mx-auto max-w-5xl overflow-hidden p-6 sm:p-9">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BackLink />
-          <MeetingShareButtons seriesPath={path} filename={appModel.filenameBase} />
+          <MeetingShareButtons seriesPath={path} />
         </div>
 
         <div className="mt-5">

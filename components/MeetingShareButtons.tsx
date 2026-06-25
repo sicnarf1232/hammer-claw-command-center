@@ -9,18 +9,18 @@ import { useEffect, useRef, useState } from "react";
 export default function MeetingShareButtons({
   path,
   seriesPath,
-  filename,
 }: {
   path?: string;
   seriesPath?: string;
-  filename: string;
 }) {
-  const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const htmlRef = useRef<string | null>(null);
 
   const targetBody = JSON.stringify(seriesPath ? { seriesPath } : { path });
+  const printQuery = seriesPath
+    ? `series=${encodeURIComponent(seriesPath)}`
+    : `note=${encodeURIComponent(path ?? "")}`;
 
   // Prefetch the rendered email HTML so "Copy" can write synchronously.
   useEffect(() => {
@@ -40,34 +40,13 @@ export default function MeetingShareButtons({
     };
   }, [targetBody]);
 
-  async function downloadPdf() {
-    setBusy(true);
+  function downloadPdf() {
     setErr(null);
-    try {
-      const res = await fetch("/api/meetings/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: targetBody,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setErr(data.error ?? "Could not generate the PDF.");
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${filename}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch {
-      setErr("Network error generating the PDF.");
-    } finally {
-      setBusy(false);
-    }
+    // Open the standalone, client-branded print view of the shared HTML; it
+    // auto-opens the print dialog so you can Save as PDF (same HTML as the email
+    // copy and the in-app view).
+    const win = window.open(`/api/meetings/print?${printQuery}`, "_blank");
+    if (!win) setErr("Allow pop-ups to open the printable PDF view.");
   }
 
   async function copyForEmail() {
@@ -116,11 +95,10 @@ export default function MeetingShareButtons({
       <div className="flex items-center gap-2">
         <button
           onClick={downloadPdf}
-          disabled={busy}
-          className="btn btn-primary px-3 py-1 text-xs disabled:opacity-60"
-          title="Download a branded PDF"
+          className="btn btn-primary px-3 py-1 text-xs"
+          title="Open a branded print view, then Save as PDF"
         >
-          {busy ? "Building PDF…" : "Download PDF"}
+          Download PDF
         </button>
         <button
           onClick={copyForEmail}

@@ -105,6 +105,14 @@ describe("renderShareHtml", () => {
     expect(html).toContain("&lt;discussion&gt;");
     expect(html).toContain("&amp; systems");
     expect(html).toContain("needs due date");
+    // Closed actions stay collapsed for email.
+    expect(html).toContain("<details");
+    expect(html).not.toMatch(/<details[^>]*\bopen\b/);
+  });
+
+  it("expands closed actions for print/PDF", () => {
+    const html = renderShareHtml(meetingDoc(), MERIT, { expandClosed: true });
+    expect(html).toMatch(/<details[^>]*\bopen\b/);
   });
 });
 

@@ -2,6 +2,11 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 3 PART A step 2: Download PDF from the shared HTML (2026-06-24)
+
+- The Download PDF button now opens `GET /api/meetings/print?note=|series=`: a standalone, app-chrome-free HTML document of the SAME shared template (client-branded), with `print-color-adjust: exact` and an auto-`window.print()`, so you Save as PDF. The PDF is literally the shared HTML, so it cannot drift from the in-app view or the email copy.
+- Decision: no headless Chromium (heavy + fragile on Hobby) and no separate pdf-lib layout. Retired `lib/meetingPdf.ts`, `lib/meetingShare.ts`, `POST /api/meetings/pdf`, and their tests (pdf-lib stays for quotes). One loader `buildShareHtml()` now backs both the email-copy route and the print route. Closed actions render expanded (`<details open>`) in print.
+
 ## Phase 3 PART A step 1: one shared meeting/series template (2026-06-24)
 
 - New `lib/meetingTemplate.tsx`: ONE themed document (`DocModel` content + `DocTheme` tokens + the `MeetingDoc` component) renders the in-app meeting/series detail AND the Copy-for-email export, so they cannot drift. Sections: brand eyebrow (`MERIT MEDICAL OEM · MEETING/ROLLING NOTES`, replacing the old "FILM ROOM" eyebrow), title, meta, team-colored people chips (with rolling N× on series), stat cards, brand-tinted TL;DR callout with a brand left-border, action-item cards (Jordan's checkable + synced via source line; other owners tracking-only with a due pill), collapsible closed actions, decision/number/watch sections, full-notes, footer with the brand line + logo slot.
