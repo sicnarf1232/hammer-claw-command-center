@@ -2,6 +2,12 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 3 PART B: Branding settings page + Merit seed (2026-06-24)
+
+- New `/branding` page + `POST/GET /api/branding`: list kits, create/edit a kit (name, workstream, primary/secondary/accent color pickers with hex inputs, logo upload), with a live export preview that mirrors the PDF/email look. `listBrandKits()` + `upsertBrandKit()` (upsert by id, else by the unique workstreamKey). Added to the left nav.
+- Logo storage: pushed to Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set, else stored inline as a data URL in `brand_kits.logo_url` (the page tells you which). Decision unchanged from the punchlist.
+- `ensureMeritSeed()` runs on page load so the Merit kit exists to edit; set the crimson palette + upload the Merit logo there and the exports pick it up by workstream. Needs `POSTGRES_URL` (the page shows a setup notice until then).
+
 ## Phase 3 PART A step 2: Download PDF from the shared HTML (2026-06-24)
 
 - The Download PDF button now opens `GET /api/meetings/print?note=|series=`: a standalone, app-chrome-free HTML document of the SAME shared template (client-branded), with `print-color-adjust: exact` and an auto-`window.print()`, so you Save as PDF. The PDF is literally the shared HTML, so it cannot drift from the in-app view or the email copy.

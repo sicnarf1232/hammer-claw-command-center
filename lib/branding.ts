@@ -93,6 +93,83 @@ export async function resolveBrandKit(
   }
 }
 
+function rowToKit(r: {
+  id: number;
+  name: string;
+  workstreamKey: string | null;
+  primary: string;
+  secondary: string;
+  accent: string;
+  logoUrl: string | null;
+}): BrandKit {
+  return {
+    id: r.id,
+    name: r.name,
+    workstreamKey: r.workstreamKey,
+    primary: r.primary,
+    secondary: r.secondary,
+    accent: r.accent,
+    logoUrl: r.logoUrl,
+  };
+}
+
+// All saved kits, for the Branding settings page. Empty when no DB.
+export async function listBrandKits(): Promise<BrandKit[]> {
+  if (!dbConfigured()) return [];
+  const rows = await getDb().select().from(brandKits).orderBy(brandKits.name);
+  return rows.map(rowToKit);
+}
+
+// Whether brand logos are stored in Vercel Blob (hosted URL) vs. inline data URL.
+export function brandLogoStorageEnabled(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
+
+export interface BrandKitInput {
+  id?: number;
+  name: string;
+  workstreamKey: string | null;
+  primary: string;
+  secondary: string;
+  accent: string;
+  logoUrl: string | null;
+}
+
+// Create or update a kit. Updates by id, else by its (unique) workstreamKey, so
+// re-saving a workstream's kit never trips the unique index. Server-only.
+export async function upsertBrandKit(input: BrandKitInput): Promise<BrandKit> {
+  const db = getDb();
+  let existingId = input.id;
+  if (!existingId && input.workstreamKey) {
+    const rows = await db
+      .select({ id: brandKits.id })
+      .from(brandKits)
+      .where(eq(brandKits.workstreamKey, input.workstreamKey))
+      .limit(1);
+    if (rows[0]) existingId = rows[0].id;
+  }
+
+  const values = {
+    name: input.name.trim(),
+    workstreamKey: input.workstreamKey,
+    primary: input.primary,
+    secondary: input.secondary,
+    accent: input.accent,
+    logoUrl: input.logoUrl,
+  };
+
+  if (existingId) {
+    const [row] = await db
+      .update(brandKits)
+      .set({ ...values, updatedAt: new Date() })
+      .where(eq(brandKits.id, existingId))
+      .returning();
+    return rowToKit(row);
+  }
+  const [row] = await db.insert(brandKits).values(values).returning();
+  return rowToKit(row);
+}
+
 // Insert the Merit placeholder kit if no kit exists for "merit". Server-only.
 export async function ensureMeritSeed(): Promise<void> {
   if (!dbConfigured()) return;

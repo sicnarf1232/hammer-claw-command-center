@@ -55,6 +55,13 @@ export const ActivityIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const BrandIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2.5-2.5c0-.6-.2-1.1-.6-1.5-.3-.4-.5-.8-.5-1.3a1.5 1.5 0 0 1 1.5-1.5H17a5 5 0 0 0 5-5c0-4.4-4.5-8-10-8Z" />
+    <path d="M7.5 11.5h.01M11 7.5h.01M15.5 8.5h.01" />
+  </Svg>
+);
+
 export const SunIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="4" />

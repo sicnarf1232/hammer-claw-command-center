@@ -254,8 +254,15 @@ vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
 - [ ] VERIFY LIVE: upload a PDF on /library, confirm it lists, opens from Blob,
       and that the brain (/ask) can answer a question from its text.
 
-## Branding logos (Phase 3 PART B) — decision needed
-- [ ] Logo storage for brand kits: prefer Vercel Blob (`BLOB_READ_WRITE_TOKEN`).
-      If Blob is not set up, the Branding upload falls back to storing a data URL
-      directly in `brand_kits.logo_url` (works, but bloats the row). Wire Blob to
-      switch from data URL to a hosted URL.
+## Branding (Phase 3 PART B) — BUILT 2026-06-24, needs POSTGRES_URL to use
+- [x] `/branding` page + `/api/branding` shipped: list/create/edit kits (name,
+      workstream, primary/secondary/accent pickers, logo upload, live export
+      preview). `ensureMeritSeed()` auto-creates the Merit kit to edit.
+- [ ] PROVISION: the page needs `POSTGRES_URL` (same Neon DB as the cutover). It
+      shows a setup notice until then. Once the DB is live, open `/branding`, set
+      the Merit crimson palette, upload the Merit logo, and the meeting exports
+      (Download PDF + Copy-for-email) pick it up by workstream. (The in-app view
+      stays on the app theme by design.)
+- [ ] Logo storage: pushed to Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set,
+      else stored inline as a data URL in `brand_kits.logo_url` (works, heavier
+      row). Provision a Blob store to switch to hosted URLs.

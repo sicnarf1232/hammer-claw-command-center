@@ -13,6 +13,7 @@ import {
   ActivityIcon,
   SparkIcon,
   LibraryIcon,
+  BrandIcon,
   type IconProps,
 } from "./icons";
 import ThemeToggle from "./ThemeToggle";
@@ -28,6 +29,7 @@ const ITEMS: { href: string; label: string; Icon: ComponentType<IconProps> }[] =
     { href: "/meetings", label: "Meetings", Icon: MeetingsIcon },
     { href: "/library", label: "Library", Icon: LibraryIcon },
     { href: "/quote", label: "Quote", Icon: QuoteIcon },
+    { href: "/branding", label: "Branding", Icon: BrandIcon },
     { href: "/notifications", label: "Activity", Icon: ActivityIcon },
   ];
 
