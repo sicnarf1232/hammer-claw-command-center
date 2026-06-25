@@ -1,5 +1,5 @@
--- Cutover table setup: paste this whole file into the Neon SQL editor and Run.
--- Idempotent for tables/indexes; creates the DB-cutover tables.
+-- Cutover + branding table setup: paste into the Neon SQL editor and Run.
+-- Idempotent for tables/indexes.
 
 CREATE TABLE IF NOT EXISTS "accounts" (
 	"id" serial PRIMARY KEY NOT NULL,
@@ -143,3 +143,17 @@ ALTER TABLE "task_emails" ADD CONSTRAINT "task_emails_email_id_emails_id_fk" FOR
 CREATE INDEX IF NOT EXISTS "emails_message_id_idx" ON "emails" USING btree ("message_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "emails_thread_idx" ON "emails" USING btree ("thread_id");--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "task_emails_pk" ON "task_emails" USING btree ("task_id","email_id");
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "brand_kits" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"workstream_key" text,
+	"primary" text NOT NULL,
+	"secondary" text NOT NULL,
+	"accent" text NOT NULL,
+	"logo_url" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "brand_kits_workstream_ux" ON "brand_kits" USING btree ("workstream_key");

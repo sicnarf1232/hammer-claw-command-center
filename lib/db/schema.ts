@@ -330,6 +330,26 @@ export const taskEmails = pgTable(
   (t) => ({ pk: uniqueIndex("task_emails_pk").on(t.taskId, t.emailId) }),
 );
 
+// User-managed brand kits (Phase 3 PART B). The shared exports (PDF, email HTML)
+// are CLIENT-branded; a meeting resolves its kit by workstream. One row per
+// workstream (workstreamKey unique, nullable for ad-hoc kits). logoUrl points to
+// Blob (or a data URL fallback).
+export const brandKits = pgTable(
+  "brand_kits",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    workstreamKey: text("workstream_key"), // "merit" | "sloan" | "personal" | null
+    primary: text("primary").notNull(),
+    secondary: text("secondary").notNull(),
+    accent: text("accent").notNull(),
+    logoUrl: text("logo_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ wsUx: uniqueIndex("brand_kits_workstream_ux").on(t.workstreamKey) }),
+);
+
 // Key-value for sync bookkeeping (last sync time, etc.).
 export const appMeta = pgTable("app_meta", {
   key: text("key").primaryKey(),

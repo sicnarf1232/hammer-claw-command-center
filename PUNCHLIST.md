@@ -253,3 +253,9 @@ vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
       so the `documents` table exists in Postgres.
 - [ ] VERIFY LIVE: upload a PDF on /library, confirm it lists, opens from Blob,
       and that the brain (/ask) can answer a question from its text.
+
+## Branding logos (Phase 3 PART B) — decision needed
+- [ ] Logo storage for brand kits: prefer Vercel Blob (`BLOB_READ_WRITE_TOKEN`).
+      If Blob is not set up, the Branding upload falls back to storing a data URL
+      directly in `brand_kits.logo_url` (works, but bloats the row). Wire Blob to
+      switch from data URL to a hosted URL.
