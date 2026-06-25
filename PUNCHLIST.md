@@ -258,11 +258,20 @@ vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
 - [x] `/branding` page + `/api/branding` shipped: list/create/edit kits (name,
       workstream, primary/secondary/accent pickers, logo upload, live export
       preview). `ensureMeritSeed()` auto-creates the Merit kit to edit.
+- [ ] RE-RUN SQL FOR THE PAPER COLUMN: `brand_kits` now has a `paper` column.
+      Re-run `drizzle/brand-kits.sql` in the Neon SQL editor (idempotent; the
+      `ALTER TABLE ... ADD COLUMN IF NOT EXISTS "paper"` adds it to your existing
+      table). Until then `/branding` shows the "run brand-kits.sql" notice.
 - [ ] PROVISION: the page needs `POSTGRES_URL` (same Neon DB as the cutover). It
       shows a setup notice until then. Once the DB is live, open `/branding`, set
-      the Merit crimson palette, upload the Merit logo, and the meeting exports
-      (Download PDF + Copy-for-email) pick it up by workstream. (The in-app view
-      stays on the app theme by design.)
+      the Merit crimson palette + paper, upload the Merit logo, and ALL THREE views
+      (in-app note, Download PDF, Copy-for-email) pick it up by workstream.
+- [ ] PDF DEPLOY CHECK: the Download PDF route renders headless Chromium
+      (@sparticuz/chromium + puppeteer-core) on Vercel. After this deploys, click
+      Download PDF on a meeting and confirm a file downloads. If Vercel rejects the
+      function size on Hobby or it errors, the button auto-falls back to the print
+      view; tell me and I will switch to chromium-min (remote binary) or a hosted
+      renderer.
 - [ ] Logo storage: pushed to Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set,
       else stored inline as a data URL in `brand_kits.logo_url` (works, heavier
       row). Provision a Blob store to switch to hosted URLs.

@@ -34,7 +34,8 @@ export default async function BrandingPage() {
     kits = await listBrandKits();
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
-    if (/brand_kits/i.test(m)) tableMissing = true;
+    // Missing table OR the newer "paper" column both surface as "does not exist".
+    if (/does not exist/i.test(m) || /brand_kits/i.test(m)) tableMissing = true;
   }
 
   if (tableMissing) {
@@ -45,11 +46,11 @@ export default async function BrandingPage() {
           className="card p-5 text-sm"
           style={{ borderColor: "var(--due)", color: "var(--due-ink)" }}
         >
-          <p className="font-semibold">The brand_kits table does not exist yet.</p>
+          <p className="font-semibold">The brand_kits table needs to be set up.</p>
           <p className="mt-1">
             Run <code className="font-mono">drizzle/brand-kits.sql</code> in the Neon
-            SQL editor (it is idempotent), then reload this page. That creates just
-            the branding table without the full cutover.
+            SQL editor (it is idempotent, and adds the new paper column), then reload
+            this page. That sets up just the branding table without the full cutover.
           </p>
         </div>
       </div>

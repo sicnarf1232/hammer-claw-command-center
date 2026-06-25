@@ -14,6 +14,7 @@ export default function MeetingShareButtons({
   seriesPath?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const htmlRef = useRef<string | null>(null);
 
@@ -21,6 +22,11 @@ export default function MeetingShareButtons({
   const printQuery = seriesPath
     ? `series=${encodeURIComponent(seriesPath)}`
     : `note=${encodeURIComponent(path ?? "")}`;
+
+  function filenameFromDisposition(cd: string | null): string | null {
+    const m = cd?.match(/filename="?([^"]+)"?/i);
+    return m ? m[1] : null;
+  }
 
   // Prefetch the rendered email HTML so "Copy" can write synchronously.
   useEffect(() => {
@@ -40,13 +46,34 @@ export default function MeetingShareButtons({
     };
   }, [targetBody]);
 
-  function downloadPdf() {
+  async function downloadPdf() {
     setErr(null);
-    // Open the standalone, client-branded print view of the shared HTML; it
-    // auto-opens the print dialog so you can Save as PDF (same HTML as the email
-    // copy and the in-app view).
-    const win = window.open(`/api/meetings/print?${printQuery}`, "_blank");
-    if (!win) setErr("Allow pop-ups to open the printable PDF view.");
+    setBusy(true);
+    try {
+      // Real, auto-downloading PDF rendered server-side from the same shared
+      // HTML (headless Chromium). No print dialog.
+      const res = await fetch(`/api/meetings/pdf?${printQuery}`);
+      if (!res.ok) {
+        setErr("Could not build the PDF. Opening a printable view instead.");
+        window.open(`/api/meetings/print?${printQuery}`, "_blank");
+        return;
+      }
+      const blob = await res.blob();
+      const name = filenameFromDisposition(res.headers.get("content-disposition")) || "meeting-notes.pdf";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErr("Network error building the PDF. Opening a printable view instead.");
+      window.open(`/api/meetings/print?${printQuery}`, "_blank");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function copyForEmail() {
@@ -95,10 +122,11 @@ export default function MeetingShareButtons({
       <div className="flex items-center gap-2">
         <button
           onClick={downloadPdf}
-          className="btn btn-primary px-3 py-1 text-xs"
-          title="Open a branded print view, then Save as PDF"
+          disabled={busy}
+          className="btn btn-primary px-3 py-1 text-xs disabled:opacity-60"
+          title="Download a branded PDF"
         >
-          Download PDF
+          {busy ? "Building PDF…" : "Download PDF"}
         </button>
         <button
           onClick={copyForEmail}

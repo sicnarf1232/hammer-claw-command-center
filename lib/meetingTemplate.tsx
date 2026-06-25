@@ -7,7 +7,7 @@ import { personNameMatches } from "@/lib/vault/people";
 import { needsDueDate } from "@/lib/dates";
 import { initials } from "@/lib/customerHues";
 import { toTaskView, buildAccountLookup, type TaskView } from "@/lib/taskView";
-import { type BrandKit, brandToCssVars } from "@/lib/branding";
+import { type BrandKit, brandToCssVars, paperInk } from "@/lib/branding";
 import type { Account } from "@/lib/vault/types";
 
 // Phase 3 PART A. ONE themed meeting/series template, shared by:
@@ -97,6 +97,7 @@ export interface DocTheme {
   primarySoft: string;
   accentSoft: string;
   border: string;
+  paper: string;
   fg: string;
   ink2: string;
   muted: string;
@@ -112,41 +113,19 @@ export interface DocTheme {
   fontFamily: string;
 }
 
-const EXPORT_FONT =
+export const EXPORT_FONT =
   "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif";
 
-// In-app: read the app's semantic tokens so the meeting view stays on the APP
-// brand and respects light/dark + the saved palette. Never restyle these.
-export function appDocTheme(): DocTheme {
-  return {
-    primary: "var(--accent)",
-    secondary: "var(--fg)",
-    accent: "var(--accent-2, var(--accent))",
-    primarySoft: "var(--accent-soft)",
-    accentSoft: "var(--accent-soft)",
-    border: "var(--line)",
-    fg: "var(--fg)",
-    ink2: "var(--ink-2)",
-    muted: "var(--muted)",
-    surface2: "var(--surface-2)",
-    line: "var(--line)",
-    line2: "var(--line-2)",
-    ok: "var(--ok)",
-    warm: "var(--warm)",
-    warmSoft: "var(--warm-soft)",
-    dueSoft: "var(--due-soft)",
-    dueInk: "var(--due-ink)",
-    logoUrl: null,
-    fontFamily: "inherit",
-  };
-}
-
-// Export: theme the shared HTML with the resolved client brand. Each brand token
-// is `var(--brand-x, #literal)` so it colors even when a mail client strips the
-// custom-property declaration set by brandStyleAttr() on the root.
-export function clientDocTheme(brand: BrandKit): DocTheme {
+// ONE theme, used by all three surfaces (in-app, email, PDF) so the branding is
+// consistent and sticky. Brand colors are `var(--brand-x, #literal)` so they
+// resolve from the CSS vars in-app and survive mail clients that strip custom
+// properties on export; the neutral inks derive from the paper so the document
+// reads well on white, cream, or a dark background.
+export function docTheme(brand: BrandKit): DocTheme {
   const v = brandToCssVars(brand);
   const tok = (name: keyof typeof v) => `var(${name}, ${v[name]})`;
+  const paper = brand.paper || "#ffffff";
+  const ink = paperInk(paper);
   return {
     primary: tok("--brand-primary"),
     secondary: tok("--brand-secondary"),
@@ -154,17 +133,18 @@ export function clientDocTheme(brand: BrandKit): DocTheme {
     primarySoft: tok("--brand-primary-soft"),
     accentSoft: tok("--brand-accent-soft"),
     border: tok("--brand-border"),
-    fg: "#1f2733",
-    ink2: "#374151",
-    muted: "#6b7280",
-    surface2: "#f8fafc",
-    line: "#e6e8ec",
-    line2: "#d6dae0",
-    ok: "#15803d",
-    warm: "#b45309",
-    warmSoft: "#fff7ed",
-    dueSoft: "#fef3c7",
-    dueInk: "#92400e",
+    paper,
+    fg: ink.fg,
+    ink2: ink.ink2,
+    muted: ink.muted,
+    surface2: ink.surface2,
+    line: ink.line,
+    line2: ink.line2,
+    ok: ink.ok,
+    warm: ink.warm,
+    warmSoft: ink.warmSoft,
+    dueSoft: ink.dueSoft,
+    dueInk: ink.dueInk,
     logoUrl: brand.logoUrl,
     fontFamily: EXPORT_FONT,
   };
@@ -439,8 +419,24 @@ export function MeetingDoc({
   expandClosed?: boolean; // print/PDF: render closed actions expanded
 }) {
   const t = theme;
+  // One compact byline instead of stacked rows (date · account · topic), which
+  // wasted vertical space in the email copy.
+  const headerLine = [model.subtitle, ...model.meta.map((m) => m.value)]
+    .map((s) => clean(s ?? ""))
+    .filter(Boolean)
+    .join("  ·  ");
   return (
     <div style={{ fontFamily: t.fontFamily, color: t.fg }}>
+      {t.logoUrl && (
+        <div style={{ marginBottom: 14 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={t.logoUrl}
+            alt=""
+            style={{ height: 36, width: "auto", maxWidth: 220, objectFit: "contain" }}
+          />
+        </div>
+      )}
       <div style={{ ...EYEBROW, color: t.primary }}>{clean(model.eyebrow)}</div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 2px" }}>
@@ -459,19 +455,8 @@ export function MeetingDoc({
           {clean(model.title)}
         </h1>
       </div>
-      {model.subtitle && (
-        <div style={{ color: t.muted, fontSize: 13 }}>{clean(model.subtitle)}</div>
-      )}
-
-      {model.meta.length > 0 && (
-        <div style={{ marginTop: 8, fontSize: 13, color: t.ink2 }}>
-          {model.meta.map((m) => (
-            <div key={m.label}>
-              <span style={{ fontWeight: 600, color: t.fg }}>{clean(m.label)}:</span>{" "}
-              {clean(m.value)}
-            </div>
-          ))}
-        </div>
+      {headerLine && (
+        <div style={{ color: t.muted, fontSize: 13 }}>{headerLine}</div>
       )}
 
       {(model.about.length > 0 || model.teams.length > 0) && (
@@ -861,7 +846,7 @@ function SectionBlock({
   return (
     <section style={{ marginTop: 28 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 12 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: t.warm, fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: t.accent, fontVariantNumeric: "tabular-nums" }}>
           {String(index).padStart(2, "0")}
         </span>
         <span style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: t.secondary }}>
@@ -1020,5 +1005,3 @@ function renderInline(text: string, theme: DocTheme): React.ReactNode {
   if (last < cleaned.length) nodes.push(cleaned.slice(last));
   return nodes;
 }
-
-export { EXPORT_FONT };

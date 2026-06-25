@@ -2,6 +2,15 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 3 polish: brand-in-app, paper colors, auto-download PDF (2026-06-25)
+
+- Branding now reflects in the in-app meeting/series view too: ONE `docTheme(brand)` themes all three surfaces (in-app, email, PDF), so the colors, paper, and logo are sticky and consistent. The note body adopts the brand; the app chrome (toolbar, classifier) stays on the app theme. (Replaced the split appDocTheme/clientDocTheme.)
+- Paper / texture choices: brand kits gain a `paper` background (white, cream, ivory, sand, parchment + dark slate/charcoal/navy). Ink (text, borders, surfaces) auto-derives from the paper's luminance via `paperInk()` so the note reads well on light or dark. New `paper` column on brand_kits (drizzle/brand-kits.sql adds it; ALTER is idempotent).
+- Logo across the top of the document (in all three views), kept also as a footer bookend.
+- Compact email header: date · account · topic collapse into one byline instead of stacked rows, so the copy is far less tall.
+- Auto-download PDF: the Download button now fetches a real PDF rendered server-side from the same shared HTML via headless Chromium (@sparticuz/chromium + puppeteer-core), no print dialog. Falls back to the print view if the PDF route errors. `serverExternalPackages` set so Vercel traces the Chromium binary.
+- Self-review fixes: section index uses the accent color (matches the preview legend); branding setup errors (missing table or paper column) show a clear "run brand-kits.sql" notice.
+
 ## Phase 3 PART B: Branding settings page + Merit seed (2026-06-24)
 
 - New `/branding` page + `POST/GET /api/branding`: list kits, create/edit a kit (name, workstream, primary/secondary/accent color pickers with hex inputs, logo upload), with a live export preview that mirrors the PDF/email look. `listBrandKits()` + `upsertBrandKit()` (upsert by id, else by the unique workstreamKey). Added to the left nav.

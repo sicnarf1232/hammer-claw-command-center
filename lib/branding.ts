@@ -13,6 +13,7 @@ export interface BrandKit {
   primary: string;
   secondary: string;
   accent: string;
+  paper: string; // document background (the "paper"): white, cream, dark, etc.
   logoUrl: string | null;
 }
 
@@ -23,6 +24,7 @@ export const APP_NEUTRAL: BrandKit = {
   primary: "#5145e6",
   secondary: "#1f2937",
   accent: "#5145e6",
+  paper: "#ffffff",
   logoUrl: null,
 };
 
@@ -34,8 +36,22 @@ export const MERIT_PLACEHOLDER: BrandKit = {
   primary: "#9ca3af",
   secondary: "#4b5563",
   accent: "#9ca3af",
+  paper: "#ffffff",
   logoUrl: null,
 };
+
+// Suggested "paper" backgrounds for the note: a few warm light tones and a few
+// dark ones. Offered as presets in the Branding picker.
+export const PAPERS: { name: string; value: string; dark?: boolean }[] = [
+  { name: "White", value: "#ffffff" },
+  { name: "Cream", value: "#faf6ec" },
+  { name: "Ivory", value: "#f6f1e3" },
+  { name: "Sand", value: "#efe6d3" },
+  { name: "Parchment", value: "#f2ead6" },
+  { name: "Slate", value: "#1f2533", dark: true },
+  { name: "Charcoal", value: "#17181c", dark: true },
+  { name: "Navy", value: "#15203a", dark: true },
+];
 
 // 6-digit hex -> "rgba(r,g,b,a)" for derived tints (soft backgrounds, borders).
 export function tint(hex: string, alpha: number): string {
@@ -43,6 +59,70 @@ export function tint(hex: string, alpha: number): string {
   if (!m) return hex;
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+// Relative luminance (sRGB) of a #rrggbb color, used to pick ink for a paper.
+function relLuminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex ?? "").trim());
+  if (!m) return 1;
+  const n = parseInt(m[1], 16);
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+}
+
+export function isDarkPaper(paper: string): boolean {
+  return relLuminance(paper) < 0.45;
+}
+
+export interface PaperInk {
+  fg: string;
+  ink2: string;
+  muted: string;
+  surface2: string;
+  line: string;
+  line2: string;
+  ok: string;
+  warm: string;
+  warmSoft: string;
+  dueSoft: string;
+  dueInk: string;
+}
+
+// Ink + neutral tokens for a given paper, as translucent overlays so they
+// composite correctly over any background (light or dark). Lets the same
+// template read well on white, cream, or a dark paper.
+export function paperInk(paper: string): PaperInk {
+  if (isDarkPaper(paper)) {
+    return {
+      fg: "#f4f4f5",
+      ink2: "rgba(255,255,255,0.80)",
+      muted: "rgba(255,255,255,0.56)",
+      surface2: "rgba(255,255,255,0.06)",
+      line: "rgba(255,255,255,0.14)",
+      line2: "rgba(255,255,255,0.24)",
+      ok: "#4ade80",
+      warm: "#fbbf24",
+      warmSoft: "rgba(251,191,36,0.16)",
+      dueSoft: "rgba(251,191,36,0.16)",
+      dueInk: "#fde68a",
+    };
+  }
+  return {
+    fg: "#1f2733",
+    ink2: "#374151",
+    muted: "#6b7280",
+    surface2: "rgba(0,0,0,0.035)",
+    line: "rgba(0,0,0,0.10)",
+    line2: "rgba(0,0,0,0.16)",
+    ok: "#15803d",
+    warm: "#b45309",
+    warmSoft: "rgba(180,83,9,0.10)",
+    dueSoft: "#fef3c7",
+    dueInk: "#92400e",
+  };
 }
 
 // The single theming contract: feed these into the shared template's CSS vars.
@@ -85,6 +165,7 @@ export async function resolveBrandKit(
           primary: r.primary,
           secondary: r.secondary,
           accent: r.accent,
+          paper: r.paper ?? "#ffffff",
           logoUrl: r.logoUrl,
         }
       : APP_NEUTRAL;
@@ -100,6 +181,7 @@ function rowToKit(r: {
   primary: string;
   secondary: string;
   accent: string;
+  paper: string | null;
   logoUrl: string | null;
 }): BrandKit {
   return {
@@ -109,6 +191,7 @@ function rowToKit(r: {
     primary: r.primary,
     secondary: r.secondary,
     accent: r.accent,
+    paper: r.paper ?? "#ffffff",
     logoUrl: r.logoUrl,
   };
 }
@@ -132,6 +215,7 @@ export interface BrandKitInput {
   primary: string;
   secondary: string;
   accent: string;
+  paper: string;
   logoUrl: string | null;
 }
 
@@ -155,6 +239,7 @@ export async function upsertBrandKit(input: BrandKitInput): Promise<BrandKit> {
     primary: input.primary,
     secondary: input.secondary,
     accent: input.accent,
+    paper: input.paper,
     logoUrl: input.logoUrl,
   };
 
@@ -181,6 +266,7 @@ export async function ensureMeritSeed(): Promise<void> {
     primary: MERIT_PLACEHOLDER.primary,
     secondary: MERIT_PLACEHOLDER.secondary,
     accent: MERIT_PLACEHOLDER.accent,
+    paper: MERIT_PLACEHOLDER.paper,
     logoUrl: null,
   });
 }

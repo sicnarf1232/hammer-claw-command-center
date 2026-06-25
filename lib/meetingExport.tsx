@@ -1,7 +1,7 @@
 import React from "react";
 import {
   MeetingDoc,
-  clientDocTheme,
+  docTheme,
   meetingToDoc,
   seriesToDoc,
   EXPORT_FONT,
@@ -144,20 +144,21 @@ export async function buildShareHtml(
 }
 
 // Sets the brand CSS vars on the root via brandStyleAttr so the var() tokens
-// resolve; the literal fallbacks baked into clientDocTheme keep it colored in
-// clients that strip custom properties.
+// resolve; the literal fallbacks baked into docTheme keep it colored in clients
+// that strip custom properties. The root background is the brand "paper".
 export function renderShareHtml(
   model: DocModel,
   brand: BrandKit,
   opts: { expandClosed?: boolean } = {},
 ): string {
-  const theme = clientDocTheme(brand);
+  const theme = docTheme(brand);
   const inner = serialize(
     React.createElement(MeetingDoc, { model, theme, expandClosed: opts.expandClosed }),
   );
   return (
-    `<div style="${brandStyleAttr(brand)};max-width:680px;margin:0 auto;padding:8px 12px;` +
-    `background:#ffffff;font-family:${EXPORT_FONT};font-size:15px;line-height:1.55;color:#1f2733">` +
+    `<div style="${brandStyleAttr(brand)};max-width:680px;margin:0 auto;padding:20px 22px;` +
+    `border-radius:14px;background:${theme.paper};font-family:${EXPORT_FONT};` +
+    `font-size:15px;line-height:1.55;color:${theme.fg}">` +
     inner +
     `</div>`
   );

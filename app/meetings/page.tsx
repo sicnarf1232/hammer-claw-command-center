@@ -31,11 +31,13 @@ import MeetingShareButtons from "@/components/MeetingShareButtons";
 import SyncContactsButton from "@/components/SyncContactsButton";
 import { todayISO } from "@/lib/dates";
 import TaskRow from "@/components/TaskRow";
+import { workstreamFromPath } from "@/lib/taskView";
+import { resolveBrandKit, brandToCssVars } from "@/lib/branding";
 import {
   meetingToDoc,
   seriesToDoc,
   MeetingDoc,
-  appDocTheme,
+  docTheme,
   type DocPerson,
   type DocAction,
 } from "@/lib/meetingTemplate";
@@ -201,15 +203,19 @@ async function MeetingDetail({ path }: { path: string }) {
     return a ? `/accounts/${a.slug}` : undefined;
   };
 
-  // In-app document: APP brand, account label as the eyebrow lead, About links
-  // live; the account control is the classifier below, so drop the Account meta.
+  // The branded document: same client brand (resolved by workstream) the
+  // exports use, so all three views are consistent. The brand colors + paper +
+  // logo apply to the note body; the app chrome (toolbar, classifier) stays on
+  // the app theme above it.
+  const brand = await resolveBrandKit(workstreamFromPath(note.path));
+  const theme = docTheme(brand);
+  const lead = brand.workstreamKey ? brand.name : "Film Room";
   const appModel = meetingToDoc(note, {
     roster,
     accounts,
-    eyebrowLead: note.customer?.display || "Film Room",
+    eyebrowLead: lead,
     accountHref,
   });
-  appModel.meta = appModel.meta.filter((m) => m.label !== "Account");
 
   return (
     <Shell>
@@ -236,10 +242,18 @@ async function MeetingDetail({ path }: { path: string }) {
           />
         </div>
 
-        <div className="mt-5">
+        <div
+          className="mt-5 rounded-2xl p-6 sm:p-8"
+          style={{
+            ...(brandToCssVars(brand) as React.CSSProperties),
+            background: theme.paper,
+            color: theme.fg,
+            border: `1px solid ${theme.line}`,
+          }}
+        >
           <MeetingDoc
             model={appModel}
-            theme={appDocTheme()}
+            theme={theme}
             slots={{
               renderPerson: (p: DocPerson) => (
                 <PersonLink
@@ -376,10 +390,13 @@ async function SeriesDetail({ path }: { path: string }) {
     return undefined;
   };
 
+  const brand = await resolveBrandKit(workstreamFromPath(series.path));
+  const theme = docTheme(brand);
+  const lead = brand.workstreamKey ? brand.name : "Film Room";
   const appModel = seriesToDoc(series, view, {
     roster,
     accounts,
-    eyebrowLead: "Film Room",
+    eyebrowLead: lead,
   });
 
   return (
@@ -390,10 +407,18 @@ async function SeriesDetail({ path }: { path: string }) {
           <MeetingShareButtons seriesPath={path} />
         </div>
 
-        <div className="mt-5">
+        <div
+          className="mt-5 rounded-2xl p-6 sm:p-8"
+          style={{
+            ...(brandToCssVars(brand) as React.CSSProperties),
+            background: theme.paper,
+            color: theme.fg,
+            border: `1px solid ${theme.line}`,
+          }}
+        >
           <MeetingDoc
             model={appModel}
-            theme={appDocTheme()}
+            theme={theme}
             slots={{
               renderPerson: (p: DocPerson) => (
                 <PersonLink

@@ -343,6 +343,7 @@ export const brandKits = pgTable(
     primary: text("primary").notNull(),
     secondary: text("secondary").notNull(),
     accent: text("accent").notNull(),
+    paper: text("paper"), // document background ("paper"); null => white
     logoUrl: text("logo_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

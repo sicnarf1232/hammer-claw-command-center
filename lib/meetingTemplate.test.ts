@@ -51,6 +51,7 @@ const MERIT: BrandKit = {
   primary: "#9f1239",
   secondary: "#4b5563",
   accent: "#e11d48",
+  paper: "#ffffff",
   logoUrl: null,
 };
 

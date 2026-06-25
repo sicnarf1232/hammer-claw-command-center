@@ -151,9 +151,12 @@ CREATE TABLE IF NOT EXISTS "brand_kits" (
 	"primary" text NOT NULL,
 	"secondary" text NOT NULL,
 	"accent" text NOT NULL,
+	"paper" text,
 	"logo_url" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
+--> statement-breakpoint
+ALTER TABLE "brand_kits" ADD COLUMN IF NOT EXISTS "paper" text;
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "brand_kits_workstream_ux" ON "brand_kits" USING btree ("workstream_key");

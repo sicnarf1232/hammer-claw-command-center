@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body.name !== "string" || !body.name.trim()) {
     return NextResponse.json({ error: "A kit name is required." }, { status: 400 });
   }
-  for (const k of ["primary", "secondary", "accent"] as const) {
+  for (const k of ["primary", "secondary", "accent", "paper"] as const) {
     if (!HEX.test(String(body[k] ?? ""))) {
       return NextResponse.json({ error: `Invalid ${k} color (need #rrggbb).` }, { status: 400 });
     }
@@ -50,17 +50,18 @@ export async function POST(req: NextRequest) {
       primary: body.primary,
       secondary: body.secondary,
       accent: body.accent,
+      paper: body.paper,
       logoUrl,
     };
     const kit = await upsertBrandKit(input);
     return NextResponse.json({ kit });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to save the brand kit.";
-    if (/relation .*brand_kits.* does not exist|brand_kits/i.test(message)) {
+    if (/does not exist/i.test(message)) {
       return NextResponse.json(
         {
           error:
-            "The brand_kits table does not exist yet. Run drizzle/brand-kits.sql in the Neon SQL editor, then try again.",
+            "The brand_kits table is not set up (or is missing the paper column). Run drizzle/brand-kits.sql in the Neon SQL editor, then try again.",
         },
         { status: 503 },
       );

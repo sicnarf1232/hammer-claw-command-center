@@ -1,5 +1,5 @@
--- Branding (Phase 3 PART B). Run this in the Neon SQL editor to create just the
--- brand_kits table, so /branding works without running the full cutover SQL.
+-- Branding (Phase 3 PART B). Run this in the Neon SQL editor to create / update
+-- the brand_kits table, so /branding works without running the full cutover SQL.
 -- Idempotent: safe to run more than once.
 
 CREATE TABLE IF NOT EXISTS "brand_kits" (
@@ -9,10 +9,14 @@ CREATE TABLE IF NOT EXISTS "brand_kits" (
 	"primary" text NOT NULL,
 	"secondary" text NOT NULL,
 	"accent" text NOT NULL,
+	"paper" text,
 	"logo_url" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
+
+-- Add the paper column for tables created before it existed.
+ALTER TABLE "brand_kits" ADD COLUMN IF NOT EXISTS "paper" text;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "brand_kits_workstream_ux"
 	ON "brand_kits" USING btree ("workstream_key");

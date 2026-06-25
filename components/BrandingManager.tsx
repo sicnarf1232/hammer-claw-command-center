@@ -4,6 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BrandKit } from "@/lib/branding";
 
+// Suggested paper backgrounds (kept in sync with PAPERS in lib/branding; copied
+// here so this client bundle never imports the server-only branding module).
+const PAPERS: { name: string; value: string }[] = [
+  { name: "White", value: "#ffffff" },
+  { name: "Cream", value: "#faf6ec" },
+  { name: "Ivory", value: "#f6f1e3" },
+  { name: "Sand", value: "#efe6d3" },
+  { name: "Parchment", value: "#f2ead6" },
+  { name: "Slate", value: "#1f2533" },
+  { name: "Charcoal", value: "#17181c" },
+  { name: "Navy", value: "#15203a" },
+];
+
 // 6-digit hex -> rgba for soft tints (local copy so this client bundle never
 // pulls the server-only branding module).
 function tint(hex: string, alpha: number): string {
@@ -11,6 +24,19 @@ function tint(hex: string, alpha: number): string {
   if (!m) return hex;
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+// Is this paper dark enough to need light ink? (matches isDarkPaper in branding)
+function isDark(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex ?? "").trim());
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return L < 0.45;
 }
 
 const WORKSTREAMS: { value: string; label: string }[] = [
@@ -28,6 +54,7 @@ interface Draft {
   primary: string;
   secondary: string;
   accent: string;
+  paper: string;
   logoUrl: string | null;
 }
 
@@ -37,6 +64,7 @@ const BLANK: Draft = {
   primary: "#9f1239",
   secondary: "#4b5563",
   accent: "#e11d48",
+  paper: "#ffffff",
   logoUrl: null,
 };
 
@@ -48,6 +76,7 @@ function kitToDraft(k: BrandKit): Draft {
     primary: k.primary,
     secondary: k.secondary,
     accent: k.accent,
+    paper: k.paper || "#ffffff",
     logoUrl: k.logoUrl,
   };
 }
@@ -110,6 +139,7 @@ export default function BrandingManager({
           primary: draft.primary,
           secondary: draft.secondary,
           accent: draft.accent,
+          paper: draft.paper,
           logoUrl: draft.logoUrl,
         }),
       });
@@ -199,6 +229,41 @@ export default function BrandingManager({
             <ColorField label="Secondary" value={draft.secondary} onChange={(v) => set("secondary", v)} />
             <ColorField label="Accent" value={draft.accent} onChange={(v) => set("accent", v)} />
           </div>
+
+          <Field label="Paper" hint="The note background, across all three views.">
+            <div className="flex flex-wrap items-center gap-2">
+              {PAPERS.map((p) => {
+                const active = draft.paper.toLowerCase() === p.value.toLowerCase();
+                return (
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() => set("paper", p.value)}
+                    title={p.name}
+                    className="flex flex-col items-center gap-1"
+                  >
+                    <span
+                      className="h-8 w-8 rounded-[8px] border-2"
+                      style={{
+                        background: p.value,
+                        borderColor: active ? "var(--accent)" : "var(--line-2)",
+                      }}
+                    />
+                    <span className="text-[10px] text-muted">{p.name}</span>
+                  </button>
+                );
+              })}
+              <input
+                type="color"
+                value={/^#[0-9a-fA-F]{6}$/.test(draft.paper) ? draft.paper : "#ffffff"}
+                onChange={(e) => set("paper", e.target.value)}
+                className="h-8 w-8 cursor-pointer rounded border bg-transparent p-0.5"
+                style={{ borderColor: "var(--line)" }}
+                aria-label="Custom paper color"
+                title="Custom"
+              />
+            </div>
+          </Field>
 
           <Field
             label="Logo"
@@ -314,37 +379,45 @@ function ColorField({
   );
 }
 
-// A faithful mini of the export document, themed by the live draft colors, so
-// every brand color has a visible role (primary, secondary, and accent).
+// A faithful mini of the export document, themed by the live draft colors +
+// paper, so every brand element has a visible role and the paper choice shows.
 function Preview({ draft }: { draft: Draft }) {
   const lead = (draft.name || "Brand").toUpperCase();
+  const dark = isDark(draft.paper);
+  const fg = dark ? "#f4f4f5" : "#1f2733";
+  const muted = dark ? "rgba(255,255,255,0.56)" : "#6b7280";
+  const cardBg = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.035)";
+  const cardLine = dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)";
   return (
     <div className="sticky top-4">
       <div
-        className="rounded-[12px] border p-4 text-[#1f2733]"
-        style={{ borderColor: "var(--line)", background: "#ffffff" }}
+        className="rounded-[12px] border p-4"
+        style={{ borderColor: "var(--line)", background: draft.paper, color: fg }}
       >
+        {draft.logoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={draft.logoUrl} alt="" className="mb-2 h-6 w-auto max-w-[120px] object-contain" />
+        )}
         {/* Eyebrow + footer rule + TL;DR border + internal chip = PRIMARY */}
-        <div
-          className="text-[9px] font-bold uppercase"
-          style={{ letterSpacing: "0.18em", color: draft.primary }}
-        >
+        <div className="text-[9px] font-bold uppercase" style={{ letterSpacing: "0.18em", color: draft.primary }}>
           {lead} · MEETING NOTES
         </div>
         {/* Title + section headings = SECONDARY */}
         <div className="mt-1 text-[15px] font-bold leading-tight" style={{ color: draft.secondary }}>
           GTIN Alignment
         </div>
-        <div className="text-[10px] text-[#6b7280]">June 17, 2026</div>
+        <div className="text-[10px]" style={{ color: muted }}>
+          June 17, 2026 · MicroVention Terumo
+        </div>
 
         <div className="mt-2.5 flex flex-wrap gap-1">
           <span
             className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]"
-            style={{ border: "1px solid #d6dae0" }}
+            style={{ border: `1px solid ${cardLine}` }}
           >
             <span
               className="flex h-3.5 w-3.5 items-center justify-center rounded text-[8px] font-bold"
-              style={{ background: tint(draft.primary, 0.1), color: draft.primary }}
+              style={{ background: tint(draft.primary, 0.18), color: draft.primary }}
             >
               JO
             </span>
@@ -358,15 +431,12 @@ function Preview({ draft }: { draft: Draft }) {
             <div
               key={i}
               className="flex flex-col items-center rounded-[8px] border p-1.5"
-              style={{ borderColor: "#e6e8ec", background: "#f8fafc" }}
+              style={{ borderColor: cardLine, background: cardBg }}
             >
               <span className="text-[15px] font-bold leading-none" style={{ color: draft.accent }}>
                 {v}
               </span>
-              <span
-                className="mt-0.5 text-[7px] font-bold uppercase text-[#6b7280]"
-                style={{ letterSpacing: "0.12em" }}
-              >
+              <span className="mt-0.5 text-[7px] font-bold uppercase" style={{ letterSpacing: "0.12em", color: muted }}>
                 {["People", "Open", "Done"][i]}
               </span>
             </div>
@@ -375,34 +445,28 @@ function Preview({ draft }: { draft: Draft }) {
 
         <div
           className="mt-3 rounded-[8px] p-2.5 text-[11px] leading-snug"
-          style={{ background: tint(draft.primary, 0.1), borderLeft: `3px solid ${draft.primary}` }}
+          style={{ background: tint(draft.primary, 0.14), borderLeft: `3px solid ${draft.primary}` }}
         >
           Merit needs a valid GTIN before sample builds.
         </div>
 
-        {/* A section row: index + accent diamond + SECONDARY heading */}
+        {/* A section row: index + accent + SECONDARY heading */}
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-[9px] font-bold tabular-nums" style={{ color: draft.accent }}>
             01
           </span>
-          <span
-            className="text-[9px] font-bold uppercase"
-            style={{ letterSpacing: "0.1em", color: draft.secondary }}
-          >
+          <span className="text-[9px] font-bold uppercase" style={{ letterSpacing: "0.1em", color: draft.secondary }}>
             Key Decisions
           </span>
         </div>
         <div className="mt-1 flex items-center gap-2">
-          <span
-            className="inline-block h-2 w-2 rotate-45 rounded-[1px]"
-            style={{ background: draft.primary }}
-          />
+          <span className="inline-block h-2 w-2 rotate-45 rounded-[1px]" style={{ background: draft.primary }} />
           <span className="text-[11px]">Hold sample builds until the GTIN is confirmed.</span>
         </div>
 
         <div
-          className="mt-3 flex items-center justify-between border-t-2 pt-2 text-[9px] text-[#6b7280]"
-          style={{ borderColor: draft.primary }}
+          className="mt-3 flex items-center justify-between border-t-2 pt-2 text-[9px]"
+          style={{ borderColor: draft.primary, color: muted }}
         >
           <span>{draft.name || "Brand"} · Confidential</span>
           {draft.logoUrl ? (
@@ -414,11 +478,12 @@ function Preview({ draft }: { draft: Draft }) {
         </div>
       </div>
 
-      {/* Legend: where each color shows up */}
+      {/* Legend: where each element shows up */}
       <div className="mt-3 grid gap-1.5 text-2xs">
         <Legend color={draft.primary} label="Primary" where="eyebrow, chips, borders, callout" />
         <Legend color={draft.secondary} label="Secondary" where="title + section headings" />
         <Legend color={draft.accent} label="Accent" where="stat numbers, section index" />
+        <Legend color={draft.paper} label="Paper" where="note background (all 3 views)" />
       </div>
     </div>
   );
