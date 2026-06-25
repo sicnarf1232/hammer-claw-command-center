@@ -42,11 +42,13 @@ export async function GET(req: NextRequest) {
 
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
+    const executablePath = process.env.CHROME_PATH || (await chromium.executablePath());
+    console.log("[meetings/pdf] launching chromium", { executablePath, args: chromium.args.length });
     browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: { width: 820, height: 1160, deviceScaleFactor: 2 },
       // Local dev: set CHROME_PATH to a real Chrome (the bundled binary is Linux).
-      executablePath: process.env.CHROME_PATH || (await chromium.executablePath()),
+      executablePath,
       headless: true,
     });
     const page = await browser.newPage();
@@ -65,6 +67,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err) {
+    console.error("[meetings/pdf] generation failed:", err);
     const message = err instanceof Error ? err.message : "PDF generation failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
