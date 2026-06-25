@@ -314,76 +314,125 @@ function ColorField({
   );
 }
 
-// A faithful mini of the export document, themed by the live draft colors.
+// A faithful mini of the export document, themed by the live draft colors, so
+// every brand color has a visible role (primary, secondary, and accent).
 function Preview({ draft }: { draft: Draft }) {
   const lead = (draft.name || "Brand").toUpperCase();
   return (
-    <div
-      className="rounded-[12px] border p-4 text-[#1f2733]"
-      style={{ borderColor: "var(--line)", background: "#ffffff" }}
-    >
+    <div className="sticky top-4">
       <div
-        className="text-[9px] font-bold uppercase"
-        style={{ letterSpacing: "0.18em", color: draft.primary }}
+        className="rounded-[12px] border p-4 text-[#1f2733]"
+        style={{ borderColor: "var(--line)", background: "#ffffff" }}
       >
-        {lead} · MEETING NOTES
-      </div>
-      <div className="mt-1 text-[15px] font-bold leading-tight text-[#1f2733]">
-        GTIN Alignment
-      </div>
-      <div className="text-[10px] text-[#6b7280]">June 17, 2026</div>
-
-      <div className="mt-2.5 flex flex-wrap gap-1">
-        <span
-          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]"
-          style={{ border: "1px solid #d6dae0" }}
+        {/* Eyebrow + footer rule + TL;DR border + internal chip = PRIMARY */}
+        <div
+          className="text-[9px] font-bold uppercase"
+          style={{ letterSpacing: "0.18em", color: draft.primary }}
         >
+          {lead} · MEETING NOTES
+        </div>
+        {/* Title + section headings = SECONDARY */}
+        <div className="mt-1 text-[15px] font-bold leading-tight" style={{ color: draft.secondary }}>
+          GTIN Alignment
+        </div>
+        <div className="text-[10px] text-[#6b7280]">June 17, 2026</div>
+
+        <div className="mt-2.5 flex flex-wrap gap-1">
           <span
-            className="flex h-3.5 w-3.5 items-center justify-center rounded text-[8px] font-bold"
-            style={{ background: tint(draft.primary, 0.1), color: draft.primary }}
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]"
+            style={{ border: "1px solid #d6dae0" }}
           >
-            JO
+            <span
+              className="flex h-3.5 w-3.5 items-center justify-center rounded text-[8px] font-bold"
+              style={{ background: tint(draft.primary, 0.1), color: draft.primary }}
+            >
+              JO
+            </span>
+            Jordan
           </span>
-          Jordan
-        </span>
-      </div>
+        </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-1.5">
-        {["3", "2", "1"].map((v, i) => (
-          <div
-            key={i}
-            className="flex flex-col items-center rounded-[8px] border p-1.5"
-            style={{ borderColor: "#e6e8ec", background: "#f8fafc" }}
+        {/* Stat values = ACCENT */}
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          {["3", "2", "1"].map((v, i) => (
+            <div
+              key={i}
+              className="flex flex-col items-center rounded-[8px] border p-1.5"
+              style={{ borderColor: "#e6e8ec", background: "#f8fafc" }}
+            >
+              <span className="text-[15px] font-bold leading-none" style={{ color: draft.accent }}>
+                {v}
+              </span>
+              <span
+                className="mt-0.5 text-[7px] font-bold uppercase text-[#6b7280]"
+                style={{ letterSpacing: "0.12em" }}
+              >
+                {["People", "Open", "Done"][i]}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div
+          className="mt-3 rounded-[8px] p-2.5 text-[11px] leading-snug"
+          style={{ background: tint(draft.primary, 0.1), borderLeft: `3px solid ${draft.primary}` }}
+        >
+          Merit needs a valid GTIN before sample builds.
+        </div>
+
+        {/* A section row: index + accent diamond + SECONDARY heading */}
+        <div className="mt-3 flex items-baseline gap-2">
+          <span className="text-[9px] font-bold tabular-nums" style={{ color: draft.accent }}>
+            01
+          </span>
+          <span
+            className="text-[9px] font-bold uppercase"
+            style={{ letterSpacing: "0.1em", color: draft.secondary }}
           >
-            <span className="text-[15px] font-bold leading-none" style={{ color: draft.accent }}>
-              {v}
-            </span>
-            <span className="mt-0.5 text-[7px] font-bold uppercase text-[#6b7280]" style={{ letterSpacing: "0.12em" }}>
-              {["People", "Open", "Done"][i]}
-            </span>
-          </div>
-        ))}
+            Key Decisions
+          </span>
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <span
+            className="inline-block h-2 w-2 rotate-45 rounded-[1px]"
+            style={{ background: draft.primary }}
+          />
+          <span className="text-[11px]">Hold sample builds until the GTIN is confirmed.</span>
+        </div>
+
+        <div
+          className="mt-3 flex items-center justify-between border-t-2 pt-2 text-[9px] text-[#6b7280]"
+          style={{ borderColor: draft.primary }}
+        >
+          <span>{draft.name || "Brand"} · Confidential</span>
+          {draft.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={draft.logoUrl} alt="" className="h-4 w-auto max-w-[60px] object-contain" />
+          ) : (
+            <span>Hammer Claw</span>
+          )}
+        </div>
       </div>
 
-      <div
-        className="mt-3 rounded-[8px] p-2.5 text-[11px] leading-snug"
-        style={{ background: tint(draft.primary, 0.1), borderLeft: `3px solid ${draft.primary}` }}
-      >
-        Merit needs a valid GTIN before sample builds.
+      {/* Legend: where each color shows up */}
+      <div className="mt-3 grid gap-1.5 text-2xs">
+        <Legend color={draft.primary} label="Primary" where="eyebrow, chips, borders, callout" />
+        <Legend color={draft.secondary} label="Secondary" where="title + section headings" />
+        <Legend color={draft.accent} label="Accent" where="stat numbers, section index" />
       </div>
+    </div>
+  );
+}
 
-      <div
-        className="mt-3 flex items-center justify-between border-t-2 pt-2 text-[9px] text-[#6b7280]"
-        style={{ borderColor: draft.primary }}
-      >
-        <span>{draft.name || "Brand"} · Confidential</span>
-        {draft.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={draft.logoUrl} alt="" className="h-4 w-auto max-w-[60px] object-contain" />
-        ) : (
-          <span>Hammer Claw</span>
-        )}
-      </div>
+function Legend({ color, label, where }: { color: string; label: string; where: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="h-3.5 w-3.5 shrink-0 rounded-[3px] border"
+        style={{ background: color, borderColor: "var(--line-2)" }}
+      />
+      <span className="font-semibold text-fg">{label}</span>
+      <span className="text-muted">{where}</span>
     </div>
   );
 }

@@ -27,8 +27,34 @@ export default async function BrandingPage() {
   }
 
   // Seed the Merit placeholder so it is ready to edit end to end.
-  await ensureMeritSeed().catch(() => {});
-  const kits = await listBrandKits().catch(() => []);
+  let kits: Awaited<ReturnType<typeof listBrandKits>> = [];
+  let tableMissing = false;
+  try {
+    await ensureMeritSeed();
+    kits = await listBrandKits();
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    if (/brand_kits/i.test(m)) tableMissing = true;
+  }
+
+  if (tableMissing) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <h1 className="mb-3 text-2xl font-bold text-fg">Branding</h1>
+        <div
+          className="card p-5 text-sm"
+          style={{ borderColor: "var(--due)", color: "var(--due-ink)" }}
+        >
+          <p className="font-semibold">The brand_kits table does not exist yet.</p>
+          <p className="mt-1">
+            Run <code className="font-mono">drizzle/brand-kits.sql</code> in the Neon
+            SQL editor (it is idempotent), then reload this page. That creates just
+            the branding table without the full cutover.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl">

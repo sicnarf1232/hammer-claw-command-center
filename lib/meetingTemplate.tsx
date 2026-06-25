@@ -92,6 +92,7 @@ export interface DocModel {
 // brand vars with literal hex fallbacks (email-safe).
 export interface DocTheme {
   primary: string;
+  secondary: string;
   accent: string;
   primarySoft: string;
   accentSoft: string;
@@ -119,6 +120,7 @@ const EXPORT_FONT =
 export function appDocTheme(): DocTheme {
   return {
     primary: "var(--accent)",
+    secondary: "var(--fg)",
     accent: "var(--accent-2, var(--accent))",
     primarySoft: "var(--accent-soft)",
     accentSoft: "var(--accent-soft)",
@@ -147,6 +149,7 @@ export function clientDocTheme(brand: BrandKit): DocTheme {
   const tok = (name: keyof typeof v) => `var(${name}, ${v[name]})`;
   return {
     primary: tok("--brand-primary"),
+    secondary: tok("--brand-secondary"),
     accent: tok("--brand-accent"),
     primarySoft: tok("--brand-primary-soft"),
     accentSoft: tok("--brand-accent-soft"),
@@ -452,7 +455,7 @@ export function MeetingDoc({
             }}
           />
         )}
-        <h1 style={{ fontSize: 26, lineHeight: 1.2, fontWeight: 700, margin: 0, color: t.fg }}>
+        <h1 style={{ fontSize: 26, lineHeight: 1.2, fontWeight: 700, margin: 0, color: t.secondary }}>
           {clean(model.title)}
         </h1>
       </div>
@@ -861,7 +864,7 @@ function SectionBlock({
         <span style={{ fontSize: 13, fontWeight: 700, color: t.warm, fontVariantNumeric: "tabular-nums" }}>
           {String(index).padStart(2, "0")}
         </span>
-        <span style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: t.fg }}>
+        <span style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: t.secondary }}>
           {clean(section.heading)}
         </span>
       </div>

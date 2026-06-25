@@ -56,6 +56,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ kit });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to save the brand kit.";
+    if (/relation .*brand_kits.* does not exist|brand_kits/i.test(message)) {
+      return NextResponse.json(
+        {
+          error:
+            "The brand_kits table does not exist yet. Run drizzle/brand-kits.sql in the Neon SQL editor, then try again.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
