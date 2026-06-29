@@ -153,10 +153,16 @@ can read the vault.
       parser now keyword-matches those headers and loads 1144 parts live. No
       action needed unless you change the format. Note: it reads the "High Price"
       column as unit cost; if you want a different price column, tell me.
-- [ ] QUOTE BRANDING: the PDF uses a clean typographic "Merit Medical OEM"
-      header, no logo image. If you want the real Merit OEM logo and exact brand
-      colors/fonts on the PDF, send the logo asset and brand spec and I will
-      embed it.
+- [x] QUOTE BRANDING (done 2026-06-29): the quote PDF was fully redesigned from
+      the "Merit Medical OEM Quote Redesign" handoff. Real Merit OEM logo +
+      signature embedded, Merit-red letterhead, multi-page document, full data
+      layer + parsers. See CHANGELOG 2026-06-29. Two follow-ons remain:
+      - [ ] AUTO QUOTE-TAG: suggest quote_short from the line-item category mix
+            (TBV/Vac/SI etc.). Needs a category field on price-list catalog
+            items; quote_short is a manual field until then.
+      - [ ] SAVE TO VAULT: optionally commit the generated PDF to the vault at
+            300 Merit/Meetings/{customerName}/{quoteId}/{quoteId}.pdf. Currently
+            download-only (per the 2026-06-29 build decision).
 
 ## 8. Vercel deploy — DONE (live)
 

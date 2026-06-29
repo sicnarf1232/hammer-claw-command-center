@@ -36,8 +36,10 @@ export default async function QuotePage() {
           Quote
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Assemble line items and download a Merit OEM branded PDF, rendered
-          server-side. {catalog.length > 0 ? `${catalog.length} catalog parts loaded.` : ""}
+          Build a Merit OEM quotation: add from the price list, paste a quote, or
+          enter custom items, then download the redesigned multi-page PDF. A live
+          preview shows the exact document.{" "}
+          {catalog.length > 0 ? `${catalog.length} catalog parts loaded.` : ""}
         </p>
       </header>
       {note && (

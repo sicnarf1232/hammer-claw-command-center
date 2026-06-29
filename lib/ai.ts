@@ -5,6 +5,7 @@ import {
   type Priority,
   type Workstream,
 } from "@/lib/vault/types";
+import type { RawQuoteInput } from "@/lib/quote/types";
 
 // AI drafting for email replies (Phase 2) and briefs (Phase 4). Optional:
 // without ANTHROPIC_API_KEY the app skips AI and Jordan writes the body himself.
@@ -401,6 +402,90 @@ export async function answerVaultQuestion(args: {
     .trim();
 
   return noEmDash(text);
+}
+
+// ---- Quote: free-form English parser (Quote redesign) --------------------
+
+// Parse a free-form quote request into the loose RawQuoteInput shape. Uses the
+// fast model. Parser-added items are custom (no sterility inference downstream).
+export async function parseQuoteFreeform(
+  userText: string,
+): Promise<RawQuoteInput> {
+  const system = [
+    "You parse free-form quote requests for Merit Medical OEM into JSON.",
+    "Return ONLY valid JSON, no markdown, no commentary. Schema:",
+    "{",
+    '  "customer_name": string|null,',
+    '  "customer_short": string|null,',
+    '  "customer_contact": string|null,',
+    '  "description": string|null,',
+    '  "quote_short": string|null,',
+    '  "quote_date": string|null,',
+    '  "line_items": [',
+    '    { "pn": string, "qty": number, "price": string, "lead": string,',
+    '      "desc": string, "details": string[] }',
+    "  ]",
+    "}",
+    "Rules:",
+    "- qty is a number with no commas.",
+    '- price includes "$" and is per-unit.',
+    '- lead is a phrase like "4-6 weeks" or "8 weeks".',
+    "- desc is the SHORT product name; one sentence max.",
+    "- details is an array, each element ONE short attribute (size, material,",
+    "  sterilization, packaging, feature). Each becomes its own line in the PDF.",
+    "  Do NOT collapse the bullets into a single string.",
+    "- quote_short should be a short filename tag (no spaces).",
+    '- customer_short is a short version of the company name (e.g. "Stryker NV").',
+    "- Skip any field you cannot determine; use null or omit.",
+    "House style: never use em dashes.",
+  ].join("\n");
+
+  const res = await client().messages.create({
+    model: fastModel(),
+    max_tokens: 1500,
+    system,
+    messages: [{ role: "user", content: `Free-text request:\n${userText}` }],
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  const raw = parseJsonObject(text);
+  return mapFreeformQuote(raw);
+}
+
+function mapFreeformQuote(raw: Record<string, unknown>): RawQuoteInput {
+  const str = (v: unknown): string | undefined => {
+    const s = typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "";
+    return s ? noEmDash(s) : undefined;
+  };
+  const items = Array.isArray(raw.line_items) ? raw.line_items : [];
+  return {
+    customerName: str(raw.customer_name),
+    customerShort: str(raw.customer_short),
+    customerContact: str(raw.customer_contact),
+    description: str(raw.description),
+    quoteShort: str(raw.quote_short),
+    quoteDate: str(raw.quote_date),
+    lineItems: items.map((it) => {
+      const o = (it ?? {}) as Record<string, unknown>;
+      const details = Array.isArray(o.details)
+        ? o.details.map((d) => noEmDash(String(d).trim())).filter(Boolean)
+        : [];
+      return {
+        custom: true,
+        quantity: o.qty != null ? String(o.qty) : undefined,
+        partNo: str(o.pn),
+        description: str(o.desc),
+        attributes: details,
+        price: str(o.price),
+        leadTime: str(o.lead),
+      };
+    }),
+  };
 }
 
 // Generate a brief (morning brief, EOD recap, weekly review) from a context

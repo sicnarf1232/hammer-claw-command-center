@@ -2,6 +2,32 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Quote redesign: Merit OEM quotation document + data layer (2026-06-29)
+
+- Rebuilt the quote generator around the "Merit Medical OEM Quote Redesign"
+  handoff. Five layers: (1) typed data model + business logic in `lib/quote/`
+  (quote-id derivation, customer/contact normalization, category->acronym tag
+  map, sterility inference, default lead times, leadTimeSummary composition,
+  quantity formatting, title derivation); (2) parsers, a deterministic
+  "Line Item N" key-value parser (`parseStructuredQuote`) and a free-form
+  English LLM parser (`parseQuoteFreeform` in `lib/ai.ts`, Haiku) that both
+  funnel through one `normalizeQuote`; (3) the document render, `lib/quote/
+  quoteHtml.ts` emits the multi-page Merit-red letterhead/logo/signature
+  document with an estimation-based paginator that reproduces the reference
+  3/2/closing split, assets embedded as data URIs in `lib/quote/assets.ts`;
+  (4) a rewritten `QuoteBuilder.tsx`, price-list add with sterility/lead
+  inference, custom items, paste-to-parse, per-row edit panels with Custom/Ask
+  badges, live preview iframe, validation, localStorage drafts; (5) routes
+  `POST /api/quote/pdf` (headless Chromium, same pipeline as meetings),
+  `POST /api/quote/html` (preview), `POST /api/quote/parse`.
+- Decisions: PDF render moved from pdf-lib to the Chromium HTML->PDF pipeline
+  (retired `lib/quotePdf.ts`); output is download-only for now (vault save
+  deferred); both parser formats shipped. Verified by rendering the Balt
+  reference to a faithful 3-page PDF locally. 221 tests pass (31 new).
+- Deferred (see PUNCHLIST): auto quote-tag suggestion from the line-item
+  category mix needs category metadata on catalog items; saving the PDF into
+  the vault at 300 Merit/Meetings/{customer}/{quoteId}/.
+
 ## Phase 3 polish: brand-in-app, paper colors, auto-download PDF (2026-06-25)
 
 - Branding now reflects in the in-app meeting/series view too: ONE `docTheme(brand)` themes all three surfaces (in-app, email, PDF), so the colors, paper, and logo are sticky and consistent. The note body adopts the brand; the app chrome (toolbar, classifier) stays on the app theme. (Replaced the split appDocTheme/clientDocTheme.)

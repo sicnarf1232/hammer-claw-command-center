@@ -1,6 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  composeLeadTimeSummary,
+  defaultLeadTime,
+  deriveQuoteId,
+  inferSterility,
+} from "@/lib/quote/derive";
+import {
+  BLANK_LINE_ITEM,
+  type Closing,
+  type QuoteLineItem,
+  type QuoteSpec,
+  type TableHeaderStyle,
+} from "@/lib/quote/types";
 
 export interface CatalogEntry {
   partNumber: string;
@@ -8,26 +21,53 @@ export interface CatalogEntry {
   unitCost: number | null;
 }
 
-interface LineItem {
-  partNumber: string;
-  description: string;
-  qty: number;
-  unitCost: number;
+interface UiLineItem extends QuoteLineItem {
+  id: string;
 }
 
-const BLANK: LineItem = { partNumber: "", description: "", qty: 1, unitCost: 0 };
+interface Meta {
+  customerName: string;
+  customerShort: string;
+  customerContact: string;
+  description: string;
+  quoteDate: string;
+  quoteShort: string;
+  quoteIdOverride: string;
+  leadTimeSummaryOverride: string;
+  tableHeaderStyle: TableHeaderStyle;
+  showPageNumbers: boolean;
+}
 
-export default function QuoteBuilder({
-  catalog,
-}: {
-  catalog: CatalogEntry[];
-}) {
-  const [title, setTitle] = useState("Quote");
-  const [customer, setCustomer] = useState("");
-  const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<LineItem[]>([{ ...BLANK }]);
+const DRAFT_KEY = "hc-quote-draft";
+let idCounter = 0;
+const nextId = () => `li-${Date.now().toString(36)}-${idCounter++}`;
+
+const BLANK_META: Meta = {
+  customerName: "",
+  customerShort: "",
+  customerContact: "",
+  description: "",
+  quoteDate: "",
+  quoteShort: "",
+  quoteIdOverride: "",
+  leadTimeSummaryOverride: "",
+  tableHeaderStyle: "Graphite",
+  showPageNumbers: true,
+};
+
+const CLOSINGS: Closing[] = ["", "Bulk Non-Sterile.", "Sterile", "Single-Sterile."];
+
+export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
+  const [meta, setMeta] = useState<Meta>(BLANK_META);
+  const [items, setItems] = useState<UiLineItem[]>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [parseText, setParseText] = useState("");
+  const [parseMode, setParseMode] = useState<"auto" | "structured" | "freeform">("auto");
+  const [parsing, setParsing] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
   const byPart = useMemo(() => {
     const m = new Map<string, CatalogEntry>();
@@ -35,39 +75,198 @@ export default function QuoteBuilder({
     return m;
   }, [catalog]);
 
-  const total = items.reduce((s, it) => s + it.qty * it.unitCost, 0);
+  // ---- Draft persistence (localStorage) ----
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw) as { meta: Meta; items: UiLineItem[] };
+        if (d.meta) setMeta({ ...BLANK_META, ...d.meta });
+        if (Array.isArray(d.items)) setItems(d.items);
+      }
+    } catch {
+      /* ignore a corrupt draft */
+    }
+    setLoaded(true);
+  }, []);
 
-  function update(idx: number, patch: Partial<LineItem>) {
-    setItems((prev) =>
-      prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)),
-    );
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ meta, items }));
+    } catch {
+      /* ignore quota / serialization errors */
+    }
+  }, [meta, items, loaded]);
+
+  // ---- Derived display values ----
+  const derivedQuoteId = useMemo(
+    () =>
+      deriveQuoteId({
+        customerShort: meta.customerShort,
+        customerName: meta.customerName,
+        quoteDate: meta.quoteDate,
+        quoteShort: meta.quoteShort,
+      }),
+    [meta.customerShort, meta.customerName, meta.quoteDate, meta.quoteShort],
+  );
+  const quoteId = meta.quoteIdOverride.trim() || derivedQuoteId;
+
+  const stripped = (it: UiLineItem): QuoteLineItem => {
+    const { id, ...rest } = it;
+    void id;
+    return rest;
+  };
+  const derivedSummary = useMemo(
+    () => composeLeadTimeSummary(items.map(stripped)),
+    [items],
+  );
+
+  const rawPayload = useCallback(() => {
+    return {
+      customerName: meta.customerName,
+      customerShort: meta.customerShort,
+      customerContact: meta.customerContact,
+      description: meta.description,
+      quoteDate: meta.quoteDate,
+      quoteShort: meta.quoteShort,
+      quoteId: meta.quoteIdOverride.trim() || undefined,
+      leadTimeSummary: meta.leadTimeSummaryOverride.trim() || undefined,
+      tableHeaderStyle: meta.tableHeaderStyle,
+      showPageNumbers: meta.showPageNumbers,
+      lineItems: items.map(stripped),
+    };
+  }, [meta, items]);
+
+  // ---- Live preview (debounced) ----
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!loaded) return;
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/quote/html", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(rawPayload()),
+        });
+        if (res.ok) setPreviewHtml(await res.text());
+      } catch {
+        /* preview is best-effort */
+      }
+    }, 600);
+    return () => {
+      if (previewTimer.current) clearTimeout(previewTimer.current);
+    };
+  }, [rawPayload, loaded]);
+
+  // ---- Client-side validation mirror (server is authoritative) ----
+  const validation = useMemo(() => validateClient(meta, items, quoteId), [meta, items, quoteId]);
+
+  // ---- Mutations ----
+  function patchItem(id: string, patch: Partial<UiLineItem>) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }
 
-  function onPartChange(idx: number, partNumber: string) {
+  function addCustom() {
+    const it: UiLineItem = { ...BLANK_LINE_ITEM, id: nextId() };
+    setItems((prev) => [...prev, it]);
+    setExpanded(it.id);
+  }
+
+  function addFromCatalog(partNumber: string) {
     const match = byPart.get(partNumber);
-    if (match) {
-      update(idx, {
-        partNumber,
-        description: match.description || items[idx].description,
-        unitCost: match.unitCost ?? items[idx].unitCost,
+    if (!match) return;
+    const inf = inferSterility(partNumber, match.description);
+    const def = defaultLeadTime(inf.closing);
+    const it: UiLineItem = {
+      ...BLANK_LINE_ITEM,
+      id: nextId(),
+      custom: false,
+      partNo: partNumber,
+      title: deriveTitleClient(match.description),
+      attributes: match.description ? [match.description] : [],
+      closing: inf.closing,
+      price: match.unitCost != null ? `$${match.unitCost}` : "",
+      leadStacked: Boolean(def),
+      leadAlt: def,
+      leadTime: "",
+    };
+    setItems((prev) => [...prev, it]);
+    setExpanded(it.id);
+  }
+
+  function removeItem(id: string) {
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  }
+  function move(id: string, dir: -1 | 1) {
+    setItems((prev) => {
+      const i = prev.findIndex((it) => it.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
+  async function runParse() {
+    if (!parseText.trim()) return;
+    setParsing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/quote/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: parseText, mode: parseMode }),
       });
-    } else {
-      update(idx, { partNumber });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Could not parse the input.");
+        return;
+      }
+      loadSpec(data.spec as QuoteSpec);
+      setParseText("");
+    } catch {
+      setError("Network error while parsing.");
+    } finally {
+      setParsing(false);
     }
   }
 
-  function addRow() {
-    setItems((prev) => [...prev, { ...BLANK }]);
+  function loadSpec(spec: QuoteSpec) {
+    setMeta({
+      customerName: spec.customerName,
+      customerShort: spec.customerShort,
+      customerContact: spec.quotedFor,
+      description: spec.description,
+      quoteDate: spec.quoteDate,
+      quoteShort: spec.quoteShort,
+      quoteIdOverride: "",
+      leadTimeSummaryOverride: "",
+      tableHeaderStyle: spec.tableHeaderStyle,
+      showPageNumbers: spec.showPageNumbers,
+    });
+    setItems(spec.lineItems.map((li) => ({ ...li, id: nextId() })));
   }
-  function removeRow(idx: number) {
-    setItems((prev) => prev.filter((_, i) => i !== idx));
+
+  function newQuote() {
+    if (!confirm("Start a new quote? This clears the current draft.")) return;
+    setMeta(BLANK_META);
+    setItems([]);
+    setExpanded(null);
+    setError(null);
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 
   async function downloadPdf() {
     setError(null);
-    const clean = items.filter((it) => it.partNumber || it.description);
-    if (clean.length === 0) {
-      setError("Add at least one line item.");
+    if (validation.errors.length > 0) {
+      setError("Fix the items flagged below before downloading.");
       return;
     }
     setBusy(true);
@@ -75,18 +274,20 @@ export default function QuoteBuilder({
       const res = await fetch("/api/quote/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, customer, notes, lineItems: clean }),
+        body: JSON.stringify(rawPayload()),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Could not generate the PDF.");
+        setError(
+          data.details?.join(" ") ?? data.error ?? "Could not generate the PDF.",
+        );
         return;
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${slug(title)}.pdf`;
+      a.download = `${quoteId || "quote"}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -99,153 +300,345 @@ export default function QuoteBuilder({
   }
 
   return (
-    <div className="max-w-4xl">
-      <datalist id="catalog-parts">
-        {catalog.map((c) => (
-          <option key={c.partNumber} value={c.partNumber}>
-            {c.description}
-          </option>
-        ))}
-      </datalist>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)]">
+      {/* ---- Left: editor ---- */}
+      <div className="min-w-0">
+        <datalist id="catalog-parts">
+          {catalog.map((c) => (
+            <option key={c.partNumber} value={c.partNumber}>
+              {c.description}
+            </option>
+          ))}
+        </datalist>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-sm">
-          <span className="text-muted">Quote title</span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="input mt-1 w-full"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="text-muted">Customer</span>
-          <input
-            value={customer}
-            onChange={(e) => setCustomer(e.target.value)}
-            className="input mt-1 w-full"
-          />
-        </label>
-      </div>
+        {/* Quote meta */}
+        <section className="card p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Customer">
+              <input className="input mt-1 w-full" value={meta.customerName}
+                onChange={(e) => setMeta({ ...meta, customerName: e.target.value })} />
+            </Field>
+            <Field label="Customer short (optional)">
+              <input className="input mt-1 w-full" value={meta.customerShort}
+                placeholder="defaults to first word"
+                onChange={(e) => setMeta({ ...meta, customerShort: e.target.value })} />
+            </Field>
+            <Field label="Contact (Quoted For)">
+              <input className="input mt-1 w-full" value={meta.customerContact}
+                onChange={(e) => setMeta({ ...meta, customerContact: e.target.value })} />
+            </Field>
+            <Field label="Quote date">
+              <input className="input mt-1 w-full" value={meta.quoteDate}
+                placeholder="June 26, 2026 or 2026-06-26"
+                onChange={(e) => setMeta({ ...meta, quoteDate: e.target.value })} />
+            </Field>
+            <Field label="Description">
+              <input className="input mt-1 w-full" value={meta.description}
+                onChange={(e) => setMeta({ ...meta, description: e.target.value })} />
+            </Field>
+            <Field label="Quote tag (quote_short)">
+              <input className="input mt-1 w-full" value={meta.quoteShort}
+                placeholder="e.g. 8F Dilators"
+                onChange={(e) => setMeta({ ...meta, quoteShort: e.target.value })} />
+            </Field>
+          </div>
 
-      <div className="card mt-4 overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-surface2 text-left text-2xs uppercase tracking-wide text-muted">
-              <th className="px-3 py-2 font-medium">Part #</th>
-              <th className="px-3 py-2 font-medium">Description</th>
-              <th className="px-3 py-2 text-right font-medium">Qty</th>
-              <th className="px-3 py-2 text-right font-medium">Unit cost</th>
-              <th className="px-3 py-2 text-right font-medium">Line total</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted">
-                  No line items yet. Add a line to start building the quote.
-                </td>
-              </tr>
-            ) : (
-              items.map((it, idx) => (
-                <tr
-                  key={idx}
-                  className="border-b border-border last:border-b-0 hover:bg-surface2"
-                >
-                  <td className="px-3 py-2">
-                    <input
-                      list="catalog-parts"
-                      value={it.partNumber}
-                      onChange={(e) => onPartChange(idx, e.target.value)}
-                      className="input w-28 font-mono tabular-nums"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      value={it.description}
-                      onChange={(e) => update(idx, { description: e.target.value })}
-                      className="input w-full min-w-48"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <input
-                      type="number"
-                      min={0}
-                      value={it.qty}
-                      onChange={(e) => update(idx, { qty: Number(e.target.value) })}
-                      className="input w-16 text-right font-mono tabular-nums"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={it.unitCost}
-                      onChange={(e) =>
-                        update(idx, { unitCost: Number(e.target.value) })
-                      }
-                      className="input w-24 text-right font-mono tabular-nums"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-fg">
-                    {money(it.qty * it.unitCost)}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      onClick={() => removeRow(idx)}
-                      className="cursor-pointer text-xs text-muted transition-colors hover:text-danger"
-                    >
-                      remove
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="Quote ID">
+              <input className="input mt-1 w-full font-mono text-xs"
+                value={meta.quoteIdOverride} placeholder={derivedQuoteId}
+                onChange={(e) => setMeta({ ...meta, quoteIdOverride: e.target.value })} />
+            </Field>
+            <Field label="Lead-time summary (override)">
+              <input className="input mt-1 w-full text-xs"
+                value={meta.leadTimeSummaryOverride} placeholder={derivedSummary || "auto-composed"}
+                onChange={(e) => setMeta({ ...meta, leadTimeSummaryOverride: e.target.value })} />
+            </Field>
+          </div>
 
-      <div className="mt-3 flex items-center justify-between">
-        <button onClick={addRow} className="btn-outline">
-          Add line
-        </button>
-        <div className="text-sm text-muted">
-          Total:{" "}
-          <span className="font-mono tabular-nums font-semibold text-fg">
-            {money(total)}
-          </span>
+          <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <span className="text-muted">Header</span>
+              <select className="input" value={meta.tableHeaderStyle}
+                onChange={(e) => setMeta({ ...meta, tableHeaderStyle: e.target.value as TableHeaderStyle })}>
+                <option value="Graphite">Graphite</option>
+                <option value="Merit Red">Merit Red</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={meta.showPageNumbers}
+                onChange={(e) => setMeta({ ...meta, showPageNumbers: e.target.checked })} />
+              <span className="text-muted">Show page numbers</span>
+            </label>
+          </div>
+        </section>
+
+        {/* Add items */}
+        <section className="card mt-4 p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Add from price list">
+              <input list="catalog-parts" className="input mt-1 w-56 font-mono"
+                placeholder={`${catalog.length} parts`}
+                onChange={(e) => {
+                  if (byPart.has(e.target.value)) {
+                    addFromCatalog(e.target.value);
+                    e.target.value = "";
+                  }
+                }} />
+            </Field>
+            <button className="btn-outline" onClick={addCustom}>+ Custom item</button>
+          </div>
+
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm text-muted">Paste a quote (prompt filler)</summary>
+            <div className="mt-2">
+              <textarea className="input w-full font-mono text-xs" rows={6}
+                value={parseText} onChange={(e) => setParseText(e.target.value)}
+                placeholder={"Customer: Balt\nContact: Guru Vattikuti\n\nLine Item 1\n* Quantity: 1\n* Part Number: NRE\n..."} />
+              <div className="mt-2 flex items-center gap-3">
+                <select className="input" value={parseMode}
+                  onChange={(e) => setParseMode(e.target.value as typeof parseMode)}>
+                  <option value="auto">Auto</option>
+                  <option value="structured">Structured</option>
+                  <option value="freeform">Free-form (AI)</option>
+                </select>
+                <button className="btn-outline" onClick={runParse} disabled={parsing}>
+                  {parsing ? "Parsing…" : "Parse into quote"}
+                </button>
+                <span className="text-2xs text-muted">Replaces the current line items.</span>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        {/* Line items */}
+        <section className="mt-4 space-y-2">
+          {items.length === 0 ? (
+            <div className="card p-6 text-center text-sm text-muted">
+              No line items yet. Add from the price list, add a custom item, or paste a quote.
+            </div>
+          ) : (
+            items.map((it, idx) => (
+              <LineItemCard
+                key={it.id}
+                item={it}
+                index={idx}
+                count={items.length}
+                expanded={expanded === it.id}
+                onToggle={() => setExpanded(expanded === it.id ? null : it.id)}
+                onPatch={(p) => patchItem(it.id, p)}
+                onRemove={() => removeItem(it.id)}
+                onMove={(d) => move(it.id, d)}
+              />
+            ))
+          )}
+        </section>
+
+        {/* Validation */}
+        {(validation.errors.length > 0 || validation.warnings.length > 0) && (
+          <section className="mt-4 space-y-1 text-xs">
+            {validation.errors.map((e, i) => (
+              <div key={`e${i}`} className="text-danger">• {e}</div>
+            ))}
+            {validation.warnings.map((w, i) => (
+              <div key={`w${i}`} className="text-amber-600">• {w}</div>
+            ))}
+          </section>
+        )}
+
+        {/* Actions */}
+        <div className="mt-5 flex items-center gap-3">
+          <button onClick={downloadPdf} disabled={busy || validation.errors.length > 0}
+            className="btn-primary disabled:opacity-50">
+            {busy ? "Generating…" : "Download PDF"}
+          </button>
+          <button onClick={newQuote} className="btn-ghost">New quote</button>
+          {error && <span className="text-xs text-danger">{error}</span>}
         </div>
       </div>
 
-      <label className="mt-4 block text-sm">
-        <span className="text-muted">Notes</span>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          className="input mt-1 w-full"
-        />
-      </label>
-
-      <div className="mt-4 flex items-center gap-3">
-        <button
-          onClick={downloadPdf}
-          disabled={busy}
-          className="btn-primary disabled:opacity-50"
-        >
-          {busy ? "Generating…" : "Download Merit OEM PDF"}
-        </button>
-        {error && <span className="text-xs text-danger">{error}</span>}
+      {/* ---- Right: live preview ---- */}
+      <div className="min-w-0">
+        <div className="sticky top-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-2xs uppercase tracking-wide text-muted">Live preview</span>
+            <span className="font-mono text-2xs text-muted">{quoteId}</span>
+          </div>
+          <div className="card overflow-hidden p-0" style={{ height: "70vh" }}>
+            <iframe title="Quote preview" srcDoc={previewHtml}
+              className="h-full w-full border-0" style={{ background: "#E4E4E6" }} />
+          </div>
+          <p className="mt-2 text-2xs text-muted">
+            The preview is the exact document the PDF prints. Scroll to see all pages.
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-function money(n: number): string {
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+// ---- Subcomponents -------------------------------------------------------
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block text-sm">
+      <span className="text-muted">{label}</span>
+      {children}
+    </label>
+  );
 }
 
-function slug(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "quote";
+function LineItemCard({
+  item, index, count, expanded, onToggle, onPatch, onRemove, onMove,
+}: {
+  item: UiLineItem;
+  index: number;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  onPatch: (p: Partial<UiLineItem>) => void;
+  onRemove: () => void;
+  onMove: (dir: -1 | 1) => void;
+}) {
+  const ask =
+    !item.custom && Boolean(item.partNo) && inferSterility(item.partNo, item.title).ask && !item.closing;
+  const bg = item.custom ? "#FFFBF5" : undefined;
+
+  return (
+    <div className="card p-0" style={{ background: bg }}>
+      <div className="flex items-center gap-3 px-3 py-2">
+        <button onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+          <span className="font-mono text-xs text-muted">{item.quantity || "?"}×</span>
+          <span className="font-mono text-xs text-fg">{item.partNo || "(no PN)"}</span>
+          <span className="min-w-0 flex-1 truncate text-sm text-fg">{item.title || "(untitled)"}</span>
+          <span className="font-mono text-xs text-fg">{item.price || "—"}</span>
+        </button>
+        <div className="flex items-center gap-1.5">
+          {item.custom && <span className="chip text-2xs">Custom</span>}
+          {ask && <span className="chip text-2xs text-amber-600">Ask</span>}
+          <button onClick={() => onMove(-1)} disabled={index === 0}
+            className="px-1 text-xs text-muted hover:text-fg disabled:opacity-30">↑</button>
+          <button onClick={() => onMove(1)} disabled={index === count - 1}
+            className="px-1 text-xs text-muted hover:text-fg disabled:opacity-30">↓</button>
+          <button onClick={onRemove} className="px-1 text-xs text-muted hover:text-danger">✕</button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-border px-3 py-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Quantity">
+              <input className="input mt-1 w-full" value={item.quantity}
+                onChange={(e) => onPatch({ quantity: e.target.value })} />
+            </Field>
+            <Field label="Part No.">
+              <input className="input mt-1 w-full font-mono" value={item.partNo}
+                onChange={(e) => onPatch({ partNo: e.target.value })} />
+            </Field>
+            <Field label="Title">
+              <input className="input mt-1 w-full" value={item.title}
+                onChange={(e) => onPatch({ title: e.target.value })} />
+            </Field>
+            <Field label="Price/ea.">
+              <input className="input mt-1 w-full font-mono" value={item.price}
+                onChange={(e) => onPatch({ price: e.target.value })} />
+            </Field>
+          </div>
+
+          <Field label="Attributes (one per line)">
+            <textarea className="input mt-1 w-full text-sm" rows={4}
+              value={item.attributes.join("\n")}
+              onChange={(e) => onPatch({ attributes: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })} />
+          </Field>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="Closing (sterility)">
+              <select className="input mt-1 w-full" value={item.closing}
+                onChange={(e) => onPatch({ closing: e.target.value as Closing })}>
+                {CLOSINGS.map((c) => (
+                  <option key={c} value={c}>{c || "(none)"}</option>
+                ))}
+              </select>
+            </Field>
+            <label className="mt-1 flex items-center gap-2 self-end text-sm">
+              <input type="checkbox" checked={item.leadStacked}
+                onChange={(e) => onPatch({ leadStacked: e.target.checked })} />
+              <span className="text-muted">Stacked &quot;In Stock / or&quot;</span>
+            </label>
+          </div>
+
+          {item.leadStacked ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Stock label">
+                <input className="input mt-1 w-full" value={item.leadStock}
+                  onChange={(e) => onPatch({ leadStock: e.target.value })} />
+              </Field>
+              <Field label="Alternate lead">
+                <input className="input mt-1 w-full" value={item.leadAlt}
+                  onChange={(e) => onPatch({ leadAlt: e.target.value })} />
+              </Field>
+            </div>
+          ) : (
+            <Field label="Lead time">
+              <input className="input mt-1 w-full" value={item.leadTime}
+                placeholder="e.g. 4-6 weeks, or 'in stock or 6-8 weeks'"
+                onChange={(e) => onPatch({ leadTime: e.target.value })} />
+            </Field>
+          )}
+
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={item.custom}
+              onChange={(e) => onPatch({ custom: e.target.checked })} />
+            <span className="text-muted">Custom item (no auto sterility / stacking)</span>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Client helpers ------------------------------------------------------
+
+function deriveTitleClient(description: string): string {
+  return description.replace(/[®™©]/g, "").trim().split(/\s+/).slice(0, 6).join(" ");
+}
+
+function validateClient(meta: Meta, items: UiLineItem[], quoteId: string) {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (!meta.customerName.trim()) errors.push("Customer name is required.");
+  if (!meta.customerContact.trim()) errors.push("Contact (Quoted For) is required.");
+  if (!meta.quoteDate.trim()) errors.push("Quote date is required.");
+  if (!meta.quoteShort.trim()) errors.push("Quote tag is required.");
+  if (!quoteId.trim()) errors.push("Quote ID could not be derived.");
+  if (items.length === 0) errors.push("At least one line item is required.");
+
+  const seen = new Map<string, number>();
+  items.forEach((it, i) => {
+    const n = i + 1;
+    if (!it.quantity.trim()) errors.push(`Line ${n}: quantity is required.`);
+    if (!it.price.trim()) errors.push(`Line ${n}: price is required.`);
+    if (!it.title.trim()) errors.push(`Line ${n}: a title is required.`);
+    if (it.leadStacked) {
+      if (!it.leadAlt.trim()) errors.push(`Line ${n}: stacked lead needs an alternate.`);
+    } else if (!it.leadTime.trim()) {
+      errors.push(`Line ${n}: a lead time is required.`);
+    }
+    const pn = it.partNo.trim().toUpperCase();
+    if ((pn === "NRE" || pn.startsWith("TBD")) && !leadSet(it)) {
+      errors.push(`Line ${n}: ${it.partNo} requires an explicit lead time.`);
+    }
+    if (it.partNo.length > 16) warnings.push(`Line ${n}: part number is long and may overflow.`);
+    const key = it.partNo.trim().toLowerCase();
+    if (key) {
+      const prev = seen.get(key);
+      if (prev) warnings.push(`Lines ${prev} and ${n} share part number "${it.partNo}".`);
+      else seen.set(key, n);
+    }
+  });
+  return { errors, warnings };
+}
+
+function leadSet(it: UiLineItem): boolean {
+  return it.leadStacked ? Boolean(it.leadAlt.trim()) : Boolean(it.leadTime.trim());
 }
