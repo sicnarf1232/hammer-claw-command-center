@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "app/api/meetings/pdf/route.ts": { "memory": 1536, "maxDuration": 60 },
-    "app/api/quote/pdf/route.ts": { "memory": 1536, "maxDuration": 60 }
+    "app/api/quote/pdf/route.ts": { "memory": 1536, "maxDuration": 60 },
+    "app/api/quote/save/route.ts": { "memory": 1536, "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/cron/morning-brief", "schedule": "30 12 * * *" },

@@ -11,6 +11,7 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/api/meetings/pdf": ["./node_modules/@sparticuz/chromium/bin/**"],
     "/api/quote/pdf": ["./node_modules/@sparticuz/chromium/bin/**"],
+    "/api/quote/save": ["./node_modules/@sparticuz/chromium/bin/**"],
   },
 };
 

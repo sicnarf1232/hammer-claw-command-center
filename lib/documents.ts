@@ -8,6 +8,7 @@ import { getDb, dbConfigured, documents } from "@/lib/db";
 // Everything degrades cleanly when Blob/DB are not configured.
 
 export const DOC_TYPES = [
+  { key: "quote", label: "Quote" },
   { key: "iso", label: "ISO doc" },
   { key: "biocomp", label: "Biocompatibility" },
   { key: "drawing", label: "Drawing" },

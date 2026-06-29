@@ -258,6 +258,9 @@ function Detail({
             {tab === "contacts" && <Contacts a={a} />}
             {tab === "meetings" && <Meetings a={a} />}
             {tab === "tasks" && <TasksTab a={a} today={today} />}
+            {tab === "quotes" && (
+              <DocumentLibrary account={a.name} allowedTypes={["quote"]} compact />
+            )}
             {tab === "quality" && (
               <DocumentLibrary
                 account={a.name}
@@ -279,7 +282,7 @@ function Detail({
 const TABS: { key: Tab; label: string; enabled: boolean }[] = [
   { key: "overview", label: "Overview", enabled: true },
   { key: "contacts", label: "Contacts", enabled: true },
-  { key: "quotes", label: "Quotes", enabled: false },
+  { key: "quotes", label: "Quotes", enabled: true },
   { key: "tasks", label: "Tasks", enabled: true },
   { key: "projects", label: "Open projects", enabled: false },
   { key: "pricing", label: "Pricing", enabled: false },
@@ -288,7 +291,7 @@ const TABS: { key: Tab; label: string; enabled: boolean }[] = [
   { key: "meetings", label: "Meetings", enabled: true },
 ];
 
-const PLACEHOLDER_TABS: Tab[] = ["quotes", "projects", "pricing"];
+const PLACEHOLDER_TABS: Tab[] = ["projects", "pricing"];
 
 function tabLabel(t: Tab): string {
   return TABS.find((x) => x.key === t)?.label ?? t;

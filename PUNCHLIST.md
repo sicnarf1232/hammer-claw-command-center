@@ -160,9 +160,13 @@ can read the vault.
       - [ ] AUTO QUOTE-TAG: suggest quote_short from the line-item category mix
             (TBV/Vac/SI etc.). Needs a category field on price-list catalog
             items; quote_short is a manual field until then.
-      - [ ] SAVE TO VAULT: optionally commit the generated PDF to the vault at
-            300 Merit/Meetings/{customerName}/{quoteId}/{quoteId}.pdf. Currently
-            download-only (per the 2026-06-29 build decision).
+      - [x] SAVE QUOTE (done 2026-06-29): "Save to account" in the builder
+            stores the rendered PDF as a "quote" document linked to the account;
+            the account Quotes tab lists them and accepts past-quote uploads.
+            Uses the document library (POSTGRES_URL + BLOB_READ_WRITE_TOKEN),
+            same as the Quality / OEM PCN tabs. NOTE: if those env vars are not
+            set in Vercel, the Quotes tab shows the library setup notice and
+            Save returns a 503 with that message.
 
 ## 8. Vercel deploy — DONE (live)
 

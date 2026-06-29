@@ -2,6 +2,22 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Quote save + account Quotes tab (2026-06-29)
+
+- Quotes can now be saved and are linked to their account. New "quote" document
+  type; the account Quotes tab is enabled and renders the DocumentLibrary scoped
+  to that account + the quote type, so it both lists saved quotes and accepts
+  past-quote uploads (drag a PDF in). This reuses the same store as the Quality
+  / OEM PCN tabs (needs POSTGRES_URL + BLOB_READ_WRITE_TOKEN).
+- Builder gets a "Save to account" button: POST /api/quote/save renders the same
+  PDF as Download and stores it as a quote document against the customer/account
+  (title = quote id). Render logic factored into lib/quote/renderPdf.ts, shared
+  by /api/quote/pdf and /api/quote/save (both added to the Chromium tracing list
+  + 1536MB in vercel.json).
+- Note: a quote shows on the account when its document type is "Quote" and its
+  account matches the account name. Re-save from the builder or re-tag an earlier
+  upload as "Quote" to surface it.
+
 ## Quote redesign follow-ups: prod PDF fix, formatting, task connectivity (2026-06-29)
 
 - Fix: the quote PDF 500'd on Vercel ("@sparticuz/chromium/bin does not

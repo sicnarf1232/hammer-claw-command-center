@@ -92,6 +92,8 @@ export default function QuoteBuilder({
   const [parsing, setParsing] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
 
   const byPart = useMemo(() => {
     const m = new Map<string, CatalogEntry>();
@@ -308,6 +310,37 @@ export default function QuoteBuilder({
     }
   }
 
+  async function saveToAccount() {
+    setError(null);
+    setSaved(null);
+    if (validation.errors.length > 0) {
+      setError("Fix the items flagged below before saving.");
+      return;
+    }
+    if (!meta.customerName.trim()) {
+      setError("Set a customer / account to save the quote against.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/quote/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rawPayload()),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.details?.join(" ") ?? data.error ?? "Could not save the quote.");
+        return;
+      }
+      setSaved(`Saved to ${meta.customerName} — see the account's Quotes tab.`);
+    } catch {
+      setError("Network error saving the quote.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function downloadPdf() {
     setError(null);
     if (validation.errors.length > 0) {
@@ -510,13 +543,18 @@ export default function QuoteBuilder({
         )}
 
         {/* Actions */}
-        <div className="mt-5 flex items-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center gap-3">
           <button onClick={downloadPdf} disabled={busy || validation.errors.length > 0}
             className="btn-primary disabled:opacity-50">
             {busy ? "Generating…" : "Download PDF"}
           </button>
+          <button onClick={saveToAccount} disabled={saving || validation.errors.length > 0}
+            className="btn-outline disabled:opacity-50">
+            {saving ? "Saving…" : "Save to account"}
+          </button>
           <button onClick={newQuote} className="btn-ghost">New quote</button>
           {error && <span className="text-xs text-danger">{error}</span>}
+          {saved && <span className="text-xs text-success">{saved}</span>}
         </div>
       </div>
 
