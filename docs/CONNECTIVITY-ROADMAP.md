@@ -2,9 +2,18 @@
 
 ## ▶ PICKUP — start here next session
 
-Last worked: 2026-06-19/20. HEAD = `ffc08b2` on `main`, pushed, working tree
-clean. 111 tests pass, typecheck + production build clean, deployed and Ready at
-https://hammer-claw-command-center.vercel.app.
+Last worked: 2026-06-29. HEAD = `ba8b726` on `main`, pushed, working tree
+clean. Deployed at https://hammer-claw-command-center.vercel.app.
+
+Confirmed working 2026-06-29:
+- Meeting/series PDF: click Download goes straight into a real downloaded PDF
+  (server-side headless Chromium route), no print dialog. The in-flight Chromium
+  binary tracing fix (`ba8b726`) is verified done.
+- GitHub PAT rotated and `GITHUB_TOKEN` updated in Vercel.
+
+Most recent build work: Phase 3 — branding (in-app/email/PDF themed via one
+`docTheme`, paper colors, `/branding` page + Merit seed) and the meetings PDF.
+See CHANGELOG for details.
 
 ### FIRST: two activation steps for the document library (Milestone 3 #1)
 The library is built and live but shows a setup notice until these are done

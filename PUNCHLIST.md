@@ -170,10 +170,8 @@ can read the vault.
       in Vercel > Settings > Environment Variables, then redeploy).
 
 Still to do on the deploy:
-- [ ] ROTATE THE GITHUB PAT. You pasted it in chat, so regenerate the
-      fine-grained token (GitHub > Settings > Developer settings) and update the
-      `GITHUB_TOKEN` env var in Vercel, then redeploy. Do this once everything is
-      confirmed working.
+- [x] ROTATE THE GITHUB PAT (done 2026-06-29). Regenerated the fine-grained
+      token and updated the `GITHUB_TOKEN` env var in Vercel.
 - [ ] Add the database (section 3) and the remaining secrets as you wire each
       phase: POSTGRES_URL, HC_WEBHOOK_SECRET, POWER_AUTOMATE_REPLY_URL,
       ANTHROPIC_API_KEY, NOTIFY_WEBHOOK_URL, GRANOLA_API_KEY.
