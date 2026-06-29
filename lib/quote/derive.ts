@@ -264,26 +264,50 @@ export function composeLeadTimeSummary(items: QuoteLineItem[]): string {
 
 // ---- Quantity formatting -------------------------------------------------
 
-// Add thousands separators when the value is a plain integer; otherwise pass
-// through unchanged ("1 lot" stays "1 lot").
+// Add thousands separators to any integer run of 4+ digits, leaving operators
+// and words intact. Supports volume-pricing notation: "5000+" -> "5,000+",
+// ">5000" -> ">5,000", "1000-5000" -> "1,000-5,000", "1 lot" -> "1 lot".
 export function formatQuantity(q: string): string {
   const s = q.trim();
-  const cleaned = s.replace(/,/g, "");
-  if (/^\d+$/.test(cleaned)) {
-    return new Intl.NumberFormat("en-US").format(Number(cleaned));
-  }
-  return s;
+  if (!s) return s;
+  return s
+    .replace(/,/g, "")
+    .replace(/\d+/g, (n) =>
+      n.length >= 4 ? new Intl.NumberFormat("en-US").format(Number(n)) : n,
+    );
 }
 
-// Normalize a price to a "$"-prefixed string. Accepts "$3.93", "3.93",
-// "$3,500", 16.5. Keeps existing formatting/decimals where present.
+// Normalize a price to a "$"-prefixed string for storage. Accepts "$3.93",
+// "3.93", "$3,500", 16.5. Light touch: just ensures the "$".
 export function normalizePrice(price: string | number): string {
-  if (typeof price === "number") {
-    return `$${price.toLocaleString("en-US")}`;
-  }
+  if (typeof price === "number") return `$${price}`;
   const s = price.trim();
   if (!s) return "";
   return s.startsWith("$") ? s : `$${s}`;
+}
+
+// Display a price per Jordan's house rule: show cents only when they matter.
+// Under $100, always two decimals ($16.50, $4.00). $100 and over, drop a ".00"
+// ($100 not $100.00, $41,200 not $41,200.00) but keep real cents ($1,234.50).
+// Always thousands separators. Non-numeric input passes through with a "$".
+export function formatPrice(price: string | number): string {
+  const raw = typeof price === "number" ? String(price) : price.trim();
+  if (!raw) return "";
+  const cleaned = raw.replace(/[$,\s]/g, "");
+  const n = Number(cleaned);
+  if (!/^\d*\.?\d+$/.test(cleaned) || Number.isNaN(n)) {
+    // Not a plain number (e.g. "TBD", "POA"): keep as typed with a $.
+    return raw.startsWith("$") ? raw : `$${raw}`;
+  }
+  const nf = (min: number) =>
+    new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: min,
+      maximumFractionDigits: 2,
+    });
+  if (n < 100) return `$${nf(2).format(n)}`;
+  // >= 100: 2 decimals only when there are real cents, else none.
+  const hasCents = Math.round(n * 100) % 100 !== 0;
+  return `$${nf(hasCents ? 2 : 0).format(n)}`;
 }
 
 // ---- Title auto-derivation (fallback) ------------------------------------

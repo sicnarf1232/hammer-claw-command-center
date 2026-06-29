@@ -6,6 +6,7 @@ import {
   defaultLeadTime,
   deriveQuoteId,
   inferSterility,
+  parseDateParts,
 } from "@/lib/quote/derive";
 import {
   BLANK_LINE_ITEM,
@@ -19,6 +20,19 @@ export interface CatalogEntry {
   partNumber: string;
   description: string;
   unitCost: number | null;
+}
+
+export interface AccountOption {
+  name: string;
+  slug: string;
+}
+
+// Prefill seed passed in from a deep link (e.g. "Create quote" on a task).
+export interface QuoteSeed {
+  customer?: string;
+  contact?: string;
+  description?: string;
+  parseText?: string;
 }
 
 interface UiLineItem extends QuoteLineItem {
@@ -57,7 +71,17 @@ const BLANK_META: Meta = {
 
 const CLOSINGS: Closing[] = ["", "Bulk Non-Sterile.", "Sterile", "Single-Sterile."];
 
-export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
+export default function QuoteBuilder({
+  catalog,
+  accounts = [],
+  today,
+  seed,
+}: {
+  catalog: CatalogEntry[];
+  accounts?: AccountOption[];
+  today: string; // ISO YYYY-MM-DD in the app timezone
+  seed?: QuoteSeed;
+}) {
   const [meta, setMeta] = useState<Meta>(BLANK_META);
   const [items, setItems] = useState<UiLineItem[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -75,19 +99,37 @@ export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
     return m;
   }, [catalog]);
 
+  const matchedAccount = useMemo(() => {
+    const key = meta.customerName.trim().toLowerCase();
+    if (!key) return null;
+    return accounts.find((a) => a.name.trim().toLowerCase() === key) ?? null;
+  }, [accounts, meta.customerName]);
+
   // ---- Draft persistence (localStorage) ----
   useEffect(() => {
+    let m: Meta = { ...BLANK_META, quoteDate: today };
+    let its: UiLineItem[] = [];
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const d = JSON.parse(raw) as { meta: Meta; items: UiLineItem[] };
-        if (d.meta) setMeta({ ...BLANK_META, ...d.meta });
-        if (Array.isArray(d.items)) setItems(d.items);
+        if (d.meta) m = { ...m, ...d.meta, quoteDate: toISO(d.meta.quoteDate) || today };
+        if (Array.isArray(d.items)) its = d.items;
       }
     } catch {
       /* ignore a corrupt draft */
     }
+    // A task seed (deep link) takes precedence over the saved draft.
+    if (seed) {
+      if (seed.customer) m.customerName = seed.customer;
+      if (seed.contact) m.customerContact = seed.contact;
+      if (seed.description) m.description = seed.description;
+      if (seed.parseText) setParseText(seed.parseText);
+    }
+    setMeta(m);
+    setItems(its);
     setLoaded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -225,7 +267,7 @@ export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
         setError(data.error ?? "Could not parse the input.");
         return;
       }
-      loadSpec(data.spec as QuoteSpec);
+      mergeSpec(data.spec as QuoteSpec);
       setParseText("");
     } catch {
       setError("Network error while parsing.");
@@ -234,25 +276,28 @@ export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
     }
   }
 
-  function loadSpec(spec: QuoteSpec) {
-    setMeta({
-      customerName: spec.customerName,
-      customerShort: spec.customerShort,
-      customerContact: spec.quotedFor,
-      description: spec.description,
-      quoteDate: spec.quoteDate,
-      quoteShort: spec.quoteShort,
-      quoteIdOverride: "",
-      leadTimeSummaryOverride: "",
-      tableHeaderStyle: spec.tableHeaderStyle,
-      showPageNumbers: spec.showPageNumbers,
-    });
-    setItems(spec.lineItems.map((li) => ({ ...li, id: nextId() })));
+  // Merge parsed results into the current quote: only fill meta fields the
+  // parser actually found (never clobber what was typed), and append the parsed
+  // line items to any already present.
+  function mergeSpec(spec: QuoteSpec) {
+    setMeta((prev) => ({
+      ...prev,
+      customerName: spec.customerName || prev.customerName,
+      customerShort: spec.customerShort || prev.customerShort,
+      customerContact: spec.quotedFor || prev.customerContact,
+      description: spec.description || prev.description,
+      quoteDate: toISO(spec.quoteDate) || prev.quoteDate,
+      quoteShort: spec.quoteShort || prev.quoteShort,
+    }));
+    setItems((prev) => [
+      ...prev,
+      ...spec.lineItems.map((li) => ({ ...li, id: nextId() })),
+    ]);
   }
 
   function newQuote() {
     if (!confirm("Start a new quote? This clears the current draft.")) return;
-    setMeta(BLANK_META);
+    setMeta({ ...BLANK_META, quoteDate: today });
     setItems([]);
     setExpanded(null);
     setError(null);
@@ -300,7 +345,7 @@ export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
       {/* ---- Left: editor ---- */}
       <div className="min-w-0">
         <datalist id="catalog-parts">
@@ -310,13 +355,26 @@ export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
             </option>
           ))}
         </datalist>
+        <datalist id="account-names">
+          {accounts.map((a) => (
+            <option key={a.slug} value={a.name} />
+          ))}
+        </datalist>
 
         {/* Quote meta */}
         <section className="card p-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Customer">
+            <Field label="Customer / account">
               <input className="input mt-1 w-full" value={meta.customerName}
+                list="account-names" placeholder="Select an account or type a new one"
                 onChange={(e) => setMeta({ ...meta, customerName: e.target.value })} />
+              {matchedAccount ? (
+                <a href={`/accounts?a=${matchedAccount.slug}`} className="mt-1 inline-block text-2xs text-muted hover:underline">
+                  Linked account: {matchedAccount.name} ↗
+                </a>
+              ) : meta.customerName.trim() ? (
+                <span className="mt-1 inline-block text-2xs text-amber-600">New account quote (no match in vault)</span>
+              ) : null}
             </Field>
             <Field label="Customer short (optional)">
               <input className="input mt-1 w-full" value={meta.customerShort}
@@ -328,9 +386,14 @@ export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
                 onChange={(e) => setMeta({ ...meta, customerContact: e.target.value })} />
             </Field>
             <Field label="Quote date">
-              <input className="input mt-1 w-full" value={meta.quoteDate}
-                placeholder="June 26, 2026 or 2026-06-26"
-                onChange={(e) => setMeta({ ...meta, quoteDate: e.target.value })} />
+              <div className="mt-1 flex items-center gap-2">
+                <input type="date" className="input w-full" value={meta.quoteDate}
+                  onChange={(e) => setMeta({ ...meta, quoteDate: e.target.value })} />
+                {meta.quoteDate !== today && (
+                  <button type="button" className="btn-ghost whitespace-nowrap text-xs"
+                    onClick={() => setMeta({ ...meta, quoteDate: today })}>Today</button>
+                )}
+              </div>
             </Field>
             <Field label="Description">
               <input className="input mt-1 w-full" value={meta.description}
@@ -405,7 +468,7 @@ export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
                 <button className="btn-outline" onClick={runParse} disabled={parsing}>
                   {parsing ? "Parsing…" : "Parse into quote"}
                 </button>
-                <span className="text-2xs text-muted">Replaces the current line items.</span>
+                <span className="text-2xs text-muted">Adds parsed items; keeps fields you typed.</span>
               </div>
             </div>
           </details>
@@ -464,7 +527,7 @@ export default function QuoteBuilder({ catalog }: { catalog: CatalogEntry[] }) {
             <span className="text-2xs uppercase tracking-wide text-muted">Live preview</span>
             <span className="font-mono text-2xs text-muted">{quoteId}</span>
           </div>
-          <div className="card overflow-hidden p-0" style={{ height: "70vh" }}>
+          <div className="card overflow-hidden p-0" style={{ height: "calc(100vh - 9rem)" }}>
             <iframe title="Quote preview" srcDoc={previewHtml}
               className="h-full w-full border-0" style={{ background: "#E4E4E6" }} />
           </div>
@@ -601,6 +664,16 @@ function LineItemCard({
 
 function deriveTitleClient(description: string): string {
   return description.replace(/[®™©]/g, "").trim().split(/\s+/).slice(0, 6).join(" ");
+}
+
+// Convert any date string (ISO or "Month Day, Year") to ISO YYYY-MM-DD for the
+// date picker. Returns "" when unparseable.
+function toISO(input: string | undefined): string {
+  if (!input) return "";
+  const p = parseDateParts(input);
+  if (!p) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.y}-${pad(p.m)}-${pad(p.d)}`;
 }
 
 function validateClient(meta: Meta, items: UiLineItem[], quoteId: string) {

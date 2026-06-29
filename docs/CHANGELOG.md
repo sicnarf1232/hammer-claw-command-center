@@ -2,6 +2,27 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Quote redesign follow-ups: prod PDF fix, formatting, task connectivity (2026-06-29)
+
+- Fix: the quote PDF 500'd on Vercel ("@sparticuz/chromium/bin does not
+  exist") because the new route was not in the binary tracing list. Added
+  `/api/quote/pdf` to `outputFileTracingIncludes` (next.config.mjs) and a
+  1536MB/60s function entry (vercel.json), matching the meetings PDF route.
+- Price display rule (`formatPrice`): under $100 always two decimals ($16.50,
+  $4.00); $100 and over drop a ".00" ($100, $41,200) but keep real cents
+  ($1,234.50); always thousands separators. Applied in the document render.
+- Quantity (`formatQuantity`): keeps volume-pricing notation, "5000+" ->
+  "5,000+", ">5000" -> ">5,000", "1000-5000" -> "1,000-5,000".
+- Date is now a calendar picker defaulting to Today (ISO internally, a "Today"
+  reset button when changed).
+- Parser no longer clobbers manually entered fields: it merges (only fills
+  empty meta fields) and appends parsed line items.
+- Connectivity: tasks now have a "Create quote" action (TaskDetail) that deep
+  links to /quote prefilled with the customer + task text; the quote page reads
+  customer/contact/desc/parse search params as a seed. Customer field is wired
+  to vault accounts (datalist + linked-account / new-account indicator).
+- Layout: input is a fixed left rail, the live preview is wider and taller.
+
 ## Quote redesign: Merit OEM quotation document + data layer (2026-06-29)
 
 - Rebuilt the quote generator around the "Merit Medical OEM Quote Redesign"

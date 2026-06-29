@@ -10,6 +10,7 @@ const nextConfig = {
   // function (node-file-trace can miss the runtime-resolved .br binaries).
   outputFileTracingIncludes: {
     "/api/meetings/pdf": ["./node_modules/@sparticuz/chromium/bin/**"],
+    "/api/quote/pdf": ["./node_modules/@sparticuz/chromium/bin/**"],
   },
 };
 

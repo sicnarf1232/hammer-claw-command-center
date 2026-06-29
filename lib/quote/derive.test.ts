@@ -7,6 +7,7 @@ import {
   formatMMDDYY,
   formatQuantity,
   inferSterility,
+  formatPrice,
   normalizeCustomerName,
   normalizePrice,
   parseLeadPhrase,
@@ -136,15 +137,29 @@ describe("defaults + formatting", () => {
     expect(defaultLeadTime("Sterile")).toBe("6-8 weeks");
     expect(defaultLeadTime("")).toBe("");
   });
-  it("formats quantity with separators, passes through non-numeric", () => {
+  it("formats quantity with separators and volume-pricing operators", () => {
     expect(formatQuantity("5000")).toBe("5,000");
     expect(formatQuantity("50")).toBe("50");
     expect(formatQuantity("1 lot")).toBe("1 lot");
+    expect(formatQuantity("5000+")).toBe("5,000+");
+    expect(formatQuantity(">5000")).toBe(">5,000");
+    expect(formatQuantity("1000-5000")).toBe("1,000-5,000");
+    expect(formatQuantity("5,000")).toBe("5,000");
   });
   it("normalizes price with a dollar prefix", () => {
     expect(normalizePrice("3.93")).toBe("$3.93");
     expect(normalizePrice("$3,500")).toBe("$3,500");
     expect(normalizePrice(16.5)).toBe("$16.5");
+  });
+  it("formats price: cents under 100, no .00 at/over 100", () => {
+    expect(formatPrice("16.5")).toBe("$16.50");
+    expect(formatPrice("$4")).toBe("$4.00");
+    expect(formatPrice("0.5")).toBe("$0.50");
+    expect(formatPrice("100")).toBe("$100");
+    expect(formatPrice("100.00")).toBe("$100");
+    expect(formatPrice("41200")).toBe("$41,200");
+    expect(formatPrice("1234.5")).toBe("$1,234.50");
+    expect(formatPrice("TBD")).toBe("$TBD");
   });
   it("parses stacked lead phrase", () => {
     const p = parseLeadPhrase("in stock or 6-8 weeks");

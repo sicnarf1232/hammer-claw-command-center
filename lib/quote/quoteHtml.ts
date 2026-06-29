@@ -5,7 +5,7 @@
 // iframe, so the two cannot drift. House style: no em dashes.
 
 import { LOGO_DATA_URI, SIGNATURE_DATA_URI } from "@/lib/quote/assets";
-import { formatQuantity } from "@/lib/quote/derive";
+import { formatPrice, formatQuantity } from "@/lib/quote/derive";
 import type { QuoteLineItem, QuoteSpec } from "@/lib/quote/types";
 
 const PAGE_W = 816; // 8.5in @ 96dpi
@@ -140,7 +140,7 @@ function lineItemRow(it: QuoteLineItem, rowIndex: number): string {
   <div style="padding:13px 14px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border-left:1px solid #E6E7E8;">
     <div style="font-family:Inter,sans-serif;font-weight:700;font-size:13px;color:#1A1A1C;border-bottom:1.5px solid #C9252C;padding-bottom:3px;margin-bottom:7px;display:inline-block;">${esc(it.title)}</div>${attrs}${closing}
   </div>
-  <div style="padding:13px 8px;display:flex;align-items:center;justify-content:center;border-left:1px solid #E6E7E8;"><span style="font-family:Inter,sans-serif;font-weight:700;font-size:14px;color:#4D4D4F;">${esc(it.price)}</span></div>
+  <div style="padding:13px 8px;display:flex;align-items:center;justify-content:center;border-left:1px solid #E6E7E8;"><span style="font-family:Inter,sans-serif;font-weight:700;font-size:14px;color:#4D4D4F;">${esc(formatPrice(it.price))}</span></div>
   <div style="padding:13px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;border-left:1px solid #E6E7E8;">${lead}</div>
 </div>`;
 }

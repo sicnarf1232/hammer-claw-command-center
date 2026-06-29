@@ -295,6 +295,17 @@ function Row({
   );
 }
 
+function quoteHref(t: TaskView): string {
+  const params = new URLSearchParams();
+  if (t.customer && t.customer !== "internal") params.set("customer", t.customer);
+  params.set("desc", cleanTitle(t.title));
+  const parseText = [cleanTitle(t.title), t.description, t.notes]
+    .filter(Boolean)
+    .join("\n");
+  if (parseText) params.set("parse", parseText);
+  return `/quote?${params.toString()}`;
+}
+
 function TaskDetail({ t }: { t: TaskView }) {
   return (
     <div className="grid gap-2 text-sm">
@@ -303,6 +314,15 @@ function TaskDetail({ t }: { t: TaskView }) {
       ) : (
         <p className="text-muted">No additional detail captured for this task.</p>
       )}
+      <div className="pt-1">
+        <Link
+          href={quoteHref(t)}
+          className="btn-outline inline-flex items-center gap-1.5 text-xs"
+          style={t.type === "Pricing/Quote" ? { borderColor: TYPE_HUE["Pricing/Quote"], color: TYPE_HUE["Pricing/Quote"] } : undefined}
+        >
+          Create quote →
+        </Link>
+      </div>
       {t.notes && (
         <p className="whitespace-pre-wrap text-xs text-muted">
           <span className="font-semibold text-fg/70">Notes: </span>
