@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import MicButton from "@/components/MicButton";
 import {
   composeLeadTimeSummary,
   defaultLeadTime,
@@ -25,6 +26,7 @@ export interface CatalogEntry {
 export interface AccountOption {
   name: string;
   slug: string;
+  contacts?: string[];
 }
 
 // Prefill seed passed in from a deep link (e.g. "Create quote" on a task).
@@ -71,6 +73,15 @@ const BLANK_META: Meta = {
 
 const CLOSINGS: Closing[] = ["", "Bulk Non-Sterile.", "Sterile", "Single-Sterile."];
 
+interface RecentQuote {
+  id: number;
+  title: string;
+  account: string | null;
+  uploadedAt: string;
+  hasSpec: boolean;
+  spec: QuoteSpec | null;
+}
+
 export default function QuoteBuilder({
   catalog,
   accounts = [],
@@ -94,6 +105,8 @@ export default function QuoteBuilder({
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+  const [recent, setRecent] = useState<RecentQuote[]>([]);
+  const [showRecent, setShowRecent] = useState(true);
 
   const byPart = useMemo(() => {
     const m = new Map<string, CatalogEntry>();
@@ -106,6 +119,34 @@ export default function QuoteBuilder({
     if (!key) return null;
     return accounts.find((a) => a.name.trim().toLowerCase() === key) ?? null;
   }, [accounts, meta.customerName]);
+
+  const accountContacts = matchedAccount?.contacts ?? [];
+
+  // Load recent saved quotes for the "Recent quotes" panel + re-edit.
+  const loadRecent = useCallback(async () => {
+    try {
+      const res = await fetch("/api/quote/recent");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data.quotes)) setRecent(data.quotes as RecentQuote[]);
+    } catch {
+      /* best-effort */
+    }
+  }, []);
+  useEffect(() => {
+    void loadRecent();
+  }, [loadRecent]);
+
+  // When an account is chosen and no contact is set yet, offer its first contact.
+  useEffect(() => {
+    if (!loaded) return;
+    if (!meta.customerContact.trim() && accountContacts.length > 0) {
+      setMeta((m) =>
+        m.customerContact.trim() ? m : { ...m, customerContact: accountContacts[0] },
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedAccount]);
 
   // ---- Draft persistence (localStorage) ----
   useEffect(() => {
@@ -297,6 +338,33 @@ export default function QuoteBuilder({
     ]);
   }
 
+  // Re-open a saved quote for editing (revision). Full replace of the builder
+  // state; saving keeps the same quote id so it overwrites the stored version.
+  function reEdit(q: RecentQuote) {
+    if (!q.spec) {
+      setError("That quote was saved before re-edit was supported; re-create it to enable editing.");
+      return;
+    }
+    const spec = q.spec;
+    setMeta({
+      customerName: spec.customerName,
+      customerShort: spec.customerShort,
+      customerContact: spec.quotedFor,
+      description: spec.description,
+      quoteDate: toISO(spec.quoteDate) || today,
+      quoteShort: spec.quoteShort,
+      quoteIdOverride: "",
+      leadTimeSummaryOverride: "",
+      tableHeaderStyle: spec.tableHeaderStyle,
+      showPageNumbers: spec.showPageNumbers,
+    });
+    setItems(spec.lineItems.map((li) => ({ ...li, id: nextId() })));
+    setExpanded(null);
+    setError(null);
+    setSaved(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function newQuote() {
     if (!confirm("Start a new quote? This clears the current draft.")) return;
     setMeta({ ...BLANK_META, quoteDate: today });
@@ -334,6 +402,7 @@ export default function QuoteBuilder({
         return;
       }
       setSaved(`Saved to ${meta.customerName} — see the account's Quotes tab.`);
+      void loadRecent();
     } catch {
       setError("Network error saving the quote.");
     } finally {
@@ -378,8 +447,8 @@ export default function QuoteBuilder({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
-      {/* ---- Left: editor ---- */}
+    <div className="space-y-6">
+      {/* ---- Editor (full width; preview stacks below) ---- */}
       <div className="min-w-0">
         <datalist id="catalog-parts">
           {catalog.map((c) => (
@@ -393,6 +462,20 @@ export default function QuoteBuilder({
             <option key={a.slug} value={a.name} />
           ))}
         </datalist>
+        <datalist id="account-contacts">
+          {accountContacts.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
+
+        {recent.length > 0 && (
+          <RecentQuotes
+            recent={recent}
+            open={showRecent}
+            onToggle={() => setShowRecent((v) => !v)}
+            onReEdit={reEdit}
+          />
+        )}
 
         {/* Quote meta */}
         <section className="card p-4">
@@ -416,7 +499,14 @@ export default function QuoteBuilder({
             </Field>
             <Field label="Contact (Quoted For)">
               <input className="input mt-1 w-full" value={meta.customerContact}
+                list="account-contacts"
+                placeholder={accountContacts.length ? "Pick or type a contact" : "Type a contact name"}
                 onChange={(e) => setMeta({ ...meta, customerContact: e.target.value })} />
+              {accountContacts.length > 0 && (
+                <span className="mt-1 inline-block text-2xs text-muted">
+                  {accountContacts.length} contact{accountContacts.length > 1 ? "s" : ""} on this account
+                </span>
+              )}
             </Field>
             <Field label="Quote date">
               <div className="mt-1 flex items-center gap-2">
@@ -486,22 +576,37 @@ export default function QuoteBuilder({
           </div>
 
           <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-muted">Paste a quote (prompt filler)</summary>
+            <summary className="cursor-pointer text-sm text-muted">Paste or dictate a quote (prompt filler)</summary>
             <div className="mt-2">
               <textarea className="input w-full font-mono text-xs" rows={6}
                 value={parseText} onChange={(e) => setParseText(e.target.value)}
-                placeholder={"Customer: Balt\nContact: Guru Vattikuti\n\nLine Item 1\n* Quantity: 1\n* Part Number: NRE\n..."} />
-              <div className="mt-2 flex items-center gap-3">
-                <select className="input" value={parseMode}
-                  onChange={(e) => setParseMode(e.target.value as typeof parseMode)}>
-                  <option value="auto">Auto</option>
-                  <option value="structured">Structured</option>
-                  <option value="freeform">Free-form (AI)</option>
-                </select>
+                placeholder={"Customer: Balt\nContact: Guru Vattikuti\n\nLine Item 1\n* Quantity: 1\n* Part Number: NRE\n* Description: NRE - 8F Custom Green Dilator Setup  (this is the bold TITLE)\n* Details:\n   * 8F French size  (these are the attribute lines)\n   * Bulk Non-Sterile.  (sterility line, bolded on the doc)\n* Unit Price: $41,200\n* Lead Time: 24-30 weeks"} />
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1.5 text-sm">
+                  <span className="text-muted">Mode</span>
+                  <select className="input" value={parseMode}
+                    onChange={(e) => setParseMode(e.target.value as typeof parseMode)}>
+                    <option value="auto">Auto</option>
+                    <option value="structured">Structured</option>
+                    <option value="freeform">Free-form (AI)</option>
+                  </select>
+                </label>
                 <button className="btn-outline" onClick={runParse} disabled={parsing}>
                   {parsing ? "Parsing…" : "Parse into quote"}
                 </button>
+                <MicButton onText={(t) => setParseText((p) => (p ? `${p} ${t}` : t))} title="Dictate the quote" />
                 <span className="text-2xs text-muted">Adds parsed items; keeps fields you typed.</span>
+              </div>
+
+              <div className="mt-3 rounded-[10px] border p-3 text-2xs leading-relaxed text-muted" style={{ borderColor: "var(--line-2)" }}>
+                <div className="mb-1 font-semibold text-fg">Mode guide</div>
+                <p><b>Auto</b>: tries the structured format first, falls back to AI if it sees no line items. Best default.</p>
+                <p><b>Structured</b>: deterministic. Use the <code>Line Item N</code> + <code>* Key: Value</code> format (no AI).</p>
+                <p><b>Free-form (AI)</b>: plain English, parsed by AI (needs ANTHROPIC_API_KEY). Good for dictation.</p>
+                <div className="mb-1 mt-2 font-semibold text-fg">What to include per item</div>
+                <p><b>Description / Title</b>: the product name, rendered big + bold at the top of the cell.</p>
+                <p><b>Details</b> (sub-lines): each becomes an attribute line. Put the sterility as its own line (<b>Bulk Non-Sterile.</b> / <b>Sterile</b> / <b>Single-Sterile.</b>) so it renders bold.</p>
+                <p><b>Quantity</b> (supports 5,000, 100+, &gt;500), <b>Part Number</b>, <b>Unit Price</b>, <b>Lead Time</b>.</p>
               </div>
             </div>
           </details>
@@ -558,27 +663,104 @@ export default function QuoteBuilder({
         </div>
       </div>
 
-      {/* ---- Right: live preview ---- */}
+      {/* ---- Live preview (stacked below the editor, full width) ---- */}
       <div className="min-w-0">
-        <div className="sticky top-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-2xs uppercase tracking-wide text-muted">Live preview</span>
-            <span className="font-mono text-2xs text-muted">{quoteId}</span>
-          </div>
-          <div className="card overflow-hidden p-0" style={{ height: "calc(100vh - 9rem)" }}>
-            <iframe title="Quote preview" srcDoc={previewHtml}
-              className="h-full w-full border-0" style={{ background: "#E4E4E6" }} />
-          </div>
-          <p className="mt-2 text-2xs text-muted">
-            The preview is the exact document the PDF prints. Scroll to see all pages.
-          </p>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-2xs uppercase tracking-wide text-muted">Live preview</span>
+          <span className="font-mono text-2xs text-muted">{quoteId}</span>
         </div>
+        <div className="card overflow-hidden p-0" style={{ height: "120vh" }}>
+          <iframe title="Quote preview" srcDoc={previewHtml}
+            className="h-full w-full border-0" style={{ background: "#E4E4E6" }} />
+        </div>
+        <p className="mt-2 text-2xs text-muted">
+          The preview is the exact document the PDF prints. Scroll to see all pages.
+        </p>
       </div>
     </div>
   );
 }
 
 // ---- Subcomponents -------------------------------------------------------
+
+// Monday of the week containing d (local time).
+function mondayOf(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  const dow = (x.getDay() + 6) % 7; // 0 = Monday
+  x.setDate(x.getDate() - dow);
+  return x;
+}
+function weekLabel(iso: string, now: Date): string {
+  const wk = mondayOf(new Date(iso));
+  const thisWk = mondayOf(now);
+  const diff = Math.round((thisWk.getTime() - wk.getTime()) / (7 * 86_400_000));
+  if (diff <= 0) return "This week";
+  if (diff === 1) return "Last week";
+  return `Week of ${wk.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+function RecentQuotes({
+  recent,
+  open,
+  onToggle,
+  onReEdit,
+}: {
+  recent: RecentQuote[];
+  open: boolean;
+  onToggle: () => void;
+  onReEdit: (q: RecentQuote) => void;
+}) {
+  const groups = useMemo(() => {
+    const now = new Date();
+    const out: { label: string; items: RecentQuote[] }[] = [];
+    for (const q of recent) {
+      const label = weekLabel(q.uploadedAt, now);
+      const g = out.find((x) => x.label === label);
+      if (g) g.items.push(q);
+      else out.push({ label, items: [q] });
+    }
+    return out;
+  }, [recent]);
+
+  return (
+    <section className="card mb-4 p-4">
+      <button onClick={onToggle} className="flex w-full items-center justify-between text-left">
+        <span className="text-sm font-semibold text-fg">Recent quotes</span>
+        <span className="text-2xs text-muted">{recent.length} saved · {open ? "hide" : "show"}</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          {groups.map((g) => (
+            <div key={g.label}>
+              <div className="text-2xs uppercase tracking-wide text-muted">{g.label}</div>
+              <div className="mt-1 space-y-1">
+                {g.items.map((q) => (
+                  <div key={q.id} className="flex items-center gap-2 text-sm">
+                    {q.hasSpec ? (
+                      <button onClick={() => onReEdit(q)}
+                        className="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline"
+                        style={{ color: "var(--accent-2)" }} title="Re-edit this quote">
+                        {q.title}
+                      </button>
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg" title="Saved before re-edit support">
+                        {q.title}
+                      </span>
+                    )}
+                    {q.account && <span className="truncate text-2xs text-muted">{q.account}</span>}
+                    <a href={`/api/documents/file?id=${q.id}`} target="_blank" rel="noopener noreferrer"
+                      className="whitespace-nowrap text-2xs text-muted hover:text-fg">PDF ↗</a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (

@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { normalizeQuote } from "@/lib/quote/normalize";
 import { validateQuote } from "@/lib/quote/validate";
 import { renderQuotePdf } from "@/lib/quote/renderPdf";
-import { documentsEnabled, uploadDocument } from "@/lib/documents";
+import {
+  deleteDocument,
+  documentsEnabled,
+  findDocument,
+  uploadDocument,
+} from "@/lib/documents";
 import type { RawQuoteInput } from "@/lib/quote/types";
 
 export const runtime = "nodejs";
@@ -50,17 +55,25 @@ export async function POST(req: NextRequest) {
 
   try {
     const pdf = await renderQuotePdf(spec);
+    const title = spec.quoteId || "Quote";
     const fileName = `${safeName(spec.quoteId || "quote")}.pdf`;
+
+    // Overwrite an existing quote with the same id for this account (re-edit /
+    // revision): drop the old blob + row before saving the new version.
+    const existing = await findDocument(spec.customerName, title, "quote");
+    if (existing) await deleteDocument(existing.id).catch(() => {});
+
     const doc = await uploadDocument({
       bytes: new Uint8Array(pdf),
       fileName,
       contentType: "application/pdf",
-      title: spec.quoteId || "Quote",
+      title,
       docType: "quote",
       account: spec.customerName,
       notes: spec.description || undefined,
+      spec,
     });
-    return NextResponse.json({ ok: true, document: doc });
+    return NextResponse.json({ ok: true, document: doc, replaced: Boolean(existing) });
   } catch (err) {
     console.error("[quote/save] failed:", err);
     const message = err instanceof Error ? err.message : "Save failed.";

@@ -149,6 +149,8 @@ export const documents = pgTable(
     tags: jsonb("tags").$type<string[]>().default([]),
     extractedText: text("extracted_text"), // PDF text for search (best-effort)
     notes: text("notes"),
+    // For quotes: the full QuoteSpec so a saved quote can be re-opened and edited.
+    spec: jsonb("spec"),
     uploadedAt: timestamp("uploaded_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

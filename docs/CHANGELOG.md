@@ -2,6 +2,29 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Quote builder: stacked preview, contacts, speech, recent quotes, re-edit (2026-06-30)
+
+- Layout: the live preview now stacks full-width below the editor (was a right
+  rail), so the input sections get the full width and you scroll down to the
+  preview.
+- Contacts: the quote is linked to the account, so the contact field offers that
+  account's contacts (datalist) and auto-fills the first when the account is
+  picked. Page passes account contacts.
+- Parse box: added speech-to-text (MicButton, Web Speech API) for dictation, a
+  mode guide (Auto / Structured / Free-form), and a "what to include" guide
+  (title vs detail/attribute lines vs the bold sterility line).
+- Recent quotes: a "Recent quotes" panel grouped by week (This week / Last week
+  / Week of <Mon>), newest first, each with an Open-PDF link. New
+  GET /api/quote/recent.
+- Re-edit + overwrite: saved quotes now persist their full QuoteSpec (new
+  documents.spec column), so clicking a recent quote re-opens it in the builder.
+  Saving a quote with the same id for the same account OVERWRITES the stored
+  version (revision), instead of erroring/duplicating. Reads/writes degrade
+  gracefully if the spec column is not present yet.
+- NEW SQL TO RUN (Neon) to enable re-edit:
+  ALTER TABLE documents ADD COLUMN IF NOT EXISTS spec jsonb;
+- Noted for later: a global app-wide brain mic (bottom-right) is not built yet.
+
 ## Private Blob store support (2026-06-30)
 
 - The Vercel Blob store is configured private, so the hardcoded access:"public"

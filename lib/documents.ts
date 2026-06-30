@@ -40,6 +40,7 @@ export interface DocumentRecord {
   tags: string[] | null;
   extractedText: string | null;
   notes: string | null;
+  spec?: unknown; // for quotes: the QuoteSpec, so it can be re-opened to edit
   uploadedAt: Date;
 }
 
@@ -74,6 +75,7 @@ export interface UploadInput {
   docType: DocType;
   account?: string;
   notes?: string;
+  spec?: unknown; // for quotes
 }
 
 export async function uploadDocument(input: UploadInput): Promise<DocumentRecord> {
@@ -94,37 +96,100 @@ export async function uploadDocument(input: UploadInput): Promise<DocumentRecord
     input.contentType === "application/pdf" || /\.pdf$/i.test(input.fileName);
   const extractedText = isPdf ? await extractPdfText(input.bytes) : "";
 
-  const [row] = await getDb()
-    .insert(documents)
-    .values({
-      title: input.title?.trim() || input.fileName,
-      fileName: input.fileName,
-      contentType: input.contentType ?? null,
-      sizeBytes: input.bytes.byteLength,
-      blobUrl: blob.url,
-      docType: input.docType,
-      account: input.account?.trim() || null,
-      tags: [],
-      extractedText: extractedText || null,
-      notes: input.notes?.trim() || null,
-    })
-    .returning();
-  return row as DocumentRecord;
+  const values = {
+    title: input.title?.trim() || input.fileName,
+    fileName: input.fileName,
+    contentType: input.contentType ?? null,
+    sizeBytes: input.bytes.byteLength,
+    blobUrl: blob.url,
+    docType: input.docType,
+    account: input.account?.trim() || null,
+    tags: [],
+    extractedText: extractedText || null,
+    notes: input.notes?.trim() || null,
+    spec: input.spec ?? null,
+  };
+  try {
+    const [row] = await getDb().insert(documents).values(values).returning();
+    return row as DocumentRecord;
+  } catch (err) {
+    // Tolerate a pre-migration DB without the `spec` column: retry without it.
+    if (/column .*spec.* does not exist/i.test(String(err))) {
+      const { spec: _spec, ...rest } = values;
+      void _spec;
+      const [row] = await getDb().insert(documents).values(rest).returning();
+      return row as DocumentRecord;
+    }
+    throw err;
+  }
+}
+
+// Columns without `spec`, used as a fallback on a pre-migration DB so reads
+// never break before ALTER TABLE ... ADD COLUMN spec has been run.
+const COLS_NO_SPEC = {
+  id: documents.id,
+  title: documents.title,
+  fileName: documents.fileName,
+  contentType: documents.contentType,
+  sizeBytes: documents.sizeBytes,
+  blobUrl: documents.blobUrl,
+  docType: documents.docType,
+  account: documents.account,
+  tags: documents.tags,
+  extractedText: documents.extractedText,
+  notes: documents.notes,
+  uploadedAt: documents.uploadedAt,
+};
+
+// Read documents (optionally filtered), tolerating a DB that lacks the spec
+// column: if the all-columns select fails on spec, retry without it.
+async function queryDocuments(
+  where?: ReturnType<typeof eq>,
+): Promise<DocumentRecord[]> {
+  const db = getDb();
+  try {
+    const q = db.select().from(documents);
+    const rows = where
+      ? await q.where(where).orderBy(desc(documents.uploadedAt))
+      : await q.orderBy(desc(documents.uploadedAt));
+    return rows as DocumentRecord[];
+  } catch (err) {
+    if (!/column .*spec.* does not exist/i.test(String(err))) throw err;
+    const q = db.select(COLS_NO_SPEC).from(documents);
+    const rows = where
+      ? await q.where(where).orderBy(desc(documents.uploadedAt))
+      : await q.orderBy(desc(documents.uploadedAt));
+    return rows as DocumentRecord[];
+  }
+}
+
+// Find an existing document by account + title + type (used to overwrite a quote
+// when it is re-saved under the same quote id).
+export async function findDocument(
+  account: string,
+  title: string,
+  docType: DocType,
+): Promise<DocumentRecord | null> {
+  if (!dbConfigured()) return null;
+  const rows = await queryDocuments(eq(documents.docType, docType));
+  return (
+    rows.find(
+      (r) =>
+        (r.account ?? "").trim().toLowerCase() === account.trim().toLowerCase() &&
+        r.title.trim().toLowerCase() === title.trim().toLowerCase(),
+    ) ?? null
+  );
 }
 
 export async function listDocuments(account?: string): Promise<DocumentRecord[]> {
   if (!dbConfigured()) return [];
-  const db = getDb();
-  const rows = account
-    ? await db.select().from(documents).where(eq(documents.account, account)).orderBy(desc(documents.uploadedAt))
-    : await db.select().from(documents).orderBy(desc(documents.uploadedAt));
-  return rows as DocumentRecord[];
+  return queryDocuments(account ? eq(documents.account, account) : undefined);
 }
 
 export async function getDocument(id: number): Promise<DocumentRecord | null> {
   if (!dbConfigured()) return null;
-  const [row] = await getDb().select().from(documents).where(eq(documents.id, id));
-  return (row as DocumentRecord) ?? null;
+  const rows = await queryDocuments(eq(documents.id, id));
+  return rows[0] ?? null;
 }
 
 // Open a private blob's byte stream (server-side, token-authed) so the proxy

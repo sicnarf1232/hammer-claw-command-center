@@ -42,7 +42,11 @@ export default async function QuotePage({
       note = "Could not read the price list. Building with manual line items.";
     }
     try {
-      accounts = (await listAccounts()).map((a) => ({ name: a.name, slug: a.slug }));
+      accounts = (await listAccounts()).map((a) => ({
+        name: a.name,
+        slug: a.slug,
+        contacts: a.contacts.map((c) => c.name).filter(Boolean),
+      }));
     } catch {
       /* accounts are optional; the customer field still accepts free text */
     }
