@@ -110,9 +110,7 @@ function Shell({
   return (
     <div>
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">
-          Activity
-        </h1>
+        <h1 className="display-title text-2xl text-fg">Activity</h1>
         <p className="mt-1 text-sm text-muted">
           Notification log: due-today, new flagged email, briefs. {subtitle}
         </p>

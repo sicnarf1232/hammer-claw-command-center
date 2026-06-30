@@ -32,9 +32,7 @@ export default async function ContactsPage() {
 
   return (
     <article className="panel texture mx-auto max-w-5xl overflow-hidden p-6 sm:p-9">
-      <h1 className="text-[30px] font-bold leading-tight tracking-tight text-fg">
-        Contacts
-      </h1>
+      <h1 className="display-title text-[30px] leading-tight text-fg">Contacts</h1>
       <p className="mt-1 text-sm text-muted">
         Everyone across the vault, split by internal team and customers. Click a
         name for their profile and related tasks.

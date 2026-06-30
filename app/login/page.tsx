@@ -9,7 +9,7 @@ export default async function LoginPage({
   return (
     <div className="flex min-h-screen items-center justify-center bg-page px-4">
       <div className="card w-full max-w-sm p-6">
-        <h1 className="text-xl font-semibold tracking-tight text-fg">Hammer Claw</h1>
+        <h1 className="display-title text-xl text-fg">Hammer Claw</h1>
         <p className="mt-1 text-sm text-muted">
           Command Center. Single user.
         </p>

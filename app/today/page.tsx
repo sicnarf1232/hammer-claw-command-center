@@ -72,7 +72,7 @@ function Page({
   return (
     <div>
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">Today</h1>
+        <h1 className="display-title text-2xl text-fg">Today</h1>
         <p className="mt-1 text-sm text-muted">
           Open tasks due today or overdue
           {today ? (

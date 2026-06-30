@@ -63,9 +63,7 @@ function Page({
   return (
     <div>
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">
-          Accounts
-        </h1>
+        <h1 className="display-title text-2xl text-fg">Accounts</h1>
         <p className="mt-1 text-sm text-muted">
           Merit customer accounts
           {total !== undefined ? (

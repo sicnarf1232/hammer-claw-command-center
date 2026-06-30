@@ -10,7 +10,7 @@ export default function AskPage() {
   return (
     <div>
       <header className="mb-5">
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">Ask</h1>
+        <h1 className="display-title text-2xl text-fg">Ask</h1>
         <p className="mt-1 text-sm text-muted">
           The brain. Grounded in your vault: accounts, contacts, open tasks, and
           meetings. It answers from real data and tells you when something is not

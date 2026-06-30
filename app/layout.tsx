@@ -1,7 +1,23 @@
 import type { Metadata } from "next";
+import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import { BrandColorsProvider } from "@/components/BrandColors";
+
+// Merit Type Style Guide: Inter carries body & UI (weights 300–700), Outfit
+// carries display — headings, eyebrows, all-caps (weights 400–900). Loaded
+// via next/font (self-hosted, no layout shift) and exposed as CSS variables
+// that globals.css maps onto --font-sans / --font-display.
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Film Room — Meeting Intelligence",
@@ -24,7 +40,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="font-sans" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${inter.variable} ${outfit.variable} font-sans`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

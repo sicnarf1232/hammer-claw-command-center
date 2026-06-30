@@ -16,7 +16,7 @@ export default async function BrandingPage() {
   if (!dbConfigured()) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="mb-3 text-2xl font-bold text-fg">Branding</h1>
+        <h1 className="mb-3 display-title text-2xl text-fg">Branding</h1>
         <SetupNotice missing={["POSTGRES_URL"]} />
         <p className="mt-3 text-sm text-muted">
           Brand kits are stored in Postgres. Once it is provisioned, this page lets
@@ -41,7 +41,7 @@ export default async function BrandingPage() {
   if (tableMissing) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="mb-3 text-2xl font-bold text-fg">Branding</h1>
+        <h1 className="mb-3 display-title text-2xl text-fg">Branding</h1>
         <div
           className="card p-5 text-sm"
           style={{ borderColor: "var(--due)", color: "var(--due-ink)" }}
@@ -60,7 +60,7 @@ export default async function BrandingPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-5">
-        <h1 className="text-2xl font-bold text-fg">Branding</h1>
+        <h1 className="display-title text-2xl text-fg">Branding</h1>
         <p className="mt-1 text-sm text-muted">
           These kits brand the meeting exports (the Download PDF and the
           Copy-for-email HTML), resolved per workstream. The app interface stays on

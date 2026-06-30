@@ -2,6 +2,24 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Typography: Merit Type Style Guide (Outfit + Inter) (2026-06-30)
+
+- Adopted the Merit Type Style Guide (imported from the Claude Design project
+  "Outfit and Inter font guide"). Two families, one system: **Outfit** carries
+  display (headings, eyebrows, all-caps; weights 400-900), **Inter** carries
+  body & UI (weights 300-700). Colors were intentionally left unchanged per
+  Jordan's direction (font-only update).
+- Fonts load via `next/font/google` in `app/layout.tsx` (self-hosted, no layout
+  shift), exposed as `--font-inter` / `--font-outfit` and mapped in globals.css
+  onto `--font-sans` (Inter), `--font-display` (Outfit), `--font-mono` (system).
+  Removed the old SN Pro `@font-face`.
+- Base layer: h1-h4 now use the Outfit display face (800, tight tracking); body
+  inherits Inter app-wide. `.eyebrow` matches the guide (Outfit 800 / +0.10em /
+  uppercase). New `.display-title` utility + `font-display` Tailwind family for
+  the branded uppercase screen-title treatment, applied to the static page
+  titles and the Nav wordmark. Dynamic titles (account/person/meeting names)
+  keep normal case but inherit Outfit.
+
 ## Quote builder: stacked preview, contacts, speech, recent quotes, re-edit (2026-06-30)
 
 - Layout: the live preview now stacks full-width below the editor (was a right

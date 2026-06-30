@@ -58,11 +58,11 @@ export default function Nav() {
       <Link href="/meetings" className="flex items-center gap-3 px-2.5 pb-5 pt-1.5">
         <LogoMark />
         <span className="leading-none">
-          <span className="block text-[17px] font-bold tracking-tight text-fg">
+          <span className="block font-display text-[18px] font-extrabold uppercase tracking-tight text-fg">
             Film Room
           </span>
           <span
-            className="mt-1 block text-[8px] font-semibold uppercase text-muted"
+            className="mt-1 block font-display text-[8px] font-extrabold uppercase text-muted"
             style={{ letterSpacing: "0.22em" }}
           >
             Meeting Intelligence

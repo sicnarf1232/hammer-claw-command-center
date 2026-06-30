@@ -14,7 +14,7 @@ export default async function LibraryPage() {
   return (
     <div>
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">Library</h1>
+        <h1 className="display-title text-2xl text-fg">Library</h1>
         <p className="mt-1 text-sm text-muted">
           Reference material for the Merit OEM team: ISO docs, biocompatibility,
           drawings, certificates, OEM PCNs, and spec sheets. Uploaded once,

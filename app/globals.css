@@ -3,24 +3,13 @@
 @tailwind utilities;
 
 /* ============================================================
-   Film Room — local variable font (SN Pro, weights 100–900).
-   Drop SNPro.ttf and SNPro-Italic.ttf into /public/fonts/.
-   Falls back to the system sans cleanly if absent.
+   Merit Type Style Guide — two families, one system.
+   Outfit (display): headings, eyebrows, all-caps. Weights 400–900.
+   Inter (body & UI): everything you read and tap. Weights 300–700.
+   Both are loaded via next/font in app/layout.tsx and exposed as
+   --font-inter / --font-outfit; the tokens below map them onto the
+   app's --font-sans / --font-display / --font-mono slots.
    ============================================================ */
-@font-face {
-  font-family: "SN Pro";
-  src: url("/fonts/SNPro.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "SN Pro";
-  src: url("/fonts/SNPro-Italic.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: italic;
-  font-display: swap;
-}
 
 /* ============================================================
    Design tokens. Named vars (hex) are the Film Room source of
@@ -83,8 +72,12 @@
   --c-personal: 139 139 163;
   --c-shared: 74 63 208;
 
-  --font-sans: "SN Pro", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: "SN Pro", ui-monospace, monospace;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    sans-serif;
+  --font-display: var(--font-outfit), var(--font-inter), ui-sans-serif,
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    monospace;
   color-scheme: light;
 }
 
@@ -145,10 +138,17 @@
   body {
     @apply bg-page text-fg antialiased;
   }
+  /* Headings carry the Outfit display face (Merit Type Style Guide). Weight
+     defaults to 800; component utilities (font-semibold/bold) still win where
+     set. Tracking and line-height follow the guide: display -0.01em, snug 1.3. */
   h1,
   h2,
-  h3 {
-    letter-spacing: -0.02em;
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
   }
   a:focus-visible,
   button:focus-visible,
@@ -172,10 +172,19 @@
   .chip {
     @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums;
   }
-  /* Eyebrow / kicker / section label */
+  /* Eyebrow / kicker / section label — Outfit 800, +0.10em, uppercase. */
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase;
-    letter-spacing: 0.12em;
+    font-family: var(--font-display);
+    @apply text-[11px] font-extrabold uppercase;
+    letter-spacing: 0.1em;
+  }
+  /* Screen / section title — Outfit 800 uppercase, snug line-height. Apply to
+     prominent page headings that want the full branded display treatment. */
+  .display-title {
+    font-family: var(--font-display);
+    @apply font-extrabold uppercase;
+    letter-spacing: 0;
+    line-height: 1.3;
   }
   .btn {
     @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-[11px] px-3.5 py-2 text-sm font-semibold transition-all duration-150 disabled:pointer-events-none disabled:opacity-50;
