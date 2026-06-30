@@ -99,9 +99,15 @@ describe("renderShareHtml", () => {
     expect(html).toContain("Merit Medical OEM · MEETING NOTES");
     expect(html).toContain("Action items");
     expect(html).toContain("Key Decisions");
-    // Brand vars set on the root, with literal fallbacks for dumb mail clients.
-    expect(html).toContain("--brand-primary: #9f1239");
-    expect(html).toContain("var(--brand-primary, #9f1239)");
+    // Outlook-safe rendering: brand colors are emitted as LITERAL hex in element
+    // styles, never var(--brand-x, ...), since Outlook drops custom properties.
+    expect(html).toContain("border-top:2px solid #9f1239"); // footer rule, literal
+    expect(html).not.toContain("var(--brand-primary,");
+    // Layout uses tables + plain blocks, never flex/inline-block (Outlook strips them).
+    expect(html).toContain("<table");
+    expect(html).not.toContain("display:flex");
+    expect(html).not.toContain("inline-flex");
+    expect(html).not.toContain("inline-block");
     // Source HTML special chars are escaped, not injected.
     expect(html).toContain("&lt;discussion&gt;");
     expect(html).toContain("&amp; systems");

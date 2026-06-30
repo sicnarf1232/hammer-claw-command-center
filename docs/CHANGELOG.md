@@ -2,6 +2,27 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Meeting-notes export: Outlook-safe HTML (2026-06-30)
+
+- Outlook strips display:flex / inline-block / CSS custom properties on paste, so
+  the meeting/series copy-for-email template was collapsing to stacked blocks and
+  losing colors. Reworked the shared template (lib/meetingTemplate.tsx) to use
+  only Outlook-safe primitives: tables, plain block divs, inline spans, and
+  literal &#92;u00A0 for spacing.
+  - Stat row (People/Open/Closed/Decisions) is now a <table> (one <td> per stat
+    at equal width, thin spacer <td>s), card styling kept on each <td>.
+  - Attendees render <span>INITIALS</span>&nbsp;<span>Name</span>, with three
+    nbsp between people; initials are first+last word (lib/customerHues) so they
+    always match the name.
+  - Section headers get two nbsp between the number badge and title (was
+    "01KEY DECISIONS"); ◆ / ! bullet markers get a nbsp before their text.
+  - Action-item checkbox is now a span prefix inside the same div as the text
+    (was a preceding block that split onto its own line in Outlook).
+  - Every var(--brand-x, #hex) is emitted as the literal hex (docTheme), and
+    all flex/inline-block removed template-wide (footer, sessions, chips, lists).
+- 191 tests pass (meeting-template test updated to assert the Outlook-safe
+  output); verified by rendering the email HTML.
+
 ## Quote save + account Quotes tab (2026-06-29)
 
 - Quotes can now be saved and are linked to their account. New "quote" document

@@ -117,13 +117,14 @@ export const EXPORT_FONT =
   "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif";
 
 // ONE theme, used by all three surfaces (in-app, email, PDF) so the branding is
-// consistent and sticky. Brand colors are `var(--brand-x, #literal)` so they
-// resolve from the CSS vars in-app and survive mail clients that strip custom
-// properties on export; the neutral inks derive from the paper so the document
-// reads well on white, cream, or a dark background.
+// consistent and sticky. Brand colors are emitted as LITERAL hex, never
+// `var(--brand-x, ...)`: Outlook's renderer drops CSS custom properties on
+// paste/save, so a var()-based border or color renders with no color at all.
+// v[name] is already the resolved literal for the brand. The neutral inks
+// derive from the paper so the document reads well on white, cream, or dark.
 export function docTheme(brand: BrandKit): DocTheme {
   const v = brandToCssVars(brand);
-  const tok = (name: keyof typeof v) => `var(${name}, ${v[name]})`;
+  const tok = (name: keyof typeof v) => v[name];
   const paper = brand.paper || "#ffffff";
   const ink = paperInk(paper);
   return {
@@ -439,28 +440,16 @@ export function MeetingDoc({
       )}
       <div style={{ ...EYEBROW, color: t.primary }}>{clean(model.eyebrow)}</div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 2px" }}>
-        {model.accentDot && (
-          <span
-            style={{
-              width: 11,
-              height: 11,
-              borderRadius: 999,
-              background: t.primary,
-              flexShrink: 0,
-            }}
-          />
-        )}
-        <h1 style={{ fontSize: 26, lineHeight: 1.2, fontWeight: 700, margin: 0, color: t.secondary }}>
-          {clean(model.title)}
-        </h1>
-      </div>
+      <h1 style={{ fontSize: 26, lineHeight: 1.2, fontWeight: 700, margin: "6px 0 2px", color: t.secondary }}>
+        {model.accentDot && <span style={{ color: t.primary }}>&#9679;&nbsp;</span>}
+        {clean(model.title)}
+      </h1>
       {headerLine && (
         <div style={{ color: t.muted, fontSize: 13 }}>{headerLine}</div>
       )}
 
       {(model.about.length > 0 || model.teams.length > 0) && (
-        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ marginTop: 8 }}>
           {model.about.length > 0 && (
             <ChipRow label="About" theme={t}>
               {model.about.map((a) =>
@@ -484,32 +473,18 @@ export function MeetingDoc({
 
       {model.people.length > 0 && (
         <Section theme={t} label={model.kind === "series" ? "People involved" : "Attendees"}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {model.people.map((p) =>
-              slots.renderPerson ? (
-                <React.Fragment key={p.name}>{slots.renderPerson(p)}</React.Fragment>
-              ) : (
-                <PersonChip key={p.name} person={p} theme={t} />
-              ),
-            )}
+          <div style={{ fontSize: 13, color: t.ink2, lineHeight: 2 }}>
+            {model.people.map((p, i) => (
+              <React.Fragment key={p.name}>
+                {i > 0 && "\u00A0\u00A0\u00A0"}
+                {slots.renderPerson ? slots.renderPerson(p) : <PersonChip person={p} theme={t} />}
+              </React.Fragment>
+            ))}
           </div>
         </Section>
       )}
 
-      {model.stats.length > 0 && (
-        <div
-          style={{
-            marginTop: 18,
-            display: "grid",
-            gridTemplateColumns: `repeat(${model.stats.length}, minmax(0, 1fr))`,
-            gap: 10,
-          }}
-        >
-          {model.stats.map((s) => (
-            <StatCard key={s.label} value={s.value} label={s.label} theme={t} />
-          ))}
-        </div>
-      )}
+      {model.stats.length > 0 && <StatRow stats={model.stats} theme={t} />}
 
       {model.tldr && (
         <Section theme={t} label={model.tldr.label}>
@@ -530,14 +505,14 @@ export function MeetingDoc({
         {model.openActions.length === 0 ? (
           <div style={{ fontSize: 14, color: t.muted }}>Nothing open.</div>
         ) : (
-          <div style={{ display: "grid", gap: 8 }}>
-            {model.openActions.map((a) =>
-              a.isJordans && a.task && slots.renderJordanAction ? (
-                <React.Fragment key={a.key}>{slots.renderJordanAction(a)}</React.Fragment>
-              ) : (
-                <ActionCard key={a.key} action={a} theme={t} />
-              ),
-            )}
+          <div>
+            {model.openActions.map((a) => (
+              <div key={a.key} style={{ marginBottom: 8 }}>
+                {a.isJordans && a.task && slots.renderJordanAction
+                  ? slots.renderJordanAction(a)
+                  : <ActionCard action={a} theme={t} />}
+              </div>
+            ))}
           </div>
         )}
         {model.closedActions.length > 0 && (
@@ -545,10 +520,11 @@ export function MeetingDoc({
             <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: t.muted }}>
               {model.closedActions.length} closed
             </summary>
-            <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+            <div style={{ marginTop: 8 }}>
               {model.closedActions.map((c, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, fontSize: 14, color: t.muted }}>
+                <div key={i} style={{ marginBottom: 4, fontSize: 14, color: t.muted }}>
                   <span style={{ color: t.ok }}>&#9745;</span>
+                  {"\u00A0"}
                   <span style={{ textDecoration: "line-through" }}>
                     {c.owner ? `${clean(c.owner)}: ` : ""}
                     {clean(c.text)}
@@ -566,13 +542,14 @@ export function MeetingDoc({
 
       {model.sessions.length > 0 && (
         <Section theme={t} label={`Meetings in this series · ${model.sessions.length}`}>
-          <div style={{ display: "grid", gap: 8 }}>
+          <div>
             {model.sessions.map((s, i) => {
               const href = s.notePath ? slots.sessionHref?.(s.notePath) : undefined;
               return (
                 <div
                   key={i}
                   style={{
+                    marginBottom: 8,
                     border: `1px solid ${t.line}`,
                     borderLeft: `3px solid ${t.primary}`,
                     borderRadius: 12,
@@ -580,12 +557,15 @@ export function MeetingDoc({
                     background: t.surface2,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>{clean(s.heading)}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>
+                    {clean(s.heading)}
                     {href && (
-                      <a href={href} style={{ fontSize: 12, fontWeight: 600, color: t.primary, textDecoration: "none" }}>
-                        Open note &rarr;
-                      </a>
+                      <>
+                        {"\u00A0\u00A0"}
+                        <a href={href} style={{ fontSize: 12, fontWeight: 600, color: t.primary, textDecoration: "none" }}>
+                          Open note &rarr;
+                        </a>
+                      </>
                     )}
                   </div>
                   {s.text.trim() && (
@@ -605,20 +585,18 @@ export function MeetingDoc({
           marginTop: 30,
           borderTop: `2px solid ${t.primary}`,
           paddingTop: 12,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
           fontSize: 12,
           color: t.muted,
         }}
       >
         <span>{clean(model.footerLine)}</span>
         {t.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={t.logoUrl} alt="" style={{ height: 22, width: "auto", objectFit: "contain" }} />
+          <div style={{ marginTop: 6 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={t.logoUrl} alt="" style={{ height: 22, width: "auto" }} />
+          </div>
         ) : (
-          <span>Source · Hammer Claw Vault</span>
+          <span>&nbsp;&nbsp;·&nbsp;&nbsp;Source · Hammer Claw Vault</span>
         )}
       </footer>
     </div>
@@ -653,10 +631,17 @@ function ChipRow({
   theme: DocTheme;
   children: React.ReactNode;
 }) {
+  // Outlook-safe: plain block, label + chips inline, separated by explicit nbsp.
+  const arr = React.Children.toArray(children);
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, fontSize: 13, color: theme.ink2 }}>
+    <div style={{ fontSize: 13, color: theme.ink2, marginBottom: 4, lineHeight: 1.9 }}>
       <span style={{ fontWeight: 600, color: theme.fg }}>{label}:</span>
-      {children}
+      {arr.map((c, i) => (
+        <React.Fragment key={i}>
+          {"\u00A0\u00A0"}
+          {c}
+        </React.Fragment>
+      ))}
     </div>
   );
 }
@@ -665,14 +650,12 @@ function Chip({ theme, children }: { theme: DocTheme; children: React.ReactNode 
   return (
     <span
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
         padding: "2px 9px",
         borderRadius: 999,
         border: `1px solid ${theme.line2}`,
         fontSize: 12.5,
         color: theme.fg,
+        whiteSpace: "nowrap",
       }}
     >
       {children}
@@ -684,27 +667,14 @@ function PersonChip({ person, theme }: { person: DocPerson; theme: DocTheme }) {
   const isCustomer = person.kind === "customer";
   const bg = isCustomer ? theme.accentSoft : person.kind === "internal" ? theme.primarySoft : theme.surface2;
   const fg = isCustomer ? theme.accent : person.kind === "internal" ? theme.primary : theme.ink2;
+  // Outlook-safe: no inline-flex/gap (dropped on paste). Initials badge is a
+  // plain inline span; an explicit &nbsp; separates it from the name.
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "2px 9px 2px 2px",
-        borderRadius: 999,
-        border: `1px solid ${theme.line2}`,
-        fontSize: 12.5,
-        color: theme.fg,
-      }}
-    >
+    <span style={{ fontSize: 12.5, color: theme.fg, whiteSpace: "nowrap" }}>
       <span
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 20,
-          height: 20,
-          borderRadius: 7,
+          padding: "1px 6px",
+          borderRadius: 6,
           background: bg,
           color: fg,
           fontSize: 10,
@@ -713,52 +683,79 @@ function PersonChip({ person, theme }: { person: DocPerson; theme: DocTheme }) {
       >
         {initials(person.name)}
       </span>
+      {"\u00A0"}
       <span>{clean(person.name)}</span>
       {person.count != null && person.count > 0 && (
-        <span style={{ color: theme.muted, fontSize: 11, fontWeight: 600 }}>{person.count}&times;</span>
+        <span style={{ color: theme.muted, fontSize: 11, fontWeight: 600 }}>
+          {"\u00A0"}
+          {person.count}&times;
+        </span>
       )}
     </span>
   );
 }
 
-function StatCard({
-  value,
-  label,
+// Stat row as a real <table> (not flex/grid): Outlook strips display:flex/grid
+// on paste and collapses the row to stacked full-width blocks. A table with one
+// <td> per stat (plus thin spacer <td>s) survives. Card styling stays on the td.
+function StatRow({
+  stats,
   theme,
 }: {
-  value: string | number;
-  label: string;
+  stats: { value: string | number; label: string }[];
   theme: DocTheme;
 }) {
-  const numeric = typeof value === "number" || /^\d+$/.test(String(value));
+  const pct = Math.floor(100 / stats.length);
   return (
-    <div
+    <table
       style={{
-        minHeight: 80,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        padding: 12,
-        border: `1px solid ${theme.line}`,
-        borderRadius: 14,
-        background: theme.surface2,
+        width: "100%",
+        marginTop: 18,
+        borderCollapse: "separate",
+        borderSpacing: 0,
+        tableLayout: "fixed",
       }}
     >
-      <div
-        style={{
-          fontWeight: 700,
-          lineHeight: 1.1,
-          color: theme.accent,
-          fontSize: numeric ? 24 : 15,
-          wordBreak: "break-word",
-        }}
-      >
-        {clean(String(value))}
-      </div>
-      <div style={{ ...EYEBROW, color: theme.muted, marginTop: 4, fontSize: 10 }}>{clean(label)}</div>
-    </div>
+      <tbody>
+        <tr>
+          {stats.map((s, i) => {
+            const numeric =
+              typeof s.value === "number" || /^\d+$/.test(String(s.value));
+            return (
+              <React.Fragment key={s.label}>
+                {i > 0 && <td style={{ width: 10 }} />}
+                <td
+                  style={{
+                    width: `${pct}%`,
+                    textAlign: "center",
+                    verticalAlign: "middle",
+                    padding: 12,
+                    border: `1px solid ${theme.line}`,
+                    borderRadius: 14,
+                    background: theme.surface2,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      lineHeight: 1.1,
+                      color: theme.accent,
+                      fontSize: numeric ? 24 : 15,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {clean(String(s.value))}
+                  </div>
+                  <div style={{ ...EYEBROW, color: theme.muted, marginTop: 4, fontSize: 10 }}>
+                    {clean(s.label)}
+                  </div>
+                </td>
+              </React.Fragment>
+            );
+          })}
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
@@ -774,30 +771,29 @@ function ActionCard({ action, theme }: { action: DocAction; theme: DocTheme }) {
         borderLeft: `3px solid ${action.isJordans ? t.primary : t.line2}`,
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <span style={{ marginTop: 1, fontSize: 14, color: action.done ? t.ok : t.muted }}>
-          {action.done ? "☑" : "☐"}
-        </span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, color: t.fg }}>
-            {action.owner && <b style={{ color: ownerColor(action.ownerKind, t) }}>{clean(action.owner)}: </b>}
-            {clean(action.text)}
-            <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 5, marginLeft: 8, verticalAlign: "middle" }}>
-              {action.priority && <PriorityPill priority={action.priority} theme={t} />}
-              {action.customer && <Chip theme={t}>{clean(action.customer)}</Chip>}
-              {!action.flag && action.due && (
-                <Pill bg={t.dueSoft} fg={t.dueInk}>due {clean(action.due)}</Pill>
-              )}
-              {action.flag && (
-                <Pill bg={t.warmSoft} fg={t.warm}>
-                  &#9873; needs due date{action.vague ? ` · ${clean(action.vague)}` : ""}
-                </Pill>
-              )}
-            </span>
-          </div>
-          <div style={{ marginTop: 2, fontSize: 11, color: t.muted }}>
-            {action.isJordans ? "Jordan" : "tracking only"}
-          </div>
+      <div>
+        {/* Outlook-safe: the checkbox is a span prefix inside the SAME div as
+            the text, so it does not split onto its own line. */}
+        <div style={{ fontSize: 14, color: t.fg }}>
+          <span style={{ color: action.done ? t.ok : t.muted }}>
+            {action.done ? "☑" : "☐"}
+          </span>
+          {"\u00A0"}
+          {action.owner && <b style={{ color: ownerColor(action.ownerKind, t) }}>{clean(action.owner)}: </b>}
+          {clean(action.text)}
+          {action.priority && <>{"\u00A0\u00A0"}<PriorityPill priority={action.priority} theme={t} /></>}
+          {action.customer && <>{"\u00A0\u00A0"}<Chip theme={t}>{clean(action.customer)}</Chip></>}
+          {!action.flag && action.due && (
+            <>{"\u00A0\u00A0"}<Pill bg={t.dueSoft} fg={t.dueInk}>due {clean(action.due)}</Pill></>
+          )}
+          {action.flag && (
+            <>{"\u00A0\u00A0"}<Pill bg={t.warmSoft} fg={t.warm}>
+              &#9873; needs due date{action.vague ? ` · ${clean(action.vague)}` : ""}
+            </Pill></>
+          )}
+        </div>
+        <div style={{ marginTop: 2, fontSize: 11, color: t.muted }}>
+          {action.isJordans ? "Jordan" : "tracking only"}
         </div>
       </div>
     </div>
@@ -812,14 +808,12 @@ function Pill({ bg, fg, children }: { bg: string; fg: string; children: React.Re
   return (
     <span
       style={{
-        display: "inline-flex",
-        alignItems: "center",
         padding: "1px 8px",
         borderRadius: 999,
         background: bg,
         color: fg,
         fontSize: 12,
-        fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
       }}
     >
       {children}
@@ -845,18 +839,19 @@ function SectionBlock({
   const t = theme;
   return (
     <section style={{ marginTop: 28 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 12 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: t.accent, fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ marginBottom: 12 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: t.accent }}>
           {String(index).padStart(2, "0")}
         </span>
+        {"\u00A0\u00A0"}
         <span style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: t.secondary }}>
           {clean(section.heading)}
         </span>
       </div>
       {section.variant === "full" ? (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div>
           {(section.prose ?? []).map((b, i) => (
-            <div key={i}>
+            <div key={i} style={{ marginBottom: 12 }}>
               {b.heading && (
                 <div style={{ marginBottom: 2, fontSize: 14, fontWeight: 600, color: t.fg }}>{clean(b.heading)}</div>
               )}
@@ -867,7 +862,7 @@ function SectionBlock({
           ))}
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div>
           {(section.items ?? []).map((it, i) => (
             <ListItem key={i} text={it} variant={section.variant} theme={t} />
           ))}
@@ -887,17 +882,14 @@ function ListItem({
   theme: DocTheme;
 }) {
   const t = theme;
+  // Outlook-safe: no flex. Marker is an inline span with an explicit &nbsp;
+  // before the text (CSS gap/margin can be dropped on paste).
   if (variant === "watch") {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 0" }}>
+      <div style={{ padding: "10px 0", fontSize: 15, color: t.fg }}>
         <span
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 20,
-            height: 20,
-            flexShrink: 0,
+            padding: "0 7px",
             borderRadius: 999,
             background: t.warm,
             color: "#fff",
@@ -907,7 +899,8 @@ function ListItem({
         >
           !
         </span>
-        <span style={{ fontSize: 15, color: t.fg }}>{clean(text)}</span>
+        {"\u00A0"}
+        <span>{clean(text)}</span>
       </div>
     );
   }
@@ -915,33 +908,25 @@ function ListItem({
     return (
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
           padding: "10px 14px",
           marginBottom: 4,
           borderRadius: 12,
           background: t.accentSoft,
           border: `1px solid ${t.line}`,
+          fontSize: 15,
+          color: t.fg,
         }}
       >
-        <span style={{ flexShrink: 0, fontSize: 14, color: t.accent }}>&#9670;</span>
-        <span style={{ fontSize: 15, color: t.fg }}>{clean(text)}</span>
+        <span style={{ fontSize: 14, color: t.accent }}>&#9670;</span>
+        {"\u00A0"}
+        <span>{clean(text)}</span>
       </div>
     );
   }
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 0" }}>
-      <span
-        style={{
-          flexShrink: 0,
-          width: 11,
-          height: 11,
-          borderRadius: 2,
-          background: t.primary,
-          transform: "rotate(45deg)",
-        }}
-      />
+    <div style={{ padding: "10px 0", fontSize: 15, color: t.fg }}>
+      <span style={{ color: t.primary }}>&#9670;</span>
+      {"\u00A0"}
       <span style={{ fontSize: 15, color: t.fg }}>{clean(text)}</span>
     </div>
   );
