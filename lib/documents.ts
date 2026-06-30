@@ -1,4 +1,4 @@
-import { put, del } from "@vercel/blob";
+import { put, del, get } from "@vercel/blob";
 import { desc, eq } from "drizzle-orm";
 import { getDb, dbConfigured, documents } from "@/lib/db";
 
@@ -82,8 +82,10 @@ export async function uploadDocument(input: UploadInput): Promise<DocumentRecord
   }
   const safe = input.fileName.replace(/[^A-Za-z0-9._-]/g, "_");
   const key = `documents/${Date.now()}-${safe}`;
+  // Private access: these are confidential customer documents (quotes, specs).
+  // They are served back through the authed proxy route /api/documents/file.
   const blob = await put(key, Buffer.from(input.bytes), {
-    access: "public",
+    access: "private",
     contentType: input.contentType,
     addRandomSuffix: true,
   });
@@ -117,6 +119,18 @@ export async function listDocuments(account?: string): Promise<DocumentRecord[]>
     ? await db.select().from(documents).where(eq(documents.account, account)).orderBy(desc(documents.uploadedAt))
     : await db.select().from(documents).orderBy(desc(documents.uploadedAt));
   return rows as DocumentRecord[];
+}
+
+export async function getDocument(id: number): Promise<DocumentRecord | null> {
+  if (!dbConfigured()) return null;
+  const [row] = await getDb().select().from(documents).where(eq(documents.id, id));
+  return (row as DocumentRecord) ?? null;
+}
+
+// Open a private blob's byte stream (server-side, token-authed) so the proxy
+// route can stream it back to the authed user.
+export async function openDocumentBlob(blobUrl: string) {
+  return get(blobUrl, { access: "private" });
 }
 
 export async function deleteDocument(id: number): Promise<void> {

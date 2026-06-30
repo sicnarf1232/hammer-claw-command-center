@@ -2,6 +2,19 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Private Blob store support (2026-06-30)
+
+- The Vercel Blob store is configured private, so the hardcoded access:"public"
+  upload failed ("Cannot use public access on a private store"). Private is the
+  right call for confidential customer documents (quotes, specs), so:
+  - Documents now upload with access:"private" and are served through a new
+    authed proxy, GET /api/documents/file?id= (the app is behind APP_PASSWORD),
+    which streams the private blob via the SDK. The library links there instead
+    of at the raw (non-public) blob URL. Added getDocument + openDocumentBlob.
+  - Brand logos now store inline as a data URL instead of a public blob: a logo
+    must be embeddable in the meeting/quote email + PDF (loadable by Outlook and
+    headless Chromium), which a private blob URL is not.
+
 ## Meeting-notes export: Outlook-safe HTML (2026-06-30)
 
 - Outlook strips display:flex / inline-block / CSS custom properties on paste, so

@@ -194,7 +194,7 @@ export default function DocumentLibrary({
                 {docTypeLabel(d.docType)}
               </span>
               <div className="min-w-0 flex-1">
-                <a href={d.blobUrl} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-semibold hover:underline" style={{ color: "var(--accent-2)" }}>
+                <a href={`/api/documents/file?id=${d.id}`} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-semibold hover:underline" style={{ color: "var(--accent-2)" }}>
                   {d.title}
                 </a>
                 <div className="mt-0.5 truncate text-2xs text-muted">

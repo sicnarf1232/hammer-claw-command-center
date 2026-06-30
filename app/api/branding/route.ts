@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { put } from "@vercel/blob";
 import { dbConfigured } from "@/lib/db";
 import { listBrandKits, upsertBrandKit, type BrandKitInput } from "@/lib/branding";
 
@@ -37,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   try {
     if (logoUrl && logoUrl.startsWith("data:") && process.env.BLOB_READ_WRITE_TOKEN) {
-      logoUrl = await uploadDataUrl(logoUrl, body.workstreamKey);
+      logoUrl = await uploadDataUrl(logoUrl);
     }
 
     const input: BrandKitInput = {
@@ -70,17 +69,10 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function uploadDataUrl(dataUrl: string, workstreamKey: unknown): Promise<string> {
-  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl);
-  if (!m) return dataUrl; // not base64; store as-is
-  const contentType = m[1];
-  const bytes = Buffer.from(m[2], "base64");
-  const ext = contentType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "png";
-  const slug = typeof workstreamKey === "string" && workstreamKey ? workstreamKey : "kit";
-  const blob = await put(`branding/${slug}-logo.${ext}`, bytes, {
-    access: "public",
-    contentType,
-    addRandomSuffix: true,
-  });
-  return blob.url;
+// Store the logo inline as a data URL. The Blob store is private, and a brand
+// logo must be embeddable in the meeting/quote email + PDF (an <img src> that
+// Outlook and headless Chromium can load); a private blob URL would not resolve
+// in those contexts. Logos are small, so inlining is the right tradeoff.
+async function uploadDataUrl(dataUrl: string): Promise<string> {
+  return dataUrl;
 }
