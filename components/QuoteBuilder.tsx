@@ -67,7 +67,7 @@ const BLANK_META: Meta = {
   quoteShort: "",
   quoteIdOverride: "",
   leadTimeSummaryOverride: "",
-  tableHeaderStyle: "Graphite",
+  tableHeaderStyle: "Merit Red",
   showPageNumbers: true,
 };
 
@@ -99,14 +99,14 @@ export default function QuoteBuilder({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [parseText, setParseText] = useState("");
-  const [parseMode, setParseMode] = useState<"auto" | "structured" | "freeform">("auto");
+  const [parseMode, setParseMode] = useState<"auto" | "structured" | "freeform">("freeform");
   const [parsing, setParsing] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentQuote[]>([]);
-  const [showRecent, setShowRecent] = useState(true);
+  const [showRecent, setShowRecent] = useState(false);
 
   const byPart = useMemo(() => {
     const m = new Map<string, CatalogEntry>();
@@ -468,17 +468,20 @@ export default function QuoteBuilder({
           ))}
         </datalist>
 
-        {recent.length > 0 && (
-          <RecentQuotes
-            recent={recent}
-            open={showRecent}
-            onToggle={() => setShowRecent((v) => !v)}
-            onReEdit={reEdit}
-          />
-        )}
+        {/* Top action bar: New quote + Save are always visible. */}
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <button onClick={newQuote} className="btn-outline">New quote</button>
+          <button onClick={saveToAccount} disabled={saving || validation.errors.length > 0}
+            className="btn-primary disabled:opacity-50">
+            {saving ? "Saving…" : "Save quote"}
+          </button>
+          {error && <span className="text-xs text-danger">{error}</span>}
+          {saved && <span className="text-xs text-success">{saved}</span>}
+        </div>
 
-        {/* Quote meta */}
-        <section className="card p-4">
+        {/* Quote details (collapsible so the preview stays in view) */}
+        <details className="card p-4" open>
+          <summary className="mb-3 cursor-pointer text-sm font-semibold text-fg">Quote details</summary>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Customer / account">
               <input className="input mt-1 w-full" value={meta.customerName}
@@ -547,8 +550,8 @@ export default function QuoteBuilder({
               <span className="text-muted">Header</span>
               <select className="input" value={meta.tableHeaderStyle}
                 onChange={(e) => setMeta({ ...meta, tableHeaderStyle: e.target.value as TableHeaderStyle })}>
-                <option value="Graphite">Graphite</option>
                 <option value="Merit Red">Merit Red</option>
+                <option value="Graphite">Graphite</option>
               </select>
             </label>
             <label className="flex items-center gap-2">
@@ -557,10 +560,11 @@ export default function QuoteBuilder({
               <span className="text-muted">Show page numbers</span>
             </label>
           </div>
-        </section>
+        </details>
 
-        {/* Add items */}
-        <section className="card mt-4 p-4">
+        {/* Add or parse items (collapsible) */}
+        <details className="card mt-4 p-4">
+          <summary className="mb-3 cursor-pointer text-sm font-semibold text-fg">Add or parse items</summary>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Add from price list">
               <input list="catalog-parts" className="input mt-1 w-56 font-mono"
@@ -575,8 +579,8 @@ export default function QuoteBuilder({
             <button className="btn-outline" onClick={addCustom}>+ Custom item</button>
           </div>
 
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-muted">Paste or dictate a quote (prompt filler)</summary>
+          <div className="mt-4">
+            <div className="mb-1 text-sm font-semibold text-fg">Paste or dictate a quote</div>
             <div className="mt-2">
               <textarea className="input w-full font-mono text-xs" rows={6}
                 value={parseText} onChange={(e) => setParseText(e.target.value)}
@@ -598,19 +602,26 @@ export default function QuoteBuilder({
                 <span className="text-2xs text-muted">Adds parsed items; keeps fields you typed.</span>
               </div>
 
-              <div className="mt-3 rounded-[10px] border p-3 text-2xs leading-relaxed text-muted" style={{ borderColor: "var(--line-2)" }}>
-                <div className="mb-1 font-semibold text-fg">Mode guide</div>
-                <p><b>Auto</b>: tries the structured format first, falls back to AI if it sees no line items. Best default.</p>
-                <p><b>Structured</b>: deterministic. Use the <code>Line Item N</code> + <code>* Key: Value</code> format (no AI).</p>
-                <p><b>Free-form (AI)</b>: plain English, parsed by AI (needs ANTHROPIC_API_KEY). Good for dictation.</p>
-                <div className="mb-1 mt-2 font-semibold text-fg">What to include per item</div>
-                <p><b>Description / Title</b>: the product name, rendered big + bold at the top of the cell.</p>
-                <p><b>Details</b> (sub-lines): each becomes an attribute line. Put the sterility as its own line (<b>Bulk Non-Sterile.</b> / <b>Sterile</b> / <b>Single-Sterile.</b>) so it renders bold.</p>
-                <p><b>Quantity</b> (supports 5,000, 100+, &gt;500), <b>Part Number</b>, <b>Unit Price</b>, <b>Lead Time</b>.</p>
-              </div>
+              <details className="mt-3 rounded-[10px] border p-3 text-2xs leading-relaxed text-muted" style={{ borderColor: "var(--line-2)" }}>
+                <summary className="cursor-pointer font-semibold text-fg">Mode guide &amp; what to include</summary>
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <div className="font-semibold text-fg">Modes</div>
+                    <p><b>Free-form (AI)</b>: plain English, parsed by AI (needs ANTHROPIC_API_KEY). Best for dictation. Default.</p>
+                    <p><b>Structured</b>: deterministic. Use the <code>Line Item N</code> + <code>* Key: Value</code> format (no AI).</p>
+                    <p><b>Auto</b>: tries structured first, falls back to AI if it sees no line items.</p>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-fg">What to include per item</div>
+                    <p><b>Description / Title</b>: the product name, rendered big + bold at the top of the cell.</p>
+                    <p><b>Details</b> (sub-lines): each becomes an attribute line. Put the sterility as its own line (<b>Bulk Non-Sterile.</b> / <b>Sterile</b> / <b>Single-Sterile.</b>) so it renders bold.</p>
+                    <p><b>Quantity</b> (supports 5,000, 100+, &gt;500), <b>Part Number</b>, <b>Unit Price</b>, <b>Lead Time</b>.</p>
+                  </div>
+                </div>
+              </details>
             </div>
-          </details>
-        </section>
+          </div>
+        </details>
 
         {/* Line items */}
         <section className="mt-4 space-y-2">
@@ -647,19 +658,24 @@ export default function QuoteBuilder({
           </section>
         )}
 
-        {/* Actions */}
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        {/* Recent quotes: under the line items, before Download. Narrow dropdown. */}
+        {recent.length > 0 && (
+          <div className="mt-4 max-w-md">
+            <RecentQuotes
+              recent={recent}
+              open={showRecent}
+              onToggle={() => setShowRecent((v) => !v)}
+              onReEdit={reEdit}
+            />
+          </div>
+        )}
+
+        {/* Download */}
+        <div className="mt-4">
           <button onClick={downloadPdf} disabled={busy || validation.errors.length > 0}
             className="btn-primary disabled:opacity-50">
             {busy ? "Generating…" : "Download PDF"}
           </button>
-          <button onClick={saveToAccount} disabled={saving || validation.errors.length > 0}
-            className="btn-outline disabled:opacity-50">
-            {saving ? "Saving…" : "Save to account"}
-          </button>
-          <button onClick={newQuote} className="btn-ghost">New quote</button>
-          {error && <span className="text-xs text-danger">{error}</span>}
-          {saved && <span className="text-xs text-success">{saved}</span>}
         </div>
       </div>
 

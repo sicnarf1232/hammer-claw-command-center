@@ -160,6 +160,11 @@ can read the vault.
       - [ ] AUTO QUOTE-TAG: suggest quote_short from the line-item category mix
             (TBV/Vac/SI etc.). Needs a category field on price-list catalog
             items; quote_short is a manual field until then.
+      - [ ] ENABLE QUOTE RE-EDIT (run in Neon): the Recent-quotes panel can only
+            re-open a quote for editing once its spec is stored. Run:
+            `ALTER TABLE documents ADD COLUMN IF NOT EXISTS spec jsonb;`
+            then Save a quote once. Until then, Recent quotes is view-only (PDF
+            link). Code already degrades gracefully without the column.
       - [x] SAVE QUOTE (done 2026-06-29): "Save to account" in the builder
             stores the rendered PDF as a "quote" document linked to the account;
             the account Quotes tab lists them and accepts past-quote uploads.
