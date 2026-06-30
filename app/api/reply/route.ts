@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { dbConfigured } from "@/lib/db";
-import { getEmail, markReplied } from "@/lib/inbox";
+import { getEmailById, markReplied } from "@/lib/firehose/actions";
 import { draftReply, aiConfigured, AiNotConfiguredError } from "@/lib/ai";
 import {
   postReplyIntent,
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const email = await getEmail(body.id);
+  const email = await getEmailById(body.id);
   if (!email) {
     return NextResponse.json({ error: "Email not found." }, { status: 404 });
   }
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await postReplyIntent({
       action: "create_draft",
-      inReplyTo: email.messageId,
+      inReplyTo: email.messageId ?? "",
       to,
       cc: [],
       subject,

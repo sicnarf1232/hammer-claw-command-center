@@ -24,7 +24,6 @@ const ITEMS: { href: string; label: string; Icon: ComponentType<IconProps> }[] =
     { href: "/ask", label: "Ask", Icon: SparkIcon },
     { href: "/tasks", label: "Tasks", Icon: TasksIcon },
     { href: "/inbox", label: "Inbox", Icon: InboxIcon },
-    { href: "/mailstream", label: "Mailstream", Icon: InboxIcon },
     { href: "/accounts", label: "Accounts", Icon: AccountsIcon },
     { href: "/contacts", label: "Contacts", Icon: AccountsIcon },
     { href: "/meetings", label: "Meetings", Icon: MeetingsIcon },

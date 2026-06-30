@@ -268,7 +268,12 @@ vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
       received + capture sent) must POST to
       `https://hammer-claw-command-center.vercel.app/api/webhooks/email-firehose`
       with header `x-hc-signature: <HC_WEBHOOK_SECRET>` (the value in section 4).
-      The flagged Flow A keeps pointing at `/api/webhooks/email` (unchanged).
+- [x] UNIFIED INBOX: Mailstream folded into `/inbox` (thread-first, tabs Needs
+      attention / Flagged / All, reply via Flow B, flag/archive). The flagged
+      Flow A keeps its SAME URL `/api/webhooks/email` and payload — no Power
+      Automate change needed; it now marks the message flagged in the shared
+      `emails` table instead of a separate queue. `/mailstream` redirects to
+      `/inbox`.
 - [ ] VERIFY LIVE: after deploy, send yourself one Merit email and receive one,
       then open `/mailstream` — both should appear within a minute, threaded.
       Attachments open inline (needs the Blob store, already provisioned).

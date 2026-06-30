@@ -2,6 +2,22 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Milestone 4: unified inbox (Mailstream folded into Inbox) (2026-06-30)
+
+- Decision (Jordan): merge Mailstream + the flagged Inbox into ONE thread-first
+  surface so he can see full context and reply in one place. Matches roadmap
+  section D ("the Inbox becomes thread-first").
+- `/inbox` is now the single view over the firehose `emails` table: tabs Needs
+  attention (flagged or unmapped) / Flagged / All mail, with live counts. Thread
+  view at `/inbox/[key]` shows the full chain + attachments + Reply (Flow B, with
+  AI draft) + Flag/Archive actions.
+- The Outlook "flag" is no longer a separate queue: `/api/webhooks/email` (Flow A,
+  unchanged URL/payload) now lands the message in the same `emails` table and sets
+  `flagged=true` (added columns flagged/flaggedAt/status/repliedAt, self-provisioned).
+  `email_queue` is retired (left dormant, not dropped).
+- `/mailstream` now redirects to `/inbox`; removed from the Nav. `/api/reply` and
+  the new `/api/inbox/action` (flag/archive) operate on the firehose emails.
+
 ## Milestone 4: email firehose live (ingest + Mailstream) (2026-06-30)
 
 - New endpoint `POST /api/webhooks/email-firehose` receives every Merit OEM

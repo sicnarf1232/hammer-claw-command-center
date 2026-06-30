@@ -17,6 +17,17 @@ export interface ThreadSummary {
   accountId: number | null;
   needsReview: boolean;
   hasAttachments: boolean;
+  flagged: boolean;
+  archived: boolean;
+  replied: boolean;
+}
+
+export type InboxView = "attention" | "flagged" | "all";
+
+export interface ListThreadsOpts {
+  view?: InboxView;
+  accountId?: number;
+  limit?: number;
 }
 
 // A thread key is the conversationId when present, else a per-message key so a
@@ -33,8 +44,11 @@ function partyLabel(e: EmailRow): string {
   return e.fromName?.trim() || e.fromEmail || "Unknown";
 }
 
-// Group the most recent messages into threads, newest activity first.
-export async function listThreads(limit = 60): Promise<ThreadSummary[]> {
+// Group the most recent messages into threads, newest activity first. Filtered
+// by view: attention = flagged or needs-review (and not archived); flagged =
+// flagged only; all = everything. An optional accountId scopes to one account.
+export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSummary[]> {
+  const { view = "all", accountId, limit = 80 } = opts;
   if (!dbConfigured()) return [];
   const db = getDb();
   let rows: EmailRow[];
@@ -43,13 +57,14 @@ export async function listThreads(limit = 60): Promise<ThreadSummary[]> {
       .select()
       .from(emails)
       .orderBy(desc(sql`coalesce(${emails.sentAt}, ${emails.receivedAt}, ${emails.createdAt})`))
-      .limit(600);
+      .limit(800);
   } catch {
     // Tables not provisioned yet (no firehose traffic): show empty, not an error.
     return [];
   }
 
-  const byKey = new Map<string, ThreadSummary & { _parties: Set<string> }>();
+  type Acc = ThreadSummary & { _parties: Set<string>; _latestStatus: string };
+  const byKey = new Map<string, Acc>();
   for (const e of rows) {
     const key = threadKey(e);
     const at = timeOf(e);
@@ -64,9 +79,13 @@ export async function listThreads(limit = 60): Promise<ThreadSummary[]> {
         outbound: 0,
         parties: [],
         _parties: new Set<string>(),
+        _latestStatus: e.status ?? "new",
         accountId: e.accountId ?? null,
         needsReview: false,
         hasAttachments: false,
+        flagged: false,
+        archived: false,
+        replied: false,
       };
       byKey.set(key, t);
     }
@@ -75,21 +94,44 @@ export async function listThreads(limit = 60): Promise<ThreadSummary[]> {
     else t.inbound++;
     if (e.hasAttachments) t.hasAttachments = true;
     if (e.needsReview) t.needsReview = true;
+    if (e.flagged) t.flagged = true;
+    if (e.status === "replied") t.replied = true;
     if (e.accountId != null && t.accountId == null) t.accountId = e.accountId;
     if (e.direction !== "outbound") t._parties.add(partyLabel(e));
-    // Newest message in the group sets the subject + time (rows are desc).
+    // Newest message in the group sets subject, time, and the thread's status.
     if (at && (!t.lastAt || at > t.lastAt)) {
       t.lastAt = at;
       t.subject = cleanSubject(e.subject) || t.subject;
+      t._latestStatus = e.status ?? "new";
     }
   }
 
-  const out = Array.from(byKey.values()).map((t) => {
+  let out = Array.from(byKey.values()).map((t) => {
     t.parties = Array.from(t._parties).slice(0, 4);
-    return t;
+    t.archived = t._latestStatus === "archived";
+    return t as ThreadSummary;
   });
+
+  if (accountId != null) out = out.filter((t) => t.accountId === accountId);
+  if (view === "attention") out = out.filter((t) => (t.flagged || t.needsReview) && !t.archived);
+  else if (view === "flagged") out = out.filter((t) => t.flagged && !t.archived);
+
   out.sort((a, b) => (b.lastAt?.getTime() ?? 0) - (a.lastAt?.getTime() ?? 0));
   return out.slice(0, limit);
+}
+
+// Counts for the inbox tabs (attention / flagged / all), one cheap pass.
+export async function threadCounts(): Promise<{
+  attention: number;
+  flagged: number;
+  all: number;
+}> {
+  const all = await listThreads({ view: "all", limit: 100000 });
+  return {
+    all: all.length,
+    attention: all.filter((t) => (t.flagged || t.needsReview) && !t.archived).length,
+    flagged: all.filter((t) => t.flagged && !t.archived).length,
+  };
 }
 
 export interface ThreadMessage extends EmailRow {

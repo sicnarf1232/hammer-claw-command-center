@@ -69,14 +69,22 @@ function attType(a: FirehoseAttachment): string | null {
   return str(a.contentType ?? (a as Record<string, unknown>).ContentType);
 }
 
-export async function storeFirehoseEmail(payload: FirehosePayload): Promise<StoreResult> {
+export interface StoreOpts {
+  flagged?: boolean; // the Outlook "act on this" flag
+}
+
+export async function storeFirehoseEmail(
+  payload: FirehosePayload,
+  opts: StoreOpts = {},
+): Promise<StoreResult> {
   await ensureFirehoseSchema();
   const db = getDb();
 
   const messageId = str(payload.internetMessageId);
 
   // Dedupe on internetMessageId (a message is captured by both the received and
-  // sent flows, or retried by Power Automate).
+  // sent flows, or retried by Power Automate). If a later capture carries the
+  // flag, set it on the existing row rather than inserting a duplicate.
   if (messageId) {
     const existing = await db
       .select({ id: emails.id })
@@ -84,6 +92,12 @@ export async function storeFirehoseEmail(payload: FirehosePayload): Promise<Stor
       .where(eq(emails.messageId, messageId))
       .limit(1);
     if (existing.length > 0) {
+      if (opts.flagged) {
+        await db
+          .update(emails)
+          .set({ flagged: true, flaggedAt: new Date() })
+          .where(eq(emails.id, existing[0].id));
+      }
       return { ok: true, deduped: true, emailId: existing[0].id };
     }
   }
@@ -132,6 +146,8 @@ export async function storeFirehoseEmail(payload: FirehosePayload): Promise<Stor
       accountId: mapping.emailAccountId,
       personId: mapping.emailPersonId,
       needsReview: mapping.needsReview,
+      flagged: Boolean(opts.flagged),
+      flaggedAt: opts.flagged ? new Date() : null,
     })
     .returning({ id: emails.id });
 

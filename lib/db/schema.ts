@@ -319,6 +319,12 @@ export const emails = pgTable(
     accountId: integer("account_id"), // resolved customer account (no FK: firehose is self-provisioning)
     personId: integer("person_id"), // resolved sender person
     needsReview: boolean("needs_review").notNull().default(false), // unmapped sender/account
+    // Action state (unified inbox). flagged = you flagged it in Outlook (the
+    // explicit "act on this now" signal); status tracks triage of the thread.
+    flagged: boolean("flagged").notNull().default(false),
+    flaggedAt: timestamp("flagged_at", { withTimezone: true }),
+    status: text("status").notNull().default("new"), // new | replied | archived
+    repliedAt: timestamp("replied_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
