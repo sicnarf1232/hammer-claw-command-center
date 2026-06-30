@@ -258,6 +258,26 @@ vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
 - [ ] OPTIONAL: the app reads series from any `/Rolling/` folder. If you keep
       rolling docs elsewhere, tell me and I will widen discovery.
 
+## Milestone 4 — Email firehose (2026-06-30)
+
+- [x] BUILT: `POST /api/webhooks/email-firehose` (verify sig, dedupe on
+      internetMessageId, store + link people/account, store attachments to
+      private Blob, extract PDF text). Schema self-provisions on first call, so
+      NO manual SQL is required. `/mailstream` shows threads + chains.
+- [ ] POINT THE FLOWS AT THE FIREHOSE: both Power Automate flows (capture
+      received + capture sent) must POST to
+      `https://hammer-claw-command-center.vercel.app/api/webhooks/email-firehose`
+      with header `x-hc-signature: <HC_WEBHOOK_SECRET>` (the value in section 4).
+      The flagged Flow A keeps pointing at `/api/webhooks/email` (unchanged).
+- [ ] VERIFY LIVE: after deploy, send yourself one Merit email and receive one,
+      then open `/mailstream` — both should appear within a minute, threaded.
+      Attachments open inline (needs the Blob store, already provisioned).
+- [ ] OPTIONAL (clean record): run `drizzle/0005_email_firehose.sql` in the Neon
+      SQL editor. Idempotent; not required since the app self-provisions.
+- [ ] FOLLOW-ONS (sequence F, not yet built): brain retrieval over email bodies +
+      attachment text; post-hoc Haiku triage (pathways/priority); Account Emails
+      and Contact Emails tabs. Say the word and I'll continue in order.
+
 ## Milestone 3 — Document library (2026-06-19)
 - [ ] PROVISION: create a Vercel Blob store in the project. `BLOB_READ_WRITE_TOKEN`
       is then set automatically on deploy. Until it is set, /library and the

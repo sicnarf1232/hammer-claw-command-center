@@ -2,6 +2,31 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Milestone 4: email firehose live (ingest + Mailstream) (2026-06-30)
+
+- New endpoint `POST /api/webhooks/email-firehose` receives every Merit OEM
+  message (both Power Automate flows: capture received + capture sent). Verifies
+  `x-hc-signature`, dedupes on internetMessageId, stores + links, returns 200.
+  Separate from the flagged-triage webhook so it does not flood the action queue.
+- Self-provisioning schema: the firehose creates/extends its tables on first call
+  (`lib/firehose/schema.ts`, idempotent, no cross-table FKs) because the DB URL is
+  a Sensitive Vercel var that can't be reached from local dev. Recorded as
+  `drizzle/0005_email_firehose.sql` for the record. Extended `emails` (sentAt,
+  recipients, bodyHtml, hasAttachments, needsReview) + new `email_participants`
+  and `email_attachments`.
+- Intelligent mapping (`lib/firehose/map.ts`): from/to/cc addresses resolve to
+  `people` by email, person -> account; unknown senders get a people row flagged
+  needsReview (reuses the cutover identity layer). Internal = @merit.com /
+  meritoem.com. Account picked from the first external party that maps.
+- Attachments stored to the PRIVATE Blob store, served via authed proxy
+  `/api/email-attachments/file`; PDF text extracted for the brain (best-effort).
+- New `/mailstream` page: thread-first list (grouped by conversationId, newest
+  first, account + needs-review + in/out + attachment chips) and a thread chain
+  view at `/mailstream/[key]` (interleaved messages, attachments inline). Added
+  to the Nav.
+- Still to come in sequence F: brain retrieval over emails, post-hoc Haiku triage
+  + pathways, and the Account/Contact Emails tabs.
+
 ## Typography: Merit Type Style Guide (Outfit + Inter) (2026-06-30)
 
 - Adopted the Merit Type Style Guide (imported from the Claude Design project

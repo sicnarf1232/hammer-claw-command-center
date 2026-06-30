@@ -1,0 +1,242 @@
+import { put } from "@vercel/blob";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+import { emails, emailParticipants, emailAttachments } from "@/lib/db/schema";
+import { blobConfigured, extractPdfText } from "@/lib/documents";
+import { ensureFirehoseSchema } from "./schema";
+import { parseAddressList, mapParticipants, type Addr } from "./map";
+
+// Skip storing/parsing attachments larger than this (base64 inflates ~33%).
+const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
+
+export interface FirehoseAttachment {
+  name?: string;
+  contentType?: string;
+  contentBytesBase64?: string;
+  sizeBytes?: number;
+}
+
+export interface FirehosePayload {
+  direction?: string;
+  internetMessageId?: string;
+  conversationId?: string;
+  subject?: string;
+  fromName?: string;
+  fromEmail?: string;
+  to?: unknown;
+  cc?: unknown;
+  sentAt?: string;
+  bodyText?: string;
+  bodyHtml?: string;
+  hasAttachments?: boolean;
+  webLink?: string;
+  attachments?: FirehoseAttachment[];
+}
+
+export interface StoreResult {
+  ok: true;
+  deduped: boolean;
+  emailId?: number;
+  accountId?: number | null;
+  needsReview?: boolean;
+  attachments?: number;
+}
+
+function str(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v : null;
+}
+
+function preview(text: string | null, html: string | null): string | null {
+  const base = text ?? (html ? html.replace(/<[^>]+>/g, " ") : null);
+  if (!base) return null;
+  return base.replace(/\s+/g, " ").trim().slice(0, 240) || null;
+}
+
+function isImageType(ct: string | null, name: string | null): boolean {
+  if (ct && ct.toLowerCase().startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|bmp|tiff?|heic)$/i.test(name ?? "");
+}
+
+// Normalize PA's capitalized attachment fields too.
+function attBytesB64(a: FirehoseAttachment): string | null {
+  const raw = (a as Record<string, unknown>).contentBytesBase64 ?? (a as Record<string, unknown>).ContentBytes;
+  return typeof raw === "string" && raw.trim() ? raw : null;
+}
+function attName(a: FirehoseAttachment): string | null {
+  return str(a.name ?? (a as Record<string, unknown>).Name);
+}
+function attType(a: FirehoseAttachment): string | null {
+  return str(a.contentType ?? (a as Record<string, unknown>).ContentType);
+}
+
+export async function storeFirehoseEmail(payload: FirehosePayload): Promise<StoreResult> {
+  await ensureFirehoseSchema();
+  const db = getDb();
+
+  const messageId = str(payload.internetMessageId);
+
+  // Dedupe on internetMessageId (a message is captured by both the received and
+  // sent flows, or retried by Power Automate).
+  if (messageId) {
+    const existing = await db
+      .select({ id: emails.id })
+      .from(emails)
+      .where(eq(emails.messageId, messageId))
+      .limit(1);
+    if (existing.length > 0) {
+      return { ok: true, deduped: true, emailId: existing[0].id };
+    }
+  }
+
+  const direction = payload.direction === "outbound" ? "outbound" : "inbound";
+  // fromEmail is usually a bare address, but Outlook can send "Name <addr>";
+  // parse defensively and prefer the explicit fromName for the display name.
+  const fromParsed = parseAddressList(payload.fromEmail)[0];
+  const from: Addr | null = fromParsed
+    ? { name: str(payload.fromName) ?? fromParsed.name, email: fromParsed.email }
+    : null;
+  const to = parseAddressList(payload.to);
+  const cc = parseAddressList(payload.cc);
+
+  const mapping = await mapParticipants(db, from, to, cc);
+
+  const bodyText = str(payload.bodyText);
+  const bodyHtml = str(payload.bodyHtml);
+  const sentAt = payload.sentAt ? new Date(payload.sentAt) : null;
+  const validSentAt = sentAt && !isNaN(sentAt.getTime()) ? sentAt : null;
+  const recipients = mapping.participants.map((p) => ({
+    name: p.name,
+    email: p.email,
+    role: p.role,
+  }));
+
+  const [row] = await db
+    .insert(emails)
+    .values({
+      messageId,
+      threadId: str(payload.conversationId),
+      direction,
+      receivedAt: validSentAt,
+      sentAt: validSentAt,
+      fromName: str(payload.fromName),
+      fromEmail: from?.email ?? null,
+      toAddrs: to.map((a) => a.email),
+      cc: cc.map((a) => a.email),
+      recipients,
+      subject: str(payload.subject),
+      bodyPreview: preview(bodyText, bodyHtml),
+      bodyText,
+      bodyHtml,
+      hasAttachments: Boolean(payload.hasAttachments) || (payload.attachments?.length ?? 0) > 0,
+      webLink: str(payload.webLink),
+      accountId: mapping.emailAccountId,
+      personId: mapping.emailPersonId,
+      needsReview: mapping.needsReview,
+    })
+    .returning({ id: emails.id });
+
+  const emailId = row.id;
+
+  // Participant links.
+  if (mapping.participants.length > 0) {
+    await db.insert(emailParticipants).values(
+      mapping.participants.map((p) => ({
+        emailId,
+        personId: p.personId,
+        accountId: p.accountId,
+        address: p.email,
+        name: p.name ?? null,
+        role: p.role,
+      })),
+    );
+  }
+
+  // Attachments: store bytes to a private Blob (when configured), extract PDF
+  // text for the brain. Best-effort per attachment; a failure never drops the
+  // email.
+  let attCount = 0;
+  for (const a of payload.attachments ?? []) {
+    try {
+      const name = attName(a);
+      const contentType = attType(a);
+      const b64 = attBytesB64(a);
+      const bytes = b64 ? Buffer.from(b64, "base64") : null;
+      const size = bytes?.byteLength ?? (typeof a.sizeBytes === "number" ? a.sizeBytes : null);
+      if (bytes && bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+        // Too large to retain inline; record metadata only.
+        await db.insert(emailAttachments).values({
+          emailId,
+          fileName: name,
+          contentType,
+          isImage: isImageType(contentType, name),
+          blobUrl: null,
+          sizeBytes: size,
+          extractedText: null,
+        });
+        attCount++;
+        continue;
+      }
+
+      let blobUrl: string | null = null;
+      if (bytes && blobConfigured()) {
+        const safe = (name ?? "attachment").replace(/[^A-Za-z0-9._-]/g, "_");
+        const key = `email-attachments/${emailId}/${safe}`;
+        const blob = await put(key, bytes, {
+          access: "private",
+          contentType: contentType ?? "application/octet-stream",
+          addRandomSuffix: true,
+        });
+        blobUrl = blob.url;
+      }
+
+      const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(name ?? "");
+      let extractedText: string | null = null;
+      if (bytes && isPdf) {
+        extractedText = (await extractPdfText(new Uint8Array(bytes)).catch(() => "")) || null;
+      }
+
+      await db.insert(emailAttachments).values({
+        emailId,
+        fileName: name,
+        contentType,
+        isImage: isImageType(contentType, name),
+        blobUrl,
+        sizeBytes: size,
+        extractedText,
+      });
+      attCount++;
+    } catch (err) {
+      console.error("[firehose] attachment store failed:", err);
+    }
+  }
+
+  // Reflect actual attachment presence.
+  if (attCount > 0 && !payload.hasAttachments) {
+    await db.update(emails).set({ hasAttachments: true }).where(eq(emails.id, emailId));
+  }
+
+  return {
+    ok: true,
+    deduped: false,
+    emailId,
+    accountId: mapping.emailAccountId,
+    needsReview: mapping.needsReview,
+    attachments: attCount,
+  };
+}
+
+// Lightweight audit row (no attachment bytes) so the firehose is debuggable
+// without bloating webhook_events with base64 blobs.
+export function slimAudit(payload: FirehosePayload): Record<string, unknown> {
+  return {
+    direction: payload.direction,
+    internetMessageId: payload.internetMessageId,
+    conversationId: payload.conversationId,
+    subject: payload.subject,
+    fromEmail: payload.fromEmail,
+    sentAt: payload.sentAt,
+    hasAttachments: payload.hasAttachments,
+    attachmentCount: payload.attachments?.length ?? 0,
+    kind: "firehose",
+  };
+}

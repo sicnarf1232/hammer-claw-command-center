@@ -297,25 +297,79 @@ export const emails = pgTable(
   "emails",
   {
     id: serial("id").primaryKey(),
-    messageId: text("message_id"), // Outlook internet message id (reply key)
+    messageId: text("message_id"), // Outlook internet message id (reply/dedupe key)
     threadId: text("thread_id"), // conversation id when available
     direction: text("direction").notNull().default("inbound"), // inbound | outbound
     receivedAt: timestamp("received_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }), // when the message was sent
     fromName: text("from_name"),
     fromEmail: text("from_email"),
-    toAddrs: jsonb("to_addrs").$type<string[]>().default([]),
+    toAddrs: jsonb("to_addrs").$type<string[]>().default([]), // recipient emails
     cc: jsonb("cc").$type<string[]>().default([]),
+    // Structured recipients [{ name, email, role: from|to|cc }] for the thread UI.
+    recipients: jsonb("recipients")
+      .$type<Array<{ name?: string; email: string; role: string }>>()
+      .default([]),
     subject: text("subject"),
     bodyPreview: text("body_preview"),
-    bodyText: text("body_text"), // for AI drafting context
+    bodyText: text("body_text"), // for AI drafting context + brain retrieval
+    bodyHtml: text("body_html"), // rendered chain view
+    hasAttachments: boolean("has_attachments").notNull().default(false),
     webLink: text("web_link"),
-    accountId: integer("account_id").references(() => accounts.id),
-    personId: integer("person_id").references(() => people.id), // resolved sender
+    accountId: integer("account_id"), // resolved customer account (no FK: firehose is self-provisioning)
+    personId: integer("person_id"), // resolved sender person
+    needsReview: boolean("needs_review").notNull().default(false), // unmapped sender/account
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     messageIdIdx: index("emails_message_id_idx").on(t.messageId),
     threadIdx: index("emails_thread_idx").on(t.threadId),
+    accountIdx: index("emails_account_idx").on(t.accountId),
+    sentAtIdx: index("emails_sent_at_idx").on(t.sentAt),
+  }),
+);
+
+// One row per (message, address) so we can query: all emails for a contact, for
+// a customer account, and the full thread. Linked best-effort to people/accounts
+// by email address (no FK: the firehose self-provisions and must not fail if the
+// cutover tables are absent).
+export const emailParticipants = pgTable(
+  "email_participants",
+  {
+    id: serial("id").primaryKey(),
+    emailId: integer("email_id").notNull(),
+    personId: integer("person_id"),
+    accountId: integer("account_id"),
+    address: text("address"),
+    name: text("name"),
+    role: text("role").notNull().default("to"), // from | to | cc
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    emailIdx: index("email_participants_email_idx").on(t.emailId),
+    personIdx: index("email_participants_person_idx").on(t.personId),
+    accountIdx: index("email_participants_account_idx").on(t.accountId),
+    addressIdx: index("email_participants_address_idx").on(t.address),
+  }),
+);
+
+// Email attachments: bytes go to a PRIVATE Blob store (served via authed proxy),
+// the row holds metadata + best-effort extracted text for the brain.
+export const emailAttachments = pgTable(
+  "email_attachments",
+  {
+    id: serial("id").primaryKey(),
+    emailId: integer("email_id").notNull(),
+    fileName: text("file_name"),
+    contentType: text("content_type"),
+    isImage: boolean("is_image").notNull().default(false),
+    blobUrl: text("blob_url"), // null when no Blob store configured
+    sizeBytes: integer("size_bytes"),
+    extractedText: text("extracted_text"), // PDF text for retrieval (best-effort)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    emailIdx: index("email_attachments_email_idx").on(t.emailId),
   }),
 );
 

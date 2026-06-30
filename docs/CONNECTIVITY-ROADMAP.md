@@ -23,12 +23,19 @@ free-form default, collapsible sections, recent-quotes-by-week + re-edit/overwri
 once. Until then Recent quotes is view-only (PDF link). Code degrades gracefully.
 (Tracked in PUNCHLIST. The app already overwrites a quote on re-save by id.)
 
-### NEXT BIG BUILD → Milestone 4: Email firehose → Merit OEM brain (below)
-Read "Milestone 4" in this file. Two Power Automate flows (all received + all
-sent) POST every message to a new ingest endpoint; the app stores, links to
-contact+account+thread, indexes for the brain, and post-hoc triages. The inbox
-is redesigned for high volume (threaded chains, attachments/images). The
-Power Automate build PROMPT for Claude-in-Chrome is embedded in Milestone 4.
+### Milestone 4 STATUS (2026-06-30): ingest + view SHIPPED
+Built the app side of section F steps 1-3 + 5 (partial): `POST /api/webhooks/
+email-firehose` (verify, dedupe on internetMessageId, store, link people/
+account, store attachments to private Blob, extract PDF text), self-provisioning
+schema (`lib/firehose/*`, idempotent, no manual SQL needed), address->contact->
+account mapping with needsReview, and the thread-first `/mailstream` UI (list +
+chain + attachments). Also: adopted the Merit Type Style Guide (Outfit + Inter).
+TODO for Jordan: point BOTH Power Automate flows at the firehose endpoint with
+the x-hc-signature header, then send/receive one email and check /mailstream.
+REMAINING (sequence F, next session): step 4 brain retrieval over emails +
+attachment text; step 6 post-hoc Haiku triage (pathways/priority); step 7
+Account/Contact Emails tabs. The flagged Flow A -> /api/webhooks/email is
+unchanged. The Power Automate build PROMPT is in section G below.
 
 ## Milestone 4 — Email firehose → Merit OEM brain (captured 2026-06-30)
 
