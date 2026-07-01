@@ -24,7 +24,7 @@ export default function ReplyBox({
   const editorRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState<"" | "draft" | "send">("");
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const [steer, setSteer] = useState("");
   const [empty, setEmpty] = useState(true);
   const hasOthers = ccList.length > 0 || toList.length > 1;
@@ -49,6 +49,7 @@ export default function ReplyBox({
   async function generate() {
     setBusy("draft");
     setError(null);
+    setNote(null);
     try {
       const res = await fetch("/api/reply", {
         method: "POST",
@@ -81,6 +82,7 @@ export default function ReplyBox({
     }
     setBusy("send");
     setError(null);
+    setNote(null);
     try {
       const res = await fetch("/api/reply", {
         method: "POST",
@@ -98,7 +100,11 @@ export default function ReplyBox({
       const data = await res.json();
       if (!res.ok) setError(data.error ?? "Send failed.");
       else {
-        setSent(true);
+        // Keep the reply box open for follow-ups: clear the editor, confirm, and
+        // refresh so the just-sent message appears in the thread.
+        if (editorRef.current) editorRef.current.innerHTML = "";
+        setEmpty(true);
+        setNote("Sent. Reply again below if you need to follow up.");
         router.refresh();
       }
     } catch {
@@ -106,14 +112,6 @@ export default function ReplyBox({
     } finally {
       setBusy("");
     }
-  }
-
-  if (sent) {
-    return (
-      <div className="card mt-5 p-4 text-sm text-ok">
-        Draft created in Outlook. It will appear in this thread once the sent flow captures it.
-      </div>
-    );
   }
 
   const recipCount = recipients.to.length + recipients.cc.length;
@@ -183,14 +181,15 @@ export default function ReplyBox({
         className="reply-editor input min-h-[9rem] w-full resize-y overflow-auto text-sm leading-relaxed"
       />
 
+      {note ? <div className="mt-2 text-xs text-ok">{note}</div> : null}
       {error ? <div className="mt-2 text-xs text-danger">{error}</div> : null}
       <div className="mt-3 flex items-center justify-between">
         <span className="text-2xs text-muted">
-          Creates a draft as Jordan.Francis@merit.com in Outlook · {recipCount} recipient
+          Sends as Jordan.Francis@merit.com · {recipCount} recipient
           {recipCount === 1 ? "" : "s"}
         </span>
         <button type="button" onClick={send} disabled={busy !== ""} className="btn-primary text-sm">
-          {busy === "send" ? "Creating draft…" : replyAll && hasOthers ? "Draft to all" : "Create draft"}
+          {busy === "send" ? "Sending…" : replyAll && hasOthers ? "Send to all" : "Send reply"}
         </button>
       </div>
     </div>

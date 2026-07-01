@@ -368,12 +368,15 @@ function kb(n: number): string {
 
 function fmt(d: Date | null): string {
   if (!d) return "";
+  // Render in Mountain Time (the vault's timezone); server runs in UTC, so
+  // without this an email shows 6 hours ahead of when it actually arrived.
   return new Date(d).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Denver",
   });
 }
 
