@@ -18,6 +18,21 @@ function domainOf(email: string): string {
   return email.split("@")[1]?.toLowerCase() ?? "";
 }
 
+// All accounts, for the manual link picker (when the domain suggestion is wrong
+// or absent).
+export async function listDbAccounts(): Promise<{ id: number; name: string }[]> {
+  if (!dbConfigured()) return [];
+  try {
+    const rows = await getDb()
+      .select({ id: accounts.id, name: accounts.name })
+      .from(accounts)
+      .orderBy(accounts.name);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 export async function suggestAccountForEmail(email: string): Promise<AccountSuggestion | null> {
   if (!dbConfigured()) return null;
   const domain = domainOf(email);

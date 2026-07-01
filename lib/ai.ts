@@ -25,11 +25,13 @@ function model(): string {
   return process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 }
 
-// Fast model for high-volume, latency-sensitive work (meeting triage, series
-// updates) where many calls run inside one request under a serverless time cap.
-// Defaults to Haiku; override with ANTHROPIC_FAST_MODEL.
+// Workhorse model for high-volume work (email + meeting triage, suggestions,
+// series updates, parsing). Sonnet 5, not Haiku: markedly better at reading a
+// note accurately and judging relevance, without Opus cost/latency on every
+// call. Override with ANTHROPIC_FAST_MODEL; heavy synthesis still uses Opus via
+// model().
 function fastModel(): string {
-  return process.env.ANTHROPIC_FAST_MODEL ?? "claude-haiku-4-5-20251001";
+  return process.env.ANTHROPIC_FAST_MODEL ?? "claude-sonnet-5";
 }
 
 let _client: Anthropic | null = null;

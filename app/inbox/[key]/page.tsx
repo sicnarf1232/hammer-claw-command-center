@@ -9,7 +9,8 @@ import {
 } from "@/lib/firehose/triage";
 import { markRead } from "@/lib/firehose/actions";
 import { suggestTasksForThread } from "@/lib/firehose/suggest";
-import { suggestAccountForEmail } from "@/lib/firehose/senderSuggest";
+import { suggestAccountForEmail, listDbAccounts } from "@/lib/firehose/senderSuggest";
+import { isInternal } from "@/lib/firehose/map";
 import { aiConfigured } from "@/lib/ai";
 import ThreadActions from "@/components/ThreadActions";
 import TriageBar from "@/components/TriageBar";
@@ -65,23 +66,35 @@ export default async function ThreadPage({
   }
   const path = triage?.pathway ? PATHWAY_META[triage.pathway] : null;
 
-  // Smart Action panel: suggested related open tasks (account + keyword match).
+  // Smart Action panel: suggested related open tasks. Only when the thread is
+  // mapped to a customer account and is not noise/FYI, so we never suggest
+  // linking a newsletter to an unrelated customer.
+  const relevantForActions =
+    Boolean(acct?.name) && triage?.pathway !== "noise" && triage?.pathway !== "fyi";
   const suggestText = `${subject} ${triage?.summary ?? ""}`;
-  const taskSuggestions = await suggestTasksForThread(acct?.name ?? null, suggestText, 3).catch(() => []);
+  const taskSuggestions = relevantForActions
+    ? await suggestTasksForThread(acct?.name ?? null, suggestText, 3).catch(() => [])
+    : [];
 
-  // Sender suggestion: only when the thread is not mapped to an account and has
-  // an external inbound sender.
+  // Sender suggestion: only for an EXTERNAL, unmapped inbound sender. Internal
+  // (@merit.com / meritoem.com) is never a customer, so no card. Offer both the
+  // domain suggestion and a manual picker over all accounts.
   let senderSuggestion: {
     address: string;
     name: string | null;
     suggestion: { accountId: number; name: string } | null;
+    accounts: { id: number; name: string }[];
   } | null = null;
-  if (acctId == null && latestInbound?.fromEmail) {
-    const s = await suggestAccountForEmail(latestInbound.fromEmail).catch(() => null);
+  if (acctId == null && latestInbound?.fromEmail && !isInternal(latestInbound.fromEmail)) {
+    const [s, allAccounts] = await Promise.all([
+      suggestAccountForEmail(latestInbound.fromEmail).catch(() => null),
+      listDbAccounts().catch(() => []),
+    ]);
     senderSuggestion = {
       address: latestInbound.fromEmail,
       name: latestInbound.fromName ?? null,
       suggestion: s ? { accountId: s.accountId, name: s.name } : null,
+      accounts: allAccounts,
     };
   }
 
@@ -117,6 +130,7 @@ export default async function ThreadPage({
           address={senderSuggestion.address}
           name={senderSuggestion.name}
           suggestion={senderSuggestion.suggestion}
+          accounts={senderSuggestion.accounts}
         />
       ) : null}
 

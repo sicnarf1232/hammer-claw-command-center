@@ -3,20 +3,25 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-// Shown on a thread whose sender is not yet mapped to an account. Suggests the
-// account (by shared email domain) and links on one tap. Suggestion-only.
+// Shown on a thread whose external sender is not yet mapped to an account.
+// Suggests the account (by shared email domain) and links on one tap, and offers
+// a manual picker over all accounts when the suggestion is wrong or absent.
 export default function SenderSuggest({
   address,
   name,
   suggestion,
+  accounts,
 }: {
   address: string;
   name: string | null;
   suggestion: { accountId: number; name: string } | null;
+  accounts: { id: number; name: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [manual, setManual] = useState(false);
+  const [pick, setPick] = useState("");
 
   async function link(accountId: number, accountName: string) {
     setBusy(true);
@@ -50,23 +55,65 @@ export default function SenderSuggest({
         {name ? `${name} · ` : ""}
         {address} is not linked to an account yet.
       </div>
-      {suggestion ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted">Looks like</span>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {suggestion ? (
+          <>
+            <span className="text-xs text-muted">Looks like</span>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => link(suggestion.accountId, suggestion.name)}
+              className="btn-primary text-xs"
+            >
+              Link to {suggestion.name}
+            </button>
+            <button
+              type="button"
+              onClick={() => setManual((m) => !m)}
+              className="text-xs text-muted underline hover:text-fg"
+            >
+              Not right?
+            </button>
+          </>
+        ) : (
           <button
             type="button"
-            disabled={busy}
-            onClick={() => link(suggestion.accountId, suggestion.name)}
+            onClick={() => setManual((m) => !m)}
+            className="btn-outline text-xs"
+          >
+            Link to an account
+          </button>
+        )}
+      </div>
+
+      {manual ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            value={pick}
+            onChange={(e) => setPick(e.target.value)}
+            className="input py-1.5 text-xs"
+          >
+            <option value="">Choose account…</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={busy || !pick}
+            onClick={() => {
+              const a = accounts.find((x) => String(x.id) === pick);
+              if (a) link(a.id, a.name);
+            }}
             className="btn-primary text-xs"
           >
-            Link to {suggestion.name}
+            Link
           </button>
         </div>
-      ) : (
-        <div className="mt-1 text-xs text-muted">
-          No matching account found by domain. Map it from the account page when ready.
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }

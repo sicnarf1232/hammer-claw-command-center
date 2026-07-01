@@ -176,10 +176,13 @@ export async function mapParticipants(
     participants.find((p) => p.accountId != null)?.accountId ??
     null;
 
+  // Needs review only when there IS an external party we could not map. An
+  // all-internal thread (everyone @merit.com / meritoem.com) is not a customer
+  // mapping gap, so it never gets flagged.
   return {
     participants,
     emailAccountId,
     emailPersonId,
-    needsReview: emailAccountId == null,
+    needsReview: emailAccountId == null && external.length > 0,
   };
 }
