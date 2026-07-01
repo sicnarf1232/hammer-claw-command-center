@@ -181,8 +181,14 @@ can read the vault.
 - [x] GitHub connected, so `git push` to `main` now auto-deploys.
 - [x] Production env vars set: GITHUB_TOKEN, VAULT_REPO, VAULT_BRANCH,
       APP_TIMEZONE, APP_PASSWORD.
-- [x] App login is on. APP_PASSWORD = `a985f43e3817b3f609fe` (change it anytime
-      in Vercel > Settings > Environment Variables, then redeploy).
+- [x] App login is on. APP_PASSWORD is set in Vercel production (Sensitive, so it
+      pulls down blank locally and can't be read back). ROTATED 2026-06-30 to a
+      value Jordan chose (not stored here on purpose). To change it:
+      `vercel env rm APP_PASSWORD production -y` then
+      `printf %s 'newpassword' | vercel env add APP_PASSWORD production` (the
+      `printf %s` avoids a trailing newline that would break login) then
+      `vercel deploy --prod --yes`. Or edit it in the Vercel dashboard and
+      redeploy.
 
 Still to do on the deploy:
 - [x] ROTATE THE GITHUB PAT (done 2026-06-29). Regenerated the fine-grained
