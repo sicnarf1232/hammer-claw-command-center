@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { customerHue, initials } from "@/lib/customerHues";
 
 export interface InboxThread {
@@ -21,6 +22,10 @@ export interface InboxThread {
   flagged: boolean;
   replied: boolean;
   unread: boolean;
+  summary: string | null;
+  pathway: string | null;
+  priority: string | null;
+  needsReply: boolean;
 }
 
 type View = "attention" | "flagged" | "all";
@@ -30,6 +35,16 @@ const TABS: { key: View; label: string }[] = [
   { key: "flagged", label: "Flagged" },
   { key: "all", label: "All" },
 ];
+
+// Client-safe pathway chip metadata (mirrors lib/firehose/triage PATHWAY_META).
+const PATHWAY: Record<string, { label: string; color: string }> = {
+  "needs-reply": { label: "Needs reply", color: "var(--due)" },
+  "quote-request": { label: "Quote", color: "var(--accent)" },
+  "quality-pcn": { label: "Quality / PCN", color: "var(--warm)" },
+  logistics: { label: "Logistics", color: "var(--info, #5145e6)" },
+  fyi: { label: "FYI", color: "var(--ink-3)" },
+  noise: { label: "Noise", color: "var(--ink-3)" },
+};
 
 export default function InboxList({
   threads,
@@ -41,12 +56,45 @@ export default function InboxList({
   counts: { attention: number; flagged: number; all: number };
 }) {
   const [q, setQ] = useState("");
+  const router = useRouter();
+  const requested = useRef<Set<string>>(new Set());
+  const [triaging, setTriaging] = useState(false);
+
+  // Progressively AI-triage untriaged threads, 6 at a time, then refresh so the
+  // summaries + smart "Needs attention" membership show up. Each key is only
+  // requested once (no retry loops).
+  useEffect(() => {
+    const pending = threads
+      .filter((t) => !t.summary && !requested.current.has(t.key))
+      .slice(0, 6)
+      .map((t) => t.key);
+    if (pending.length === 0) return;
+    pending.forEach((k) => requested.current.add(k));
+    let cancelled = false;
+    setTriaging(true);
+    (async () => {
+      try {
+        const res = await fetch("/api/inbox/triage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keys: pending }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && data?.triagedCount > 0) router.refresh();
+      } finally {
+        if (!cancelled) setTriaging(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [threads, router]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return threads;
     return threads.filter((t) =>
-      [t.subject, t.who, t.preview, t.accountName]
+      [t.subject, t.who, t.preview, t.summary, t.accountName]
         .filter(Boolean)
         .some((s) => s!.toLowerCase().includes(needle)),
     );
@@ -56,7 +104,6 @@ export default function InboxList({
 
   return (
     <div>
-      {/* Search + tabs */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 sm:max-w-sm">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -91,6 +138,13 @@ export default function InboxList({
         </div>
       </div>
 
+      {triaging ? (
+        <div className="mb-3 flex items-center gap-2 px-1 text-2xs font-medium text-accent">
+          <SparkGlyph className="h-3.5 w-3.5 animate-pulse" />
+          AI is reading your mail…
+        </div>
+      ) : null}
+
       {filtered.length === 0 ? (
         <EmptyState view={view} searching={q.trim().length > 0} />
       ) : (
@@ -116,6 +170,8 @@ export default function InboxList({
 function Row({ t, first }: { t: InboxThread; first: boolean }) {
   const hue = customerHue(t.accountName || t.who);
   const outbound = t.lastDirection === "outbound";
+  const path = t.pathway ? PATHWAY[t.pathway] : null;
+  const high = t.priority === "high";
   return (
     <Link
       href={`/inbox/${encodeURIComponent(t.key)}`}
@@ -123,12 +179,13 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
         first ? "" : "border-t border-border"
       }`}
     >
-      {/* flagged accent bar */}
-      {t.flagged ? (
-        <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: "var(--due)" }} />
+      {t.flagged || high ? (
+        <span
+          className="absolute inset-y-0 left-0 w-[3px]"
+          style={{ background: high ? "var(--due)" : "var(--due)" }}
+        />
       ) : null}
 
-      {/* avatar */}
       <div
         className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
         style={{ background: hue.hue }}
@@ -142,9 +199,7 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
             {t.unread ? (
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--accent)" }} />
             ) : null}
-            <span
-              className={`truncate text-sm ${t.unread ? "font-bold text-fg" : "font-semibold text-fg/90"}`}
-            >
+            <span className={`truncate text-sm ${t.unread ? "font-bold text-fg" : "font-semibold text-fg/90"}`}>
               {t.who}
             </span>
             {t.count > 1 ? (
@@ -163,11 +218,30 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
           </span>
         </div>
 
-        {t.preview ? (
+        {/* AI summary when available, else the raw snippet */}
+        {t.summary ? (
+          <div className="mt-1 flex items-start gap-1.5">
+            <SparkGlyph className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
+            <span className="line-clamp-2 text-xs text-fg/70">{t.summary}</span>
+          </div>
+        ) : t.preview ? (
           <div className="mt-0.5 truncate text-xs text-muted">{t.preview}</div>
         ) : null}
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {high ? (
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold text-dueInk" style={{ background: "var(--due-soft)" }}>
+              High
+            </span>
+          ) : null}
+          {path ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
+              style={{ background: withAlpha(path.color), color: path.color }}
+            >
+              {path.label}
+            </span>
+          ) : null}
           {t.accountName ? (
             <span
               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
@@ -178,7 +252,6 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
           ) : t.needsReview ? (
             <span className="chip border-warning/40 text-warning">Needs review</span>
           ) : null}
-          {t.flagged ? <span className="chip border-due/40 text-dueInk">🚩 Flagged</span> : null}
           {t.replied ? <span className="chip border-ok/40 text-ok">Replied</span> : null}
           {t.hasAttachments ? (
             <span className="chip border-border text-fg/55">
@@ -195,7 +268,7 @@ function EmptyState({ view, searching }: { view: View; searching: boolean }) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-10 text-center">
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accentSoft text-accent">
-        <SparkGlyph />
+        <SparkGlyph className="h-6 w-6" />
       </div>
       <div className="text-sm font-semibold text-fg">
         {searching ? "No matches" : view === "all" ? "No mail yet" : "You're all caught up"}
@@ -205,13 +278,17 @@ function EmptyState({ view, searching }: { view: View; searching: boolean }) {
           ? "Try a different search."
           : view === "all"
             ? "Once the firehose flows fire, every Merit OEM message lands here, threaded and triaged."
-            : "Flagged mail and unmapped senders surface here. Switch to All to see the full stream."}
+            : "Flagged mail, unmapped senders, and anything the AI says needs a reply surface here."}
       </p>
     </div>
   );
 }
 
-// ---- date grouping ----
+function withAlpha(color: string): string {
+  // token colors are hex or var(); for var() fall back to a soft surface tint.
+  return color.startsWith("#") ? `${color}1f` : "var(--surface-2)";
+}
+
 function groupByDate(items: InboxThread[]): { label: string; items: InboxThread[] }[] {
   const buckets: Record<string, InboxThread[]> = {};
   const order: string[] = [];
@@ -227,7 +304,7 @@ function groupByDate(items: InboxThread[]): { label: string; items: InboxThread[
 }
 
 function bucketLabel(iso: string | null): string {
-  if (!iso) return "Earlier";
+  if (!iso) return "Older";
   const d = new Date(iso);
   const now = new Date();
   const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
@@ -253,7 +330,6 @@ function rel(iso: string | null): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-// ---- glyphs ----
 function SearchIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -276,9 +352,9 @@ function ClipIcon() {
     </svg>
   );
 }
-function SparkGlyph() {
+function SparkGlyph({ className }: { className?: string }) {
   return (
-    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+    <svg className={className ?? "h-4 w-4"} viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 2l1.9 5.6a2 2 0 0 0 1.3 1.3L21 11l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 11l5.8-1.9a2 2 0 0 0 1.3-1.3z" />
     </svg>
   );

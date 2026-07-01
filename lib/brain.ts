@@ -9,6 +9,7 @@ import { listAccounts } from "@/lib/accounts";
 import { customerContacts } from "@/lib/accounts";
 import { getCatalog, type CatalogItem } from "@/lib/priceList";
 import { listDocuments, matchDocuments } from "@/lib/documents";
+import { retrieveEmails } from "@/lib/firehose/brainSource";
 import { toTaskView, buildAccountLookup } from "@/lib/taskView";
 import type { Account, Task } from "@/lib/vault/types";
 import type { Roster } from "@/lib/vault/types";
@@ -292,6 +293,14 @@ export async function assembleBrainContext(question: string): Promise<{
       );
       sources.push(`Doc: ${d.title}`);
     }
+  }
+
+  // Email firehose: answer from real inbound/outbound mail + attachment text,
+  // citable by thread. Empty when there is no email traffic yet.
+  const emailHits = await retrieveEmails(question, 3).catch(() => []);
+  for (const e of emailHits) {
+    lines.push(`EMAIL: ${e.title}`, e.snippet, "");
+    sources.push(`Email: ${e.title}`);
   }
 
   return { context: lines.join("\n"), sources };

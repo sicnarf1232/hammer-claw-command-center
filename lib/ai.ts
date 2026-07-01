@@ -488,6 +488,101 @@ function mapFreeformQuote(raw: Record<string, unknown>): RawQuoteInput {
   };
 }
 
+// ---- Email triage (Milestone 4). Haiku classifies a thread into a pathway +
+// priority + a one-line summary, so the inbox can surface what needs action.
+export type EmailPathway =
+  | "needs-reply"
+  | "quote-request"
+  | "quality-pcn"
+  | "logistics"
+  | "fyi"
+  | "noise";
+
+export interface EmailTriageResult {
+  summary: string;
+  pathway: EmailPathway;
+  priority: "high" | "medium" | "low";
+  needsReply: boolean;
+}
+
+export interface TriageThreadInput {
+  subject: string;
+  account?: string | null;
+  messages: Array<{ direction: string; from: string; at?: string | null; text: string }>;
+}
+
+const PATHWAYS: EmailPathway[] = [
+  "needs-reply",
+  "quote-request",
+  "quality-pcn",
+  "logistics",
+  "fyi",
+  "noise",
+];
+
+export async function triageEmailThread(
+  input: TriageThreadInput,
+): Promise<EmailTriageResult> {
+  const system = [
+    "You triage email threads for the Merit Medical OEM sales team (Jordan Francis).",
+    "Jordan is Jordan.Francis@merit.com; messages he SENT are direction=outbound.",
+    "Return ONLY valid JSON, no markdown. Schema:",
+    "{",
+    '  "summary": string,   // ONE sentence, <= 22 words, what the thread is about + the ask',
+    '  "pathway": "needs-reply"|"quote-request"|"quality-pcn"|"logistics"|"fyi"|"noise",',
+    '  "priority": "high"|"medium"|"low",',
+    '  "needs_reply": boolean  // does Jordan still owe a response?',
+    "}",
+    "Guidance:",
+    "- needs-reply: a customer asked something still open and Jordan has not answered.",
+    "- quote-request: they want pricing/a quote. quality-pcn: quality issue, complaint, or OEM PCN.",
+    "- logistics: orders, shipping, scheduling, forecasts. fyi: informational, no action.",
+    "- noise: newsletters, auto-replies, spam, calendar noise.",
+    "- If Jordan's outbound message is the latest and nothing is pending, needs_reply=false.",
+    "- priority high only for time-sensitive customer asks, quality issues, or escalations.",
+    "House style: never use em dashes in the summary.",
+  ].join("\n");
+
+  const convo = input.messages
+    .map(
+      (m) =>
+        `[${m.direction === "outbound" ? "JORDAN (sent)" : "THEM"}${m.at ? " " + m.at : ""}] ${m.from}: ${m.text.slice(0, 1200)}`,
+    )
+    .join("\n\n")
+    .slice(0, 9000);
+
+  const res = await client().messages.create({
+    model: fastModel(),
+    max_tokens: 400,
+    system,
+    messages: [
+      {
+        role: "user",
+        content: `Account: ${input.account ?? "unknown"}\nSubject: ${input.subject}\n\nThread:\n${convo}`,
+      },
+    ],
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  const raw = parseJsonObject(text);
+  const pathway = PATHWAYS.includes(raw.pathway as EmailPathway)
+    ? (raw.pathway as EmailPathway)
+    : "fyi";
+  const priority =
+    raw.priority === "high" || raw.priority === "low" ? raw.priority : "medium";
+  return {
+    summary: noEmDash(String(raw.summary ?? "").trim()).slice(0, 240) || "No summary.",
+    pathway,
+    priority,
+    needsReply: Boolean(raw.needs_reply) || pathway === "needs-reply",
+  };
+}
+
 // Generate a brief (morning brief, EOD recap, weekly review) from a context
 // blob the caller assembles. Returns markdown body (no frontmatter).
 export async function generateBrief(args: {

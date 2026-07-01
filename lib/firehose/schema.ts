@@ -77,6 +77,19 @@ const DDL: string[] = [
     "created_at" timestamptz NOT NULL DEFAULT now()
   )`,
   `CREATE INDEX IF NOT EXISTS "email_attachments_email_idx" ON "email_attachments" ("email_id")`,
+
+  `CREATE TABLE IF NOT EXISTS "email_triage" (
+    "id" serial PRIMARY KEY,
+    "thread_key" text NOT NULL,
+    "summary" text,
+    "pathway" text,
+    "priority" text,
+    "needs_reply" boolean NOT NULL DEFAULT false,
+    "signature" text,
+    "model" text,
+    "updated_at" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "email_triage_thread_key_ux" ON "email_triage" ("thread_key")`,
 ];
 
 // Run the DDL once per warm lambda. A failed run does not latch, so the next

@@ -379,6 +379,25 @@ export const emailAttachments = pgTable(
   }),
 );
 
+// Post-hoc AI triage of a thread (Haiku). Keyed by the same threadKey the read
+// layer uses (t:<conversationId> or m:<emailId>). `signature` captures the
+// thread's state (message count + latest id) so triage re-runs when it changes.
+export const emailTriage = pgTable(
+  "email_triage",
+  {
+    id: serial("id").primaryKey(),
+    threadKey: text("thread_key").notNull(),
+    summary: text("summary"),
+    pathway: text("pathway"),
+    priority: text("priority"),
+    needsReply: boolean("needs_reply").notNull().default(false),
+    signature: text("signature"),
+    model: text("model"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ keyUx: uniqueIndex("email_triage_thread_key_ux").on(t.threadKey) }),
+);
+
 // Many-to-many task <-> email link: a task can reference several emails and an
 // email can spawn/relate to several tasks. Drives "reply from a task with the
 // thread as AI context" and "create task from email".

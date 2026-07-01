@@ -1,10 +1,6 @@
 import { dbConfigured } from "@/lib/db";
-import {
-  listThreads,
-  threadCounts,
-  accountNames,
-  type InboxView,
-} from "@/lib/firehose/read";
+import { listThreads, accountNames, type InboxView } from "@/lib/firehose/read";
+import { getTriageMap } from "@/lib/firehose/triage";
 import InboxList, { type InboxThread } from "@/components/InboxList";
 import SetupNotice from "@/components/SetupNotice";
 
@@ -12,7 +8,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // Unified inbox (Milestone 4): one thread-first view over the whole Merit OEM
-// firehose. Flagged = you flagged it in Outlook; needs-review = unmapped sender.
+// firehose, with AI triage. Needs-attention = flagged, unmapped, or the triage
+// says Jordan still owes a reply.
 export default async function InboxPage({
   searchParams,
 }: {
@@ -30,16 +27,32 @@ export default async function InboxPage({
   const view: InboxView =
     sp.view === "flagged" || sp.view === "all" ? sp.view : "attention";
 
-  const [rawThreads, counts] = await Promise.all([
-    listThreads({ view, limit: 150 }),
-    threadCounts(),
-  ]);
+  // Load the full recent set once, then derive counts + the current view from it
+  // (so the tab counts stay consistent and include AI needs-reply).
+  const all = await listThreads({ view: "all", limit: 400 });
+  const triage = await getTriageMap(all.map((t) => t.key));
+
+  const isAttention = (t: (typeof all)[number]) =>
+    (t.flagged || t.needsReview || triage.get(t.key)?.needsReply) && !t.archived;
+
+  const counts = {
+    all: all.length,
+    attention: all.filter(isAttention).length,
+    flagged: all.filter((t) => t.flagged && !t.archived).length,
+  };
+
+  let shown = all;
+  if (view === "attention") shown = all.filter(isAttention);
+  else if (view === "flagged") shown = all.filter((t) => t.flagged && !t.archived);
+  shown = shown.slice(0, 150);
+
   const accounts = await accountNames(
-    rawThreads.map((t) => t.accountId).filter((x): x is number => x != null),
+    shown.map((t) => t.accountId).filter((x): x is number => x != null),
   );
 
-  const threads: InboxThread[] = rawThreads.map((t) => {
+  const threads: InboxThread[] = shown.map((t) => {
     const acct = t.accountId != null ? accounts.get(t.accountId) : undefined;
+    const tr = triage.get(t.key);
     return {
       key: t.key,
       subject: t.subject,
@@ -57,6 +70,10 @@ export default async function InboxPage({
       flagged: t.flagged,
       replied: t.replied,
       unread: t.unread,
+      summary: tr?.summary ?? null,
+      pathway: tr?.pathway ?? null,
+      priority: tr?.priority ?? null,
+      needsReply: Boolean(tr?.needsReply),
     };
   });
 
@@ -80,8 +97,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
         <h1 className="mt-1 display-title text-[28px] text-fg">Inbox</h1>
         <p className="mt-1 max-w-xl text-sm text-muted">
-          Every inbound and outbound message, threaded and mapped to accounts. Open
-          a thread to read the full chain and reply.
+          Every inbound and outbound message, threaded, mapped to accounts, and
+          triaged by AI. Open a thread to read the full chain and reply.
         </p>
       </header>
       {children}

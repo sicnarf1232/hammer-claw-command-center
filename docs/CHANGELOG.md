@@ -2,6 +2,23 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Inbox intelligence: AI triage + summaries + brain over email (2026-06-30)
+
+- Haiku auto-triage (`lib/ai.ts:triageEmailThread`, `lib/firehose/triage.ts`):
+  each thread gets a one-line summary, a pathway (needs-reply / quote-request /
+  quality-pcn / logistics / fyi / noise), a priority, and a needs-reply flag.
+  Stored in a self-provisioned `email_triage` table keyed by threadKey, with a
+  signature so it re-runs when a new message arrives.
+- Smart Needs-attention: the tab now = flagged OR unmapped OR AI-says-needs-reply.
+- Inbox rows show the AI summary (with a spark) + pathway/priority chips; the
+  thread view shows an "AI summary" card with the pathway, priority, and a
+  "you still owe a reply" hint. Triage runs post-hoc: the inbox client triages
+  untriaged threads 6 at a time (`POST /api/inbox/triage`) then refreshes; opening
+  a thread triages it on demand.
+- Brain over email (`lib/firehose/brainSource.ts`): `/ask` now retrieves from
+  real email bodies + attachment text, citable by thread (sequence F #4).
+- Sequence F now: #1-4 + #6 done. Remaining: #7 Account/Contact Emails tabs.
+
 ## Mobile revamp + inbox facelift (2026-06-30)
 
 - Responsive nav: the fixed 236px sidebar is now desktop-only. On mobile there's

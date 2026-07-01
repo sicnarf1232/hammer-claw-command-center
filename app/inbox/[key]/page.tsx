@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getThread, accountNames, type ThreadMessage } from "@/lib/firehose/read";
+import {
+  ensureTriageForKeys,
+  getTriageMap,
+  PATHWAY_META,
+  type TriageRow,
+} from "@/lib/firehose/triage";
+import { aiConfigured } from "@/lib/ai";
 import ThreadActions from "@/components/ThreadActions";
 import ReplyBox from "@/components/ReplyBox";
 
@@ -24,6 +31,14 @@ export default async function ThreadPage({
   const archived = messages[messages.length - 1].status === "archived";
   // Reply targets the most recent inbound message (reply to the customer).
   const latestInbound = [...messages].reverse().find((m) => m.direction === "inbound");
+
+  // Ensure this thread is triaged (one Haiku call when stale), then read it back.
+  let triage: TriageRow | null = null;
+  if (aiConfigured()) {
+    await ensureTriageForKeys([decoded], 1).catch(() => {});
+    triage = (await getTriageMap([decoded])).get(decoded) ?? null;
+  }
+  const path = triage?.pathway ? PATHWAY_META[triage.pathway] : null;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -51,6 +66,35 @@ export default async function ThreadPage({
           archived={archived}
         />
       </header>
+
+      {triage?.summary ? (
+        <div
+          className="mb-4 rounded-2xl border p-4"
+          style={{ borderColor: "var(--accent-soft)", background: "var(--accent-soft)" }}
+        >
+          <div className="mb-1.5 flex items-center gap-1.5">
+            <SparkGlyph />
+            <span className="eyebrow text-accent">AI summary</span>
+            {path ? (
+              <span
+                className="ml-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
+                style={{ background: "var(--surface)", color: path.color }}
+              >
+                {path.label}
+              </span>
+            ) : null}
+            {triage.priority === "high" ? (
+              <span className="rounded-full bg-surface px-2 py-0.5 text-2xs font-bold text-dueInk">
+                High priority
+              </span>
+            ) : null}
+          </div>
+          <p className="text-sm leading-relaxed text-fg/85">{triage.summary}</p>
+          {triage.needsReply ? (
+            <p className="mt-1.5 text-xs font-medium text-accent">You still owe a reply.</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid gap-3">
         {messages.map((m) => (
@@ -178,4 +222,12 @@ function fmt(d: Date | null): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function SparkGlyph() {
+  return (
+    <svg className="h-3.5 w-3.5 text-accent" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2l1.9 5.6a2 2 0 0 0 1.3 1.3L21 11l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 11l5.8-1.9a2 2 0 0 0 1.3-1.3z" />
+    </svg>
+  );
 }
