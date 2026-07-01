@@ -4,7 +4,7 @@ import { getEmailById, markReplied } from "@/lib/firehose/actions";
 import { draftReply, aiConfigured, AiNotConfiguredError } from "@/lib/ai";
 import { getVoiceProfile, voiceInstructions } from "@/lib/voice";
 import {
-  postReplyIntent,
+  postMailIntent,
   replyFlowConfigured,
   ReplyFlowNotConfiguredError,
 } from "@/lib/powerAutomate";
@@ -115,8 +115,8 @@ export async function POST(req: NextRequest) {
   const cc = Array.isArray(body.cc) ? body.cc.map((x: unknown) => String(x)) : [];
 
   try {
-    const result = await postReplyIntent({
-      action: "create_draft",
+    const result = await postMailIntent({
+      action: "reply",
       inReplyTo: email.messageId ?? "",
       to,
       cc,
