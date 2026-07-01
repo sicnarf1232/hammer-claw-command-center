@@ -12,6 +12,7 @@ export async function GET() {
   if (!dbConfigured()) {
     return NextResponse.json({ error: "Database not configured." }, { status: 503 });
   }
+  try {
   const db = getDb();
   const [acctCount] = await db.select({ n: sql<number>`count(*)::int` }).from(accounts);
   const [peopleCount] = await db.select({ n: sql<number>`count(*)::int` }).from(people);
@@ -36,4 +37,10 @@ export async function GET() {
     sample,
     strykerMatches: stryker,
   });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
+  }
 }
