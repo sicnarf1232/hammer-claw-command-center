@@ -60,6 +60,7 @@ export interface DraftReplyInput {
   instructions?: string; // optional steer from Jordan ("push back on lead time", etc.)
   voice?: string; // compiled voice instructions (lib/voice voiceInstructions)
   account?: string | null; // customer account, for grounding
+  context?: string; // brain facts: part numbers, pricing, docs, prior mail
 }
 
 // Draft an email body as rich, ready-to-send HTML in Jordan's voice. Returns the
@@ -91,6 +92,9 @@ export async function draftReply(input: DraftReplyInput): Promise<string> {
     "- Never use em dashes. Use commas, colons, or periods.",
     "- Direct and professional. No filler, no marketing voice.",
     "- Do not invent facts, prices, dates, part numbers, or commitments. If something is unknown, leave a clear bracketed placeholder like [confirm date].",
+    input.context?.trim()
+      ? "- You are given reference material from Jordan's records below (part numbers, pricing, lead times, documents). When the email asks about a part or price that appears there, use those EXACT values. Never invent a price or lead time; if it is not in the reference, use a bracketed placeholder."
+      : "",
     input.voice?.trim() ? "\n" + input.voice.trim() : "",
     input.voice?.trim() ? "" : "Open with a brief greeting and close with a short sign-off and Jordan's name.",
     "",
@@ -113,6 +117,13 @@ export async function draftReply(input: DraftReplyInput): Promise<string> {
     kind === "new" ? "" : "Message:",
     kind === "new" ? "" : input.bodyText?.trim() || "(no body text was captured)",
   ].filter(Boolean);
+  if (input.context?.trim()) {
+    parts.push(
+      "",
+      "Reference material from Jordan's records (use exact part numbers, prices, and lead times; do not invent):",
+      input.context.trim(),
+    );
+  }
   if (input.instructions?.trim()) {
     parts.push("", `Jordan's instruction for this draft: ${input.instructions.trim()}`);
   }

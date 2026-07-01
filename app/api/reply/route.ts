@@ -3,6 +3,8 @@ import { dbConfigured } from "@/lib/db";
 import { getEmailById, markReplied } from "@/lib/firehose/actions";
 import { draftReply, aiConfigured, AiNotConfiguredError } from "@/lib/ai";
 import { getVoiceProfile, voiceInstructions } from "@/lib/voice";
+import { retrieveDraftContext } from "@/lib/firehose/draftContext";
+import { accountNames } from "@/lib/firehose/read";
 import {
   postMailIntent,
   replyFlowConfigured,
@@ -53,6 +55,12 @@ export async function POST(req: NextRequest) {
     }
     try {
       const voice = voiceInstructions(await getVoiceProfile());
+      const acctName =
+        email.accountId != null
+          ? (await accountNames([email.accountId])).get(email.accountId)?.name ?? null
+          : null;
+      const threadText = `${email.subject ?? ""}\n${email.bodyText ?? email.bodyPreview ?? ""}`;
+      const context = await retrieveDraftContext(threadText, acctName).catch(() => "");
       const draft = await draftReply({
         fromName: email.fromName,
         fromEmail: email.fromEmail,
@@ -61,6 +69,8 @@ export async function POST(req: NextRequest) {
         workstream: workstream as Workstream,
         instructions: typeof body.instructions === "string" ? body.instructions : undefined,
         voice,
+        account: acctName,
+        context,
       });
       return NextResponse.json({ ok: true, body: draft });
     } catch (err) {

@@ -3,6 +3,8 @@ import { dbConfigured } from "@/lib/db";
 import { getEmailById, markReplied } from "@/lib/firehose/actions";
 import { draftReply, aiConfigured } from "@/lib/ai";
 import { getVoiceProfile, voiceInstructions } from "@/lib/voice";
+import { retrieveDraftContext } from "@/lib/firehose/draftContext";
+import { accountNames } from "@/lib/firehose/read";
 import {
   postMailIntent,
   replyFlowConfigured,
@@ -46,15 +48,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "AI drafting unavailable." }, { status: 503 });
     }
     const voice = voiceInstructions(await getVoiceProfile());
+    const acctName =
+      source?.accountId != null
+        ? (await accountNames([source.accountId])).get(source.accountId)?.name ?? null
+        : null;
+    const subjectText = String(b.subject ?? source?.subject ?? "");
+    const steerText = typeof b.instructions === "string" ? b.instructions : "";
+    const threadText = `${subjectText}\n${steerText}\n${source?.bodyText ?? source?.bodyPreview ?? ""}`;
+    const context = await retrieveDraftContext(threadText, acctName).catch(() => "");
     const draft = await draftReply({
       kind: action,
       fromName: source?.fromName,
       fromEmail: source?.fromEmail,
-      subject: String(b.subject ?? source?.subject ?? ""),
+      subject: subjectText,
       bodyText: source?.bodyText ?? source?.bodyPreview ?? null,
       workstream: workstream as Workstream,
-      instructions: typeof b.instructions === "string" ? b.instructions : undefined,
+      instructions: steerText || undefined,
       voice,
+      account: acctName,
+      context,
     });
     return NextResponse.json({ ok: true, body: draft });
   }
