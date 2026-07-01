@@ -10,6 +10,7 @@ import {
   tasks as tasksT,
 } from "@/lib/db";
 import { gatherAndReconcile } from "./seed";
+import { ensureCutoverSchema } from "./schema";
 import type { ReconcileReport } from "./reconcile";
 
 // Stage 1 apply: write the reconciled vault into the app DB. Idempotent — wipes
@@ -21,6 +22,9 @@ export async function applySeed(): Promise<ReconcileReport> {
     throw new Error("POSTGRES_URL is not set; run `npm run db:push` first.");
   }
   const db = getDb();
+  // Provision the cutover tables if they do not exist yet (prod was never
+  // migrated; drizzle push cannot run from local with blank Sensitive env vars).
+  await ensureCutoverSchema();
   const r = await gatherAndReconcile();
 
   // Wipe children -> parents.
