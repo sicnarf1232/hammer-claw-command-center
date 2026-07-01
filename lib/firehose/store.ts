@@ -8,6 +8,7 @@ import { ensureFirehoseSchema } from "./schema";
 import { parseAddressList, mapParticipants, type Addr } from "./map";
 import { isInlineAttachment } from "./attach";
 import { promoteAttachmentToLibrary } from "./promote";
+import { htmlTablesToText } from "@/lib/htmlTable";
 
 // Skip storing/parsing attachments larger than this (base64 inflates ~33%).
 const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
@@ -125,8 +126,14 @@ export async function storeFirehoseEmail(
 
   const mapping = await mapParticipants(db, from, to, cc);
 
-  const bodyText = str(payload.bodyText);
+  const rawBodyText = str(payload.bodyText);
   const bodyHtml = str(payload.bodyHtml);
+  // Capture pasted spreadsheet tables (HTML <table>) that the plain-text body
+  // drops, so the numbers reach the brain and the AI drafts.
+  const tableText = bodyHtml ? htmlTablesToText(bodyHtml) : "";
+  const bodyText = tableText
+    ? [rawBodyText, "Pasted table data:", tableText].filter(Boolean).join("\n\n")
+    : rawBodyText;
   const sentAt = payload.sentAt ? new Date(payload.sentAt) : null;
   const validSentAt = sentAt && !isNaN(sentAt.getTime()) ? sentAt : null;
   const recipients = mapping.participants.map((p) => ({
