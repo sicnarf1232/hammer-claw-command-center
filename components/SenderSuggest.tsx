@@ -40,10 +40,13 @@ export default function SenderSuggest({
     }
   }
 
+  const domain = address.split("@")[1]?.toLowerCase() ?? "";
+
   if (done) {
     return (
       <div className="mb-4 rounded-2xl border border-ok/40 bg-okSoft p-3 text-sm text-ok">
-        Linked {address} to {done}.
+        Linked {domain ? `everyone @${domain}` : address} to {done}. Future mail maps
+        automatically.
       </div>
     );
   }
@@ -54,6 +57,7 @@ export default function SenderSuggest({
       <div className="mt-0.5 text-xs text-fg/70">
         {name ? `${name} · ` : ""}
         {address} is not linked to an account yet.
+        {domain ? ` Linking maps everyone @${domain}.` : ""}
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">

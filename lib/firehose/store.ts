@@ -6,6 +6,7 @@ import { blobConfigured } from "@/lib/documents";
 import { extractAttachmentText } from "@/lib/extract";
 import { ensureFirehoseSchema } from "./schema";
 import { parseAddressList, mapParticipants, isSelfAddress, type Addr } from "./map";
+import { loadDomainMap, domainOf } from "./domains";
 import { isInlineAttachment } from "./attach";
 import { promoteAttachmentToLibrary } from "./promote";
 import { htmlTablesToText } from "@/lib/htmlTable";
@@ -134,6 +135,22 @@ export async function storeFirehoseEmail(
 
   const mapping = await mapParticipants(db, from, to, cc);
 
+  // Domain fallback: if no participant resolved to an account, but the external
+  // sender's domain is linked to one (Jordan linked the domain earlier), map it.
+  let emailAccountId = mapping.emailAccountId;
+  let needsReview = mapping.needsReview;
+  if (emailAccountId == null) {
+    const domainMap = await loadDomainMap();
+    for (const p of mapping.participants) {
+      const acc = domainMap.get(domainOf(p.email));
+      if (acc != null) {
+        emailAccountId = acc;
+        needsReview = false;
+        break;
+      }
+    }
+  }
+
   const rawBodyText = str(payload.bodyText);
   const bodyHtml = str(payload.bodyHtml);
   // Capture pasted spreadsheet tables (HTML <table>) that the plain-text body
@@ -169,9 +186,9 @@ export async function storeFirehoseEmail(
       bodyHtml,
       hasAttachments: Boolean(payload.hasAttachments) || (payload.attachments?.length ?? 0) > 0,
       webLink: str(payload.webLink),
-      accountId: mapping.emailAccountId,
+      accountId: emailAccountId,
       personId: mapping.emailPersonId,
-      needsReview: mapping.needsReview,
+      needsReview,
       flagged: Boolean(opts.flagged),
       flaggedAt: opts.flagged ? new Date() : null,
     })
@@ -276,7 +293,7 @@ export async function storeFirehoseEmail(
           sizeBytes: size,
           blobUrl,
           extractedText,
-          accountId: mapping.emailAccountId,
+          accountId: emailAccountId,
           isImage,
         }).catch(() => null);
       }
@@ -296,8 +313,8 @@ export async function storeFirehoseEmail(
     ok: true,
     deduped: false,
     emailId,
-    accountId: mapping.emailAccountId,
-    needsReview: mapping.needsReview,
+    accountId: emailAccountId,
+    needsReview,
     attachments: attCount,
   };
 }

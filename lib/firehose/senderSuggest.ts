@@ -2,6 +2,7 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
 import { people, accounts, emails } from "@/lib/db/schema";
 import { isInternal } from "./map";
+import { linkDomainToAccount } from "./domains";
 import { ensureFirehoseSchema } from "./schema";
 
 // Account/contact suggestions for unmapped senders. Suggestion-only: when a
@@ -101,4 +102,8 @@ export async function linkSenderToAccount(
     .update(emails)
     .set({ accountId, needsReview: false })
     .where(sql`lower(${emails.fromEmail}) = ${addr}`);
+
+  // Link the whole company domain: remember it so future mail auto-maps, and
+  // backfill every other address on the domain. No-op for free-mail/internal.
+  await linkDomainToAccount(domainOf(addr), accountId).catch(() => false);
 }
