@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       or(
         ilike(emails.fromEmail, like),
         ilike(emails.subject, like),
-        sql`array_to_string(${emails.toAddrs}, ',') ilike ${like}`,
+        sql`${emails.toAddrs}::text ilike ${like}`,
       ),
     )
     .orderBy(desc(sql`coalesce(${emails.sentAt}, ${emails.receivedAt}, ${emails.createdAt})`))
