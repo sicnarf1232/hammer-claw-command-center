@@ -17,6 +17,15 @@ function rowsOf<T>(res: unknown): T[] {
 
 export const MERIT_DOMAINS = ["merit.com", "meritoem.com"];
 
+// Jordan's own sending identities. A message FROM one of these is outbound (he
+// sent it), regardless of what the capture flow tagged. Extend if he adds an
+// alias.
+export const SELF_ADDRESSES = ["jordan.francis@merit.com"];
+
+export function isSelfAddress(email: string): boolean {
+  return SELF_ADDRESSES.includes(email.trim().toLowerCase());
+}
+
 export interface Addr {
   name?: string;
   email: string;

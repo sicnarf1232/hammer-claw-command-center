@@ -5,7 +5,7 @@ import { emails, emailParticipants, emailAttachments } from "@/lib/db/schema";
 import { blobConfigured } from "@/lib/documents";
 import { extractAttachmentText } from "@/lib/extract";
 import { ensureFirehoseSchema } from "./schema";
-import { parseAddressList, mapParticipants, type Addr } from "./map";
+import { parseAddressList, mapParticipants, isSelfAddress, type Addr } from "./map";
 import { isInlineAttachment } from "./attach";
 import { promoteAttachmentToLibrary } from "./promote";
 import { htmlTablesToText } from "@/lib/htmlTable";
@@ -114,13 +114,21 @@ export async function storeFirehoseEmail(
     }
   }
 
-  const direction = payload.direction === "outbound" ? "outbound" : "inbound";
   // fromEmail is usually a bare address, but Outlook can send "Name <addr>";
   // parse defensively and prefer the explicit fromName for the display name.
   const fromParsed = parseAddressList(payload.fromEmail)[0];
   const from: Addr | null = fromParsed
     ? { name: str(payload.fromName) ?? fromParsed.name, email: fromParsed.email }
     : null;
+
+  // Direction: trust an explicit "outbound" from the flow, but ALSO infer it when
+  // the sender is Jordan himself. The Sent-capture flow does not always tag
+  // direction, which made his own replies show as received; this is the safety
+  // net so a message from Jordan is always outbound.
+  const direction =
+    payload.direction === "outbound" || (from?.email && isSelfAddress(from.email))
+      ? "outbound"
+      : "inbound";
   const to = parseAddressList(payload.to);
   const cc = parseAddressList(payload.cc);
 
