@@ -195,7 +195,13 @@ export async function storeFirehoseEmail(
       const contentType = attType(a);
       const b64 = attBytesB64(a);
       const bytes = b64 ? Buffer.from(b64, "base64") : null;
-      const size = bytes?.byteLength ?? (typeof a.sizeBytes === "number" ? a.sizeBytes : null);
+      const rawSize =
+        typeof a.sizeBytes === "number"
+          ? a.sizeBytes
+          : typeof (a as Record<string, unknown>).size === "number"
+            ? ((a as Record<string, unknown>).size as number)
+            : null;
+      const size = bytes?.byteLength ?? rawSize;
 
       // Skip inline images (signature logos, embedded images): they are not real
       // attachments and made almost every email look like it had one.
