@@ -175,6 +175,17 @@ export default function QuoteBuilder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // When arriving pre-seeded from an email (quote handoff), auto-run the parse
+  // once so the line items are already populated, not just the raw text.
+  const autoParsed = useRef(false);
+  useEffect(() => {
+    if (loaded && seed?.parseText && !autoParsed.current) {
+      autoParsed.current = true;
+      void runParse();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+
   useEffect(() => {
     if (!loaded) return;
     try {

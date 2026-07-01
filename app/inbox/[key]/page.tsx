@@ -78,6 +78,20 @@ export default async function ThreadPage({
     ? await suggestTasksForThread(acct?.name ?? null, suggestText, 3).catch(() => [])
     : [];
 
+  // Quote handoff: a thread triaged as a quote request gets a one-tap "Create
+  // quote" that opens the Quote builder prefilled (customer, contact) with the
+  // email text queued to auto-parse into line items.
+  const isQuoteRequest = triage?.pathway === "quote-request";
+  const quoteParseText =
+    isQuoteRequest && latestInbound
+      ? `${subject}\n${(latestInbound.bodyText ?? latestInbound.bodyPreview ?? "").slice(0, 1500)}`
+      : "";
+  const quoteHref = isQuoteRequest
+    ? `/quote?customer=${encodeURIComponent(acct?.name ?? "")}&contact=${encodeURIComponent(
+        latestInbound?.fromName?.trim() || latestInbound?.fromEmail || "",
+      )}&parse=${encodeURIComponent(quoteParseText)}`
+    : null;
+
   // Suggest-attach: library documents relevant to this thread, so a reply can
   // reference the right spec/cert/quote. Only when there is a reply to write and
   // the thread is not noise/FYI.
@@ -150,6 +164,24 @@ export default async function ThreadPage({
           suggestion={senderSuggestion.suggestion}
           accounts={senderSuggestion.accounts}
         />
+      ) : null}
+
+      {quoteHref ? (
+        <div
+          className="mb-4 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between"
+          style={{ borderColor: "var(--accent-soft)", background: "var(--accent-soft)" }}
+        >
+          <div>
+            <div className="eyebrow text-accent">Quote request detected</div>
+            <p className="mt-0.5 text-sm text-fg/85">
+              Start a Merit OEM quote prefilled from this email. The line items parse in
+              automatically for you to review.
+            </p>
+          </div>
+          <Link href={quoteHref} className="btn-primary shrink-0 whitespace-nowrap text-sm">
+            Create quote
+          </Link>
+        </div>
       ) : null}
 
       {triage?.summary || taskSuggestions.length || docSuggestions.length ? (
