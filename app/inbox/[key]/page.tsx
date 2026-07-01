@@ -9,8 +9,10 @@ import {
 } from "@/lib/firehose/triage";
 import { markRead } from "@/lib/firehose/actions";
 import { suggestTasksForThread } from "@/lib/firehose/suggest";
+import { suggestDocsForThread } from "@/lib/firehose/docSuggest";
 import { suggestAccountForEmail, listDbAccounts } from "@/lib/firehose/senderSuggest";
 import { isInternal } from "@/lib/firehose/map";
+import { docTypeLabel } from "@/lib/documents";
 import { aiConfigured } from "@/lib/ai";
 import ThreadActions from "@/components/ThreadActions";
 import TriageBar from "@/components/TriageBar";
@@ -76,6 +78,14 @@ export default async function ThreadPage({
     ? await suggestTasksForThread(acct?.name ?? null, suggestText, 3).catch(() => [])
     : [];
 
+  // Suggest-attach: library documents relevant to this thread, so a reply can
+  // reference the right spec/cert/quote. Only when there is a reply to write and
+  // the thread is not noise/FYI.
+  const docSuggestions =
+    latestInbound && triage?.pathway !== "noise" && triage?.pathway !== "fyi"
+      ? await suggestDocsForThread(acct?.name ?? null, suggestText, 3).catch(() => [])
+      : [];
+
   // Sender suggestion: only for an EXTERNAL, unmapped inbound sender. Internal
   // (@merit.com / meritoem.com) is never a customer, so no card. Offer both the
   // domain suggestion and a manual picker over all accounts.
@@ -134,7 +144,7 @@ export default async function ThreadPage({
         />
       ) : null}
 
-      {triage?.summary || taskSuggestions.length ? (
+      {triage?.summary || taskSuggestions.length || docSuggestions.length ? (
         <div className="mb-4 grid gap-3 md:grid-cols-2">
           {triage?.summary ? (
             <div
@@ -187,6 +197,36 @@ export default async function ThreadPage({
               </ul>
               <p className="mt-2 text-2xs text-muted">
                 Suggested from your open tasks. It learns as you act.
+              </p>
+            </div>
+          ) : null}
+
+          {docSuggestions.length ? (
+            <div className="rounded-2xl border border-border bg-surface p-4">
+              <div className="mb-2 flex items-center gap-1.5">
+                <SparkGlyph />
+                <span className="eyebrow text-accent">Suggested attachments</span>
+              </div>
+              <ul className="space-y-2">
+                {docSuggestions.map((d) => (
+                  <li key={d.id} className="text-sm">
+                    <a
+                      href={`/api/documents/file?id=${d.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-fg hover:text-accent"
+                    >
+                      📎 {d.title}
+                    </a>
+                    <div className="mt-0.5 flex flex-wrap gap-1.5 text-2xs text-muted">
+                      <span>{docTypeLabel(d.docType)}</span>
+                      {d.account ? <span>· {d.account}</span> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-2xs text-muted">
+                From your document library. Open to reference in your reply.
               </p>
             </div>
           ) : null}

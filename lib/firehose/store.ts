@@ -2,10 +2,12 @@ import { put } from "@vercel/blob";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { emails, emailParticipants, emailAttachments } from "@/lib/db/schema";
-import { blobConfigured, extractPdfText } from "@/lib/documents";
+import { blobConfigured } from "@/lib/documents";
+import { extractAttachmentText } from "@/lib/extract";
 import { ensureFirehoseSchema } from "./schema";
 import { parseAddressList, mapParticipants, type Addr } from "./map";
 import { isInlineAttachment } from "./attach";
+import { promoteAttachmentToLibrary } from "./promote";
 
 // Skip storing/parsing attachments larger than this (base64 inflates ~33%).
 const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
@@ -222,22 +224,41 @@ export async function storeFirehoseEmail(
         blobUrl = blob.url;
       }
 
-      const isPdf = contentType === "application/pdf" || /\.pdf$/i.test(name ?? "");
+      // Extract text from any supported document (PDF, Word, Excel, CSV, text)
+      // so it feeds the brain, not just PDFs.
+      const isImage = isImageType(contentType, name);
       let extractedText: string | null = null;
-      if (bytes && isPdf) {
-        extractedText = (await extractPdfText(new Uint8Array(bytes)).catch(() => "")) || null;
+      if (bytes && !isImage) {
+        extractedText =
+          (await extractAttachmentText(new Uint8Array(bytes), contentType, name).catch(
+            () => "",
+          )) || null;
       }
 
       await db.insert(emailAttachments).values({
         emailId,
         fileName: name,
         contentType,
-        isImage: isImageType(contentType, name),
+        isImage,
         blobUrl,
         sizeBytes: size,
         extractedText,
       });
       attCount++;
+
+      // Promote meaningful docs into the shared Document Library (reusable brain
+      // knowledge). Best-effort; skips images, tiny files, and duplicates.
+      if (blobUrl) {
+        await promoteAttachmentToLibrary({
+          fileName: name,
+          contentType,
+          sizeBytes: size,
+          blobUrl,
+          extractedText,
+          accountId: mapping.emailAccountId,
+          isImage,
+        }).catch(() => null);
+      }
     } catch (err) {
       console.error("[firehose] attachment store failed:", err);
     }
