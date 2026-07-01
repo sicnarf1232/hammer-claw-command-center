@@ -1,0 +1,308 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+
+interface UploadRef {
+  kind: "upload";
+  name: string;
+  contentType: string;
+  base64: string;
+  size: number;
+}
+
+// Compose a new email or forward one. AI can draft the body in Jordan's voice;
+// the prompt-in box steers it. Attachments are read in the browser and sent as
+// base64 to Flow B, which creates an Outlook draft. For a forward, Flow B keeps
+// the original's attachments automatically, so these are extras.
+export default function Composer({
+  mode,
+  forwardId,
+  initialSubject,
+  forwardFrom,
+}: {
+  mode: "new" | "forward";
+  forwardId?: number;
+  initialSubject?: string;
+  forwardFrom?: string | null;
+}) {
+  const router = useRouter();
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [to, setTo] = useState("");
+  const [cc, setCc] = useState("");
+  const [subject, setSubject] = useState(initialSubject ?? "");
+  const [steer, setSteer] = useState("");
+  const [files, setFiles] = useState<UploadRef[]>([]);
+  const [busy, setBusy] = useState<"" | "draft" | "send">("");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  function exec(cmd: string) {
+    editorRef.current?.focus();
+    document.execCommand(cmd, false);
+  }
+
+  async function onFiles(list: FileList | null) {
+    if (!list) return;
+    const added: UploadRef[] = [];
+    for (const f of Array.from(list)) {
+      const base64 = await fileToBase64(f);
+      if (base64) {
+        added.push({
+          kind: "upload",
+          name: f.name,
+          contentType: f.type || "application/octet-stream",
+          base64,
+          size: f.size,
+        });
+      }
+    }
+    setFiles((prev) => [...prev, ...added]);
+  }
+
+  async function generate() {
+    setBusy("draft");
+    setError(null);
+    try {
+      const res = await fetch("/api/mail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "generate",
+          action: mode,
+          workstream: "merit",
+          subject,
+          forwardId,
+          instructions: steer.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "Drafting failed.");
+      else if (editorRef.current) editorRef.current.innerHTML = data.body ?? "";
+    } catch {
+      setError("Drafting failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function send() {
+    const html = editorRef.current?.innerHTML ?? "";
+    if (!to.trim()) return setError("Add at least one recipient.");
+    if (!html.trim() || !editorRef.current?.textContent?.trim())
+      return setError("Write a message (or draft one with AI).");
+    setBusy("send");
+    setError(null);
+    try {
+      const res = await fetch("/api/mail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "send",
+          action: mode,
+          workstream: "merit",
+          forwardId,
+          to,
+          cc,
+          subject,
+          bodyHtml: html,
+          attachments: files.map((f) => ({
+            kind: "upload",
+            name: f.name,
+            contentType: f.contentType,
+            base64: f.base64,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "Send failed.");
+      else setDone(true);
+    } catch {
+      setError("Send failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="card p-5 text-sm text-ok">
+        Draft created in Outlook. Review and send it from there.
+        <div className="mt-3">
+          <button type="button" onClick={() => router.push("/inbox")} className="btn-outline text-sm">
+            Back to inbox
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-5">
+      {mode === "forward" && forwardFrom ? (
+        <div className="mb-3 rounded-xl border border-border bg-surface2 p-2.5 text-xs text-muted">
+          Forwarding the message from <span className="text-fg/80">{forwardFrom}</span>. Its original
+          attachments are included automatically.
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        <Field label="To">
+          <input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="name@company.com, another@company.com"
+            className="input w-full text-sm"
+          />
+        </Field>
+        <Field label="Cc">
+          <input
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
+            placeholder="optional"
+            className="input w-full text-sm"
+          />
+        </Field>
+        <Field label="Subject">
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder={mode === "forward" ? "FW: …" : "Subject"}
+            className="input w-full text-sm"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <input
+          value={steer}
+          onChange={(e) => setSteer(e.target.value)}
+          placeholder={
+            mode === "forward"
+              ? "How should the forward note read? (optional)"
+              : "What should this email say? (optional)"
+          }
+          className="input flex-1 text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && busy === "") {
+              e.preventDefault();
+              generate();
+            }
+          }}
+        />
+        <button
+          type="button"
+          onClick={generate}
+          disabled={busy !== ""}
+          className="btn-ghost whitespace-nowrap text-xs"
+        >
+          {busy === "draft" ? "Drafting…" : "✨ Draft with AI"}
+        </button>
+      </div>
+
+      <div className="mb-1.5 mt-2 flex items-center gap-1 text-xs">
+        <Fmt label="B" onClick={() => exec("bold")} className="font-bold" />
+        <Fmt label="I" onClick={() => exec("italic")} className="italic" />
+        <Fmt label="• List" onClick={() => exec("insertUnorderedList")} />
+        <Fmt label="1. List" onClick={() => exec("insertOrderedList")} />
+      </div>
+
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder="Write your message, or draft one with AI."
+        className="reply-editor input min-h-[12rem] w-full resize-y overflow-auto text-sm leading-relaxed"
+      />
+
+      {/* Attachments */}
+      <div className="mt-3">
+        <label className="btn-outline inline-flex cursor-pointer items-center gap-1.5 text-xs">
+          📎 Attach files
+          <input
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => onFiles(e.target.files)}
+          />
+        </label>
+        {files.length ? (
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {files.map((f, i) => (
+              <li key={i} className="chip border-border text-fg/75">
+                📎 {f.name} · {kb(f.size)}
+                <button
+                  type="button"
+                  onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                  className="ml-1.5 text-muted hover:text-danger"
+                  title="Remove"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
+      {error ? <div className="mt-3 text-xs text-danger">{error}</div> : null}
+      <div className="mt-4 flex items-center justify-between">
+        <span className="text-2xs text-muted">
+          Creates a draft as Jordan.Francis@merit.com in Outlook.
+        </span>
+        <button type="button" onClick={send} disabled={busy !== ""} className="btn-primary text-sm">
+          {busy === "send" ? "Creating draft…" : "Create draft"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-14 shrink-0 text-xs font-medium text-muted">{label}</span>
+      <div className="flex-1">{children}</div>
+    </div>
+  );
+}
+
+function Fmt({
+  label,
+  onClick,
+  className,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className={`rounded-md border border-border px-2 py-1 text-fg/70 hover:bg-surface2 hover:text-fg ${className ?? ""}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function fileToBase64(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = String(reader.result ?? "");
+      const comma = res.indexOf(",");
+      resolve(comma >= 0 ? res.slice(comma + 1) : null);
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
+function kb(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}

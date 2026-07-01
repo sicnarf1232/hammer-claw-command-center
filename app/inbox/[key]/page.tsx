@@ -128,11 +128,19 @@ export default async function ThreadPage({
             ) : null}
           </div>
         </div>
-        <ThreadActions
-          ids={messages.map((m) => m.id)}
-          flagged={flagged}
-          archived={archived}
-        />
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/compose?forwardId=${messages[messages.length - 1].id}`}
+            className="btn-outline whitespace-nowrap text-xs"
+          >
+            Forward
+          </Link>
+          <ThreadActions
+            ids={messages.map((m) => m.id)}
+            flagged={flagged}
+            archived={archived}
+          />
+        </div>
       </header>
 
       {senderSuggestion ? (

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { dbConfigured } from "@/lib/db";
 import { listThreads, accountNames, type ThreadSummary } from "@/lib/firehose/read";
 import { getTriageMap, type TriageRow } from "@/lib/firehose/triage";
@@ -102,19 +103,24 @@ export default async function InboxPage({
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div>
-      <header className="mb-5">
-        <div className="eyebrow flex items-center gap-1.5 text-accent">
-          <span
-            className="inline-block h-1.5 w-1.5 rounded-full"
-            style={{ background: "var(--accent)", boxShadow: "0 0 10px var(--accent)" }}
-          />
-          Merit OEM · live firehose
+      <header className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <div className="eyebrow flex items-center gap-1.5 text-accent">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: "var(--accent)", boxShadow: "0 0 10px var(--accent)" }}
+            />
+            Merit OEM · live firehose
+          </div>
+          <h1 className="mt-1 display-title text-[28px] text-fg">Inbox</h1>
+          <p className="mt-1 max-w-xl text-sm text-muted">
+            Every inbound and outbound message, threaded, mapped to accounts, and
+            triaged by AI. Open a thread to read the full chain and reply.
+          </p>
         </div>
-        <h1 className="mt-1 display-title text-[28px] text-fg">Inbox</h1>
-        <p className="mt-1 max-w-xl text-sm text-muted">
-          Every inbound and outbound message, threaded, mapped to accounts, and
-          triaged by AI. Open a thread to read the full chain and reply.
-        </p>
+        <Link href="/compose" className="btn-primary shrink-0 whitespace-nowrap text-sm">
+          New email
+        </Link>
       </header>
       {children}
     </div>
