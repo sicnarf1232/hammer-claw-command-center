@@ -8,10 +8,13 @@ import {
   type TriageRow,
 } from "@/lib/firehose/triage";
 import { markRead } from "@/lib/firehose/actions";
+import { suggestTasksForThread } from "@/lib/firehose/suggest";
+import { suggestAccountForEmail } from "@/lib/firehose/senderSuggest";
 import { aiConfigured } from "@/lib/ai";
 import ThreadActions from "@/components/ThreadActions";
 import TriageBar from "@/components/TriageBar";
 import ReplyBox from "@/components/ReplyBox";
+import SenderSuggest from "@/components/SenderSuggest";
 
 const JORDAN = "jordan.francis@merit.com";
 
@@ -62,6 +65,26 @@ export default async function ThreadPage({
   }
   const path = triage?.pathway ? PATHWAY_META[triage.pathway] : null;
 
+  // Smart Action panel: suggested related open tasks (account + keyword match).
+  const suggestText = `${subject} ${triage?.summary ?? ""}`;
+  const taskSuggestions = await suggestTasksForThread(acct?.name ?? null, suggestText, 3).catch(() => []);
+
+  // Sender suggestion: only when the thread is not mapped to an account and has
+  // an external inbound sender.
+  let senderSuggestion: {
+    address: string;
+    name: string | null;
+    suggestion: { accountId: number; name: string } | null;
+  } | null = null;
+  if (acctId == null && latestInbound?.fromEmail) {
+    const s = await suggestAccountForEmail(latestInbound.fromEmail).catch(() => null);
+    senderSuggestion = {
+      address: latestInbound.fromEmail,
+      name: latestInbound.fromName ?? null,
+      suggestion: s ? { accountId: s.accountId, name: s.name } : null,
+    };
+  }
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/inbox" className="text-xs text-muted hover:text-fg">
@@ -89,31 +112,69 @@ export default async function ThreadPage({
         />
       </header>
 
-      {triage?.summary ? (
-        <div
-          className="mb-4 rounded-2xl border p-4"
-          style={{ borderColor: "var(--accent-soft)", background: "var(--accent-soft)" }}
-        >
-          <div className="mb-1.5 flex items-center gap-1.5">
-            <SparkGlyph />
-            <span className="eyebrow text-accent">AI summary</span>
-            {path ? (
-              <span
-                className="ml-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
-                style={{ background: "var(--surface)", color: path.color }}
-              >
-                {path.label}
-              </span>
-            ) : null}
-            {triage.priority === "high" ? (
-              <span className="rounded-full bg-surface px-2 py-0.5 text-2xs font-bold text-dueInk">
-                High priority
-              </span>
-            ) : null}
-          </div>
-          <p className="text-sm leading-relaxed text-fg/85">{triage.summary}</p>
-          {triage.needsReply ? (
-            <p className="mt-1.5 text-xs font-medium text-accent">You still owe a reply.</p>
+      {senderSuggestion ? (
+        <SenderSuggest
+          address={senderSuggestion.address}
+          name={senderSuggestion.name}
+          suggestion={senderSuggestion.suggestion}
+        />
+      ) : null}
+
+      {triage?.summary || taskSuggestions.length ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          {triage?.summary ? (
+            <div
+              className="rounded-2xl border p-4"
+              style={{ borderColor: "var(--accent-soft)", background: "var(--accent-soft)" }}
+            >
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                <SparkGlyph />
+                <span className="eyebrow text-accent">AI summary</span>
+                {path ? (
+                  <span
+                    className="ml-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
+                    style={{ background: "var(--surface)", color: path.color }}
+                  >
+                    {path.label}
+                  </span>
+                ) : null}
+                {triage.priority === "high" ? (
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-2xs font-bold text-dueInk">
+                    High priority
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-sm leading-relaxed text-fg/85">{triage.summary}</p>
+              {triage.needsReply ? (
+                <p className="mt-1.5 text-xs font-medium text-accent">You still owe a reply.</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {taskSuggestions.length ? (
+            <div className="rounded-2xl border border-border bg-surface p-4">
+              <div className="mb-2 flex items-center gap-1.5">
+                <SparkGlyph />
+                <span className="eyebrow text-accent">Suggested actions</span>
+              </div>
+              <ul className="space-y-2">
+                {taskSuggestions.map((s, i) => (
+                  <li key={i} className="text-sm">
+                    <Link href="/tasks" className="font-medium text-fg hover:text-accent">
+                      {s.title}
+                    </Link>
+                    <div className="mt-0.5 flex flex-wrap gap-1.5 text-2xs text-muted">
+                      {s.customer ? <span>{s.customer}</span> : null}
+                      {s.due ? <span>· due {s.due}</span> : null}
+                      {s.priority ? <span>· {s.priority}</span> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-2xs text-muted">
+                Suggested from your open tasks. It learns as you act.
+              </p>
+            </div>
           ) : null}
         </div>
       ) : null}

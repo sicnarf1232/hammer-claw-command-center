@@ -2,6 +2,23 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Inbox: folders, inline-attachment fix, smart panels (2026-07-01)
+
+- Inline attachments: signature logos / embedded images no longer count as
+  attachments (`lib/firehose/attach.ts` heuristic + isInline flag). Skipped at
+  ingest, hidden at read, and a one-time backfill route
+  (`POST /api/inbox/attachments-maintenance`) cleans mail stored before the fix.
+- Folder rail: the inbox now has a left vertical folder list (Needs attention,
+  Sent, Flagged, Reviewed, All, Archived + pathway folders Needs reply / Quotes /
+  Quality-PCN / Logistics / FYI / Noise). Reviewed threads leave Needs-attention
+  but live in their pathway folder, so a reviewed "needs reply" is your reply
+  queue. Mobile shows the folders as horizontal chips.
+- Smart Action panel: the thread view suggests related open tasks (account +
+  keyword match, suggestion-only) beside the AI summary.
+- Account suggestions: an unmapped sender gets a suggested account (by shared
+  email domain); one tap links the contact + backfills their mail
+  (`POST /api/inbox/link-sender`).
+
 ## Inbox daily-driver: read state, reply-all, manual triage (2026-07-01)
 
 - Mark-as-read: opening a thread marks its messages read (`emails.read`); unread

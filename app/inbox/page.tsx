@@ -1,19 +1,39 @@
 import { dbConfigured } from "@/lib/db";
-import { listThreads, accountNames, type InboxView } from "@/lib/firehose/read";
-import { getTriageMap } from "@/lib/firehose/triage";
-import InboxList, { type InboxThread } from "@/components/InboxList";
+import { listThreads, accountNames, type ThreadSummary } from "@/lib/firehose/read";
+import { getTriageMap, type TriageRow } from "@/lib/firehose/triage";
+import InboxList, { type InboxThread, type Folder } from "@/components/InboxList";
 import SetupNotice from "@/components/SetupNotice";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Unified inbox (Milestone 4): one thread-first view over the whole Merit OEM
-// firehose, with AI triage. Needs-attention = flagged, unmapped, or the triage
-// says Jordan still owes a reply.
+// Folder model for the inbox rail. Each folder is a predicate over a thread +
+// its triage. Reviewed threads leave "Needs attention" but still live in their
+// pathway folder (e.g. a reviewed needs-reply stays in "Needs reply").
+const FOLDERS: {
+  key: string;
+  label: string;
+  group: "top" | "pathway";
+  match: (t: ThreadSummary, tr?: TriageRow) => boolean;
+}[] = [
+  { key: "attention", label: "Needs attention", group: "top", match: (t, tr) => !t.archived && !tr?.reviewed && (t.flagged || t.needsReview || Boolean(tr?.needsReply)) },
+  { key: "sent", label: "Sent", group: "top", match: (t) => !t.archived && t.outbound > 0 },
+  { key: "flagged", label: "Flagged", group: "top", match: (t) => !t.archived && t.flagged },
+  { key: "reviewed", label: "Reviewed", group: "top", match: (t, tr) => !t.archived && Boolean(tr?.reviewed) },
+  { key: "needs-reply", label: "Needs reply", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "needs-reply" },
+  { key: "quote-request", label: "Quotes", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "quote-request" },
+  { key: "quality-pcn", label: "Quality / PCN", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "quality-pcn" },
+  { key: "logistics", label: "Logistics", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "logistics" },
+  { key: "fyi", label: "FYI", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "fyi" },
+  { key: "noise", label: "Noise", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "noise" },
+  { key: "all", label: "All mail", group: "top", match: (t) => !t.archived },
+  { key: "archived", label: "Archived", group: "top", match: (t) => t.archived },
+];
+
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ folder?: string; view?: string }>;
 }) {
   if (!dbConfigured()) {
     return (
@@ -24,30 +44,21 @@ export default async function InboxPage({
   }
 
   const sp = await searchParams;
-  const view: InboxView =
-    sp.view === "flagged" || sp.view === "all" ? sp.view : "attention";
+  const requested = sp.folder ?? sp.view ?? "attention";
+  const folderKey = FOLDERS.some((f) => f.key === requested) ? requested : "attention";
 
-  // Load the full recent set once, then derive counts + the current view from it
-  // (so the tab counts stay consistent and include AI needs-reply).
-  const all = await listThreads({ view: "all", limit: 400 });
+  const all = await listThreads({ view: "all", limit: 500 });
   const triage = await getTriageMap(all.map((t) => t.key));
 
-  const isAttention = (t: (typeof all)[number]) => {
-    const tr = triage.get(t.key);
-    if (t.archived || tr?.reviewed) return false;
-    return t.flagged || t.needsReview || Boolean(tr?.needsReply);
-  };
+  const folders: Folder[] = FOLDERS.map((f) => ({
+    key: f.key,
+    label: f.label,
+    group: f.group,
+    count: all.filter((t) => f.match(t, triage.get(t.key))).length,
+  }));
 
-  const counts = {
-    all: all.length,
-    attention: all.filter(isAttention).length,
-    flagged: all.filter((t) => t.flagged && !t.archived).length,
-  };
-
-  let shown = all;
-  if (view === "attention") shown = all.filter(isAttention);
-  else if (view === "flagged") shown = all.filter((t) => t.flagged && !t.archived);
-  shown = shown.slice(0, 150);
+  const active = FOLDERS.find((f) => f.key === folderKey)!;
+  const shown = all.filter((t) => active.match(t, triage.get(t.key))).slice(0, 200);
 
   const accounts = await accountNames(
     shown.map((t) => t.accountId).filter((x): x is number => x != null),
@@ -77,12 +88,13 @@ export default async function InboxPage({
       pathway: tr?.pathway ?? null,
       priority: tr?.priority ?? null,
       needsReply: Boolean(tr?.needsReply),
+      reviewed: Boolean(tr?.reviewed),
     };
   });
 
   return (
     <Shell>
-      <InboxList threads={threads} view={view} counts={counts} />
+      <InboxList threads={threads} folder={folderKey} folders={folders} />
     </Shell>
   );
 }

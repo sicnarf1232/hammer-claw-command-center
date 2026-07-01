@@ -371,6 +371,7 @@ export const emailAttachments = pgTable(
     fileName: text("file_name"),
     contentType: text("content_type"),
     isImage: boolean("is_image").notNull().default(false),
+    isInline: boolean("is_inline").notNull().default(false), // signature/embedded image
     blobUrl: text("blob_url"), // null when no Blob store configured
     sizeBytes: integer("size_bytes"),
     extractedText: text("extracted_text"), // PDF text for retrieval (best-effort)

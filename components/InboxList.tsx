@@ -26,17 +26,16 @@ export interface InboxThread {
   pathway: string | null;
   priority: string | null;
   needsReply: boolean;
+  reviewed: boolean;
 }
 
-type View = "attention" | "flagged" | "all";
+export interface Folder {
+  key: string;
+  label: string;
+  group: "top" | "pathway";
+  count: number;
+}
 
-const TABS: { key: View; label: string }[] = [
-  { key: "attention", label: "Needs attention" },
-  { key: "flagged", label: "Flagged" },
-  { key: "all", label: "All" },
-];
-
-// Client-safe pathway chip metadata (mirrors lib/firehose/triage PATHWAY_META).
 const PATHWAY: Record<string, { label: string; color: string }> = {
   "needs-reply": { label: "Needs reply", color: "var(--due)" },
   "quote-request": { label: "Quote", color: "var(--accent)" },
@@ -46,23 +45,24 @@ const PATHWAY: Record<string, { label: string; color: string }> = {
   noise: { label: "Noise", color: "var(--ink-3)" },
 };
 
+function href(key: string): string {
+  return key === "attention" ? "/inbox" : `/inbox?folder=${key}`;
+}
+
 export default function InboxList({
   threads,
-  view,
-  counts,
+  folder,
+  folders,
 }: {
   threads: InboxThread[];
-  view: View;
-  counts: { attention: number; flagged: number; all: number };
+  folder: string;
+  folders: Folder[];
 }) {
   const [q, setQ] = useState("");
   const router = useRouter();
   const requested = useRef<Set<string>>(new Set());
   const [triaging, setTriaging] = useState(false);
 
-  // Progressively AI-triage untriaged threads, 6 at a time, then refresh so the
-  // summaries + smart "Needs attention" membership show up. Each key is only
-  // requested once (no retry loops).
   useEffect(() => {
     const pending = threads
       .filter((t) => !t.summary && !requested.current.has(t.key))
@@ -101,11 +101,48 @@ export default function InboxList({
   }, [q, threads]);
 
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
+  const top = folders.filter((f) => f.group === "top");
+  const pathways = folders.filter((f) => f.group === "pathway");
 
   return (
-    <div>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1 sm:max-w-sm">
+    <div className="flex gap-5">
+      {/* Desktop folder rail */}
+      <aside className="hidden w-44 shrink-0 md:block">
+        <nav className="space-y-0.5">
+          {top.map((f) => (
+            <FolderLink key={f.key} f={f} active={f.key === folder} />
+          ))}
+        </nav>
+        <div className="mb-1.5 mt-4 px-2 text-2xs font-extrabold uppercase tracking-[0.14em] text-muted">
+          Pathways
+        </div>
+        <nav className="space-y-0.5">
+          {pathways.map((f) => (
+            <FolderLink key={f.key} f={f} active={f.key === folder} dot />
+          ))}
+        </nav>
+      </aside>
+
+      <div className="min-w-0 flex-1">
+        {/* Mobile folder chips */}
+        <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 md:hidden">
+          {folders.map((f) => (
+            <Link
+              key={f.key}
+              href={href(f.key)}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium ${
+                f.key === folder
+                  ? "border-transparent bg-primary text-primary-fg"
+                  : "border-border bg-surface text-fg/70"
+              }`}
+            >
+              {f.label}
+              <span className={f.key === folder ? "text-primary-fg/80" : "text-muted"}>{f.count}</span>
+            </Link>
+          ))}
+        </div>
+
+        <div className="relative mb-4 sm:max-w-sm">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
             value={q}
@@ -115,55 +152,58 @@ export default function InboxList({
             inputMode="search"
           />
         </div>
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-          {TABS.map((tab) => {
-            const active = tab.key === view;
-            return (
-              <Link
-                key={tab.key}
-                href={tab.key === "attention" ? "/inbox" : `/inbox?view=${tab.key}`}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-                  active
-                    ? "border-transparent bg-primary text-primary-fg"
-                    : "border-border bg-surface text-fg/70 hover:text-fg"
-                }`}
-              >
-                {tab.label}
-                <span className={active ? "text-primary-fg/80" : "text-muted"}>
-                  {counts[tab.key]}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+
+        {triaging ? (
+          <div className="mb-3 flex items-center gap-2 px-1 text-2xs font-medium text-accent">
+            <SparkGlyph className="h-3.5 w-3.5 animate-pulse" />
+            AI is reading your mail…
+          </div>
+        ) : null}
+
+        {filtered.length === 0 ? (
+          <EmptyState folder={folder} searching={q.trim().length > 0} />
+        ) : (
+          <div className="space-y-6">
+            {groups.map((g) => (
+              <section key={g.label}>
+                <div className="mb-2 px-1 text-2xs font-extrabold uppercase tracking-[0.14em] text-muted">
+                  {g.label}
+                </div>
+                <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+                  {g.items.map((t, i) => (
+                    <Row key={t.key} t={t} first={i === 0} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
       </div>
-
-      {triaging ? (
-        <div className="mb-3 flex items-center gap-2 px-1 text-2xs font-medium text-accent">
-          <SparkGlyph className="h-3.5 w-3.5 animate-pulse" />
-          AI is reading your mail…
-        </div>
-      ) : null}
-
-      {filtered.length === 0 ? (
-        <EmptyState view={view} searching={q.trim().length > 0} />
-      ) : (
-        <div className="space-y-6">
-          {groups.map((g) => (
-            <section key={g.label}>
-              <div className="mb-2 px-1 text-2xs font-extrabold uppercase tracking-[0.14em] text-muted">
-                {g.label}
-              </div>
-              <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-                {g.items.map((t, i) => (
-                  <Row key={t.key} t={t} first={i === 0} />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
     </div>
+  );
+}
+
+function FolderLink({ f, active, dot }: { f: Folder; active: boolean; dot?: boolean }) {
+  const color = dot ? PATHWAY[f.key]?.color : undefined;
+  return (
+    <Link
+      href={href(f.key)}
+      className={`flex items-center justify-between rounded-[10px] px-2.5 py-1.5 text-sm transition-colors ${
+        active ? "bg-accentSoft font-semibold text-accent" : "text-fg/75 hover:bg-surface2"
+      }`}
+    >
+      <span className="flex items-center gap-2 truncate">
+        {dot ? (
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color ?? "var(--ink-3)" }} />
+        ) : null}
+        {f.label}
+      </span>
+      {f.count > 0 ? (
+        <span className={`shrink-0 text-2xs tabular-nums ${active ? "text-accent" : "text-muted"}`}>
+          {f.count}
+        </span>
+      ) : null}
+    </Link>
   );
 }
 
@@ -180,10 +220,7 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
       }`}
     >
       {t.flagged || high ? (
-        <span
-          className="absolute inset-y-0 left-0 w-[3px]"
-          style={{ background: high ? "var(--due)" : "var(--due)" }}
-        />
+        <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: "var(--due)" }} />
       ) : null}
 
       <div
@@ -218,7 +255,6 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
           </span>
         </div>
 
-        {/* AI summary when available, else the raw snippet */}
         {t.summary ? (
           <div className="mt-1 flex items-start gap-1.5">
             <SparkGlyph className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
@@ -242,6 +278,7 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
               {path.label}
             </span>
           ) : null}
+          {t.reviewed ? <span className="chip border-ok/40 text-ok">✓ Reviewed</span> : null}
           {t.accountName ? (
             <span
               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
@@ -264,28 +301,27 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
   );
 }
 
-function EmptyState({ view, searching }: { view: View; searching: boolean }) {
+function EmptyState({ folder, searching }: { folder: string; searching: boolean }) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-10 text-center">
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accentSoft text-accent">
         <SparkGlyph className="h-6 w-6" />
       </div>
       <div className="text-sm font-semibold text-fg">
-        {searching ? "No matches" : view === "all" ? "No mail yet" : "You're all caught up"}
+        {searching ? "No matches" : folder === "attention" ? "You're all caught up" : "Nothing here yet"}
       </div>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
         {searching
           ? "Try a different search."
-          : view === "all"
-            ? "Once the firehose flows fire, every Merit OEM message lands here, threaded and triaged."
-            : "Flagged mail, unmapped senders, and anything the AI says needs a reply surface here."}
+          : folder === "attention"
+            ? "Flagged mail, unmapped senders, and anything the AI says needs a reply surface here."
+            : "Mail lands in this folder as it arrives and gets triaged."}
       </p>
     </div>
   );
 }
 
 function withAlpha(color: string): string {
-  // token colors are hex or var(); for var() fall back to a soft surface tint.
   return color.startsWith("#") ? `${color}1f` : "var(--surface-2)";
 }
 

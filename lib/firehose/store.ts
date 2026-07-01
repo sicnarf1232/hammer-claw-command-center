@@ -5,6 +5,7 @@ import { emails, emailParticipants, emailAttachments } from "@/lib/db/schema";
 import { blobConfigured, extractPdfText } from "@/lib/documents";
 import { ensureFirehoseSchema } from "./schema";
 import { parseAddressList, mapParticipants, type Addr } from "./map";
+import { isInlineAttachment } from "./attach";
 
 // Skip storing/parsing attachments larger than this (base64 inflates ~33%).
 const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
@@ -186,6 +187,14 @@ export async function storeFirehoseEmail(
       const b64 = attBytesB64(a);
       const bytes = b64 ? Buffer.from(b64, "base64") : null;
       const size = bytes?.byteLength ?? (typeof a.sizeBytes === "number" ? a.sizeBytes : null);
+
+      // Skip inline images (signature logos, embedded images): they are not real
+      // attachments and made almost every email look like it had one.
+      const inlineFlag =
+        (a as Record<string, unknown>).isInline ?? (a as Record<string, unknown>).IsInline;
+      if (isInlineAttachment(name, contentType, size, inlineFlag as boolean | undefined)) {
+        continue;
+      }
       if (bytes && bytes.byteLength > MAX_ATTACHMENT_BYTES) {
         // Too large to retain inline; record metadata only.
         await db.insert(emailAttachments).values({
@@ -234,10 +243,12 @@ export async function storeFirehoseEmail(
     }
   }
 
-  // Reflect actual attachment presence.
-  if (attCount > 0 && !payload.hasAttachments) {
-    await db.update(emails).set({ hasAttachments: true }).where(eq(emails.id, emailId));
-  }
+  // Reflect REAL attachment presence (inline images were skipped above), so a
+  // message with only a signature logo no longer shows an attachment.
+  await db
+    .update(emails)
+    .set({ hasAttachments: attCount > 0 })
+    .where(eq(emails.id, emailId));
 
   return {
     ok: true,

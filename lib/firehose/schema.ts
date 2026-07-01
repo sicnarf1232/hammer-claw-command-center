@@ -79,6 +79,7 @@ const DDL: string[] = [
     "created_at" timestamptz NOT NULL DEFAULT now()
   )`,
   `CREATE INDEX IF NOT EXISTS "email_attachments_email_idx" ON "email_attachments" ("email_id")`,
+  `ALTER TABLE "email_attachments" ADD COLUMN IF NOT EXISTS "is_inline" boolean NOT NULL DEFAULT false`,
 
   `CREATE TABLE IF NOT EXISTS "email_triage" (
     "id" serial PRIMARY KEY,

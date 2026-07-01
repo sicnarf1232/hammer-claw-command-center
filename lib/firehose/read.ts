@@ -2,6 +2,7 @@ import { get } from "@vercel/blob";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
 import { emails, emailAttachments, accounts } from "@/lib/db/schema";
+import { isInlineAttachment } from "./attach";
 
 export type EmailRow = typeof emails.$inferSelect;
 export type AttachmentRow = typeof emailAttachments.$inferSelect;
@@ -189,6 +190,8 @@ export async function getThread(key: string): Promise<{
   }
   const attByEmail = new Map<number, AttachmentRow[]>();
   for (const a of atts) {
+    // Hide inline images (signatures) even for rows stored before the fix.
+    if (a.isInline || isInlineAttachment(a.fileName, a.contentType, a.sizeBytes)) continue;
     const list = attByEmail.get(a.emailId) ?? [];
     list.push(a);
     attByEmail.set(a.emailId, list);
