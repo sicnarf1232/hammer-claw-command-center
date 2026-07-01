@@ -66,7 +66,11 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
     return [];
   }
 
-  type Acc = ThreadSummary & { _parties: Set<string>; _latestStatus: string };
+  type Acc = ThreadSummary & {
+    _parties: Set<string>;
+    _latestStatus: string;
+    _newestRead: boolean;
+  };
   const byKey = new Map<string, Acc>();
   for (const e of rows) {
     const key = threadKey(e);
@@ -83,6 +87,7 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
         parties: [],
         _parties: new Set<string>(),
         _latestStatus: e.status ?? "new",
+        _newestRead: false,
         accountId: e.accountId ?? null,
         needsReview: false,
         hasAttachments: false,
@@ -109,6 +114,7 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
       t.lastAt = at;
       t.subject = cleanSubject(e.subject) || t.subject;
       t._latestStatus = e.status ?? "new";
+      t._newestRead = Boolean(e.read);
       t.preview = (e.bodyPreview ?? e.bodyText ?? "")?.slice(0, 160) || null;
       t.lastDirection = e.direction === "outbound" ? "outbound" : "inbound";
     }
@@ -117,7 +123,8 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
   let out = Array.from(byKey.values()).map((t) => {
     t.parties = Array.from(t._parties).slice(0, 4);
     t.archived = t._latestStatus === "archived";
-    t.unread = t._latestStatus === "new" && t.lastDirection === "inbound";
+    // Unread = the newest message is one Jordan received and has not opened.
+    t.unread = t.lastDirection === "inbound" && !t._newestRead;
     return t as ThreadSummary;
   });
 

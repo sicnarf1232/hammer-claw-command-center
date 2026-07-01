@@ -2,6 +2,23 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Inbox daily-driver: read state, reply-all, manual triage (2026-07-01)
+
+- Mark-as-read: opening a thread marks its messages read (`emails.read`); unread
+  dots now reflect real read state instead of just status.
+- Reply-all: the thread view computes the full recipient set (last sender in To,
+  everyone else in Cc, Jordan excluded) and ReplyBox defaults to Reply-all when
+  others were copied, with a toggle + a live recipient line. `/api/reply` now
+  accepts to/cc.
+- Manual triage (`TriageBar` + `POST /api/inbox/triage-set`): set a pathway
+  yourself (Needs reply / Quote / Quality-PCN / Logistics / FYI / Noise) or "Mark
+  reviewed" to clear a thread from Needs-attention. Manual triage latches
+  (`email_triage.manual/reviewed`) so AI auto-triage never overwrites it; reviewed
+  threads drop out of Needs-attention.
+- Attachments: broadened the byte-field parser (ContentBytes / contentBytes /
+  $content). NOTE: "not retained" means the Power Automate flow isn't sending the
+  attachment bytes; fix is "Include Attachments = Yes" + map ContentBytes.
+
 ## Inbox intelligence: AI triage + summaries + brain over email (2026-06-30)
 
 - Haiku auto-triage (`lib/ai.ts:triageEmailThread`, `lib/firehose/triage.ts`):

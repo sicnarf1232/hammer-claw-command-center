@@ -32,8 +32,11 @@ export default async function InboxPage({
   const all = await listThreads({ view: "all", limit: 400 });
   const triage = await getTriageMap(all.map((t) => t.key));
 
-  const isAttention = (t: (typeof all)[number]) =>
-    (t.flagged || t.needsReview || triage.get(t.key)?.needsReply) && !t.archived;
+  const isAttention = (t: (typeof all)[number]) => {
+    const tr = triage.get(t.key);
+    if (t.archived || tr?.reviewed) return false;
+    return t.flagged || t.needsReview || Boolean(tr?.needsReply);
+  };
 
   const counts = {
     all: all.length,

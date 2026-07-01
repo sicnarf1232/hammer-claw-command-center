@@ -80,6 +80,8 @@ export async function ensureTriageForKeys(
     if (messages.length === 0) continue;
     const signature = signatureOf(messages);
     const prev = existing.get(key);
+    // Respect manual triage: never auto-overwrite what Jordan set himself.
+    if (prev && (prev.manual || prev.reviewed)) continue;
     if (prev && prev.signature === signature) continue; // fresh
     todo.push({ key, messages, subject, signature });
   }
@@ -147,4 +149,46 @@ function chunk<T>(arr: T[], n: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
   return out;
+}
+
+export interface ManualTriageInput {
+  pathway?: string;
+  needsReply?: boolean;
+  reviewed?: boolean;
+  summary?: string;
+}
+
+// Jordan manually triages a thread. Sets manual=true so auto-triage won't
+// overwrite it. Upserts the triage row (creates one if the thread was never
+// auto-triaged).
+export async function setManualTriage(key: string, input: ManualTriageInput): Promise<void> {
+  await ensureFirehoseSchema();
+  const db = getDb();
+  const now = new Date();
+  const updates: Partial<typeof emailTriage.$inferInsert> = { manual: true, updatedAt: now };
+  if (input.pathway !== undefined) {
+    updates.pathway = input.pathway;
+    // Pathway drives needs-reply unless explicitly overridden below.
+    updates.needsReply = input.pathway === "needs-reply";
+  }
+  if (input.needsReply !== undefined) updates.needsReply = input.needsReply;
+  if (input.summary !== undefined) updates.summary = input.summary;
+  if (input.reviewed !== undefined) {
+    updates.reviewed = input.reviewed;
+    updates.reviewedAt = input.reviewed ? now : null;
+  }
+  await db
+    .insert(emailTriage)
+    .values({
+      threadKey: key,
+      pathway: updates.pathway ?? null,
+      needsReply: updates.needsReply ?? false,
+      summary: updates.summary ?? null,
+      reviewed: updates.reviewed ?? false,
+      reviewedAt: updates.reviewedAt ?? null,
+      manual: true,
+      signature: "manual",
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({ target: emailTriage.threadKey, set: updates });
 }

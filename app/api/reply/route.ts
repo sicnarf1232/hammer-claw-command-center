@@ -97,7 +97,15 @@ export async function POST(req: NextRequest) {
   const identity = identityFor(workstream as Workstream);
   const subject = String(body.subject ?? "").trim() ||
     `RE: ${email.subject ?? "(no subject)"}`;
-  const to = email.fromEmail ? [email.fromEmail] : [];
+  // Reply-all: the client passes the full recipient set (to + cc). Fall back to
+  // just the sender for a plain reply.
+  const to =
+    Array.isArray(body.to) && body.to.length
+      ? body.to.map((x: unknown) => String(x))
+      : email.fromEmail
+        ? [email.fromEmail]
+        : [];
+  const cc = Array.isArray(body.cc) ? body.cc.map((x: unknown) => String(x)) : [];
   const bodyHtml = toHtml(replyBody, identity.label, identity.email!);
 
   try {
@@ -105,7 +113,7 @@ export async function POST(req: NextRequest) {
       action: "create_draft",
       inReplyTo: email.messageId ?? "",
       to,
-      cc: [],
+      cc,
       subject,
       bodyHtml,
       fromIdentity: workstream as Workstream,

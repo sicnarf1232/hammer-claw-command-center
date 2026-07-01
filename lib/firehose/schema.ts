@@ -44,6 +44,8 @@ const DDL: string[] = [
   `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "flagged_at" timestamptz`,
   `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "status" text NOT NULL DEFAULT 'new'`,
   `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "replied_at" timestamptz`,
+  `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "read" boolean NOT NULL DEFAULT false`,
+  `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "read_at" timestamptz`,
   `CREATE INDEX IF NOT EXISTS "emails_message_id_idx" ON "emails" ("message_id")`,
   `CREATE INDEX IF NOT EXISTS "emails_flagged_idx" ON "emails" ("flagged")`,
   `CREATE INDEX IF NOT EXISTS "emails_thread_idx" ON "emails" ("thread_id")`,
@@ -90,6 +92,9 @@ const DDL: string[] = [
     "updated_at" timestamptz NOT NULL DEFAULT now()
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "email_triage_thread_key_ux" ON "email_triage" ("thread_key")`,
+  `ALTER TABLE "email_triage" ADD COLUMN IF NOT EXISTS "reviewed" boolean NOT NULL DEFAULT false`,
+  `ALTER TABLE "email_triage" ADD COLUMN IF NOT EXISTS "manual" boolean NOT NULL DEFAULT false`,
+  `ALTER TABLE "email_triage" ADD COLUMN IF NOT EXISTS "reviewed_at" timestamptz`,
 ];
 
 // Run the DDL once per warm lambda. A failed run does not latch, so the next

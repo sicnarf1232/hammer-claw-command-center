@@ -325,6 +325,8 @@ export const emails = pgTable(
     flaggedAt: timestamp("flagged_at", { withTimezone: true }),
     status: text("status").notNull().default("new"), // new | replied | archived
     repliedAt: timestamp("replied_at", { withTimezone: true }),
+    read: boolean("read").notNull().default(false), // opened in-app
+    readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -393,6 +395,11 @@ export const emailTriage = pgTable(
     needsReply: boolean("needs_reply").notNull().default(false),
     signature: text("signature"),
     model: text("model"),
+    // Manual triage: Jordan set the pathway/reviewed himself, so auto-triage must
+    // not clobber it. reviewed removes the thread from Needs-attention.
+    reviewed: boolean("reviewed").notNull().default(false),
+    manual: boolean("manual").notNull().default(false),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({ keyUx: uniqueIndex("email_triage_thread_key_ux").on(t.threadKey) }),

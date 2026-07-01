@@ -57,9 +57,17 @@ function isImageType(ct: string | null, name: string | null): boolean {
   return /\.(png|jpe?g|gif|webp|bmp|tiff?|heic)$/i.test(name ?? "");
 }
 
-// Normalize PA's capitalized attachment fields too.
+// Normalize PA's attachment byte field across the naming variants Power Automate
+// / Graph can emit (ContentBytes, contentBytes, contentBytesBase64, $content).
 function attBytesB64(a: FirehoseAttachment): string | null {
-  const raw = (a as Record<string, unknown>).contentBytesBase64 ?? (a as Record<string, unknown>).ContentBytes;
+  const o = a as Record<string, unknown>;
+  const raw =
+    o.contentBytesBase64 ??
+    o.ContentBytes ??
+    o.contentBytes ??
+    o.content_bytes ??
+    o.$content ??
+    o.contentbytes;
   return typeof raw === "string" && raw.trim() ? raw : null;
 }
 function attName(a: FirehoseAttachment): string | null {

@@ -7,9 +7,13 @@ import {
   PATHWAY_META,
   type TriageRow,
 } from "@/lib/firehose/triage";
+import { markRead } from "@/lib/firehose/actions";
 import { aiConfigured } from "@/lib/ai";
 import ThreadActions from "@/components/ThreadActions";
+import TriageBar from "@/components/TriageBar";
 import ReplyBox from "@/components/ReplyBox";
+
+const JORDAN = "jordan.francis@merit.com";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -27,10 +31,28 @@ export default async function ThreadPage({
   const acctId = messages.find((m) => m.accountId != null)?.accountId ?? null;
   const acct = acctId != null ? (await accountNames([acctId])).get(acctId) : undefined;
 
+  // Opening a thread marks it read in the inbox.
+  await markRead(messages.map((m) => m.id)).catch(() => {});
+
   const flagged = messages.some((m) => m.flagged);
   const archived = messages[messages.length - 1].status === "archived";
   // Reply targets the most recent inbound message (reply to the customer).
   const latestInbound = [...messages].reverse().find((m) => m.direction === "inbound");
+
+  // Reply-all recipient set: everyone on the thread except Jordan. Primary "to"
+  // is the last inbound sender; everyone else lands in Cc.
+  const self = new Set<string>([JORDAN]);
+  for (const m of messages) {
+    if (m.direction === "outbound" && m.fromEmail) self.add(m.fromEmail.toLowerCase());
+  }
+  const everyone = new Set<string>();
+  for (const m of messages) {
+    if (m.fromEmail) everyone.add(m.fromEmail.toLowerCase());
+    for (const r of m.recipients ?? []) if (r?.email) everyone.add(r.email.toLowerCase());
+  }
+  const primaryTo = latestInbound?.fromEmail?.toLowerCase() ?? null;
+  const ccList = [...everyone].filter((a) => !self.has(a) && a !== primaryTo);
+  const toList = primaryTo ? [primaryTo] : [];
 
   // Ensure this thread is triaged (one Haiku call when stale), then read it back.
   let triage: TriageRow | null = null;
@@ -96,6 +118,12 @@ export default async function ThreadPage({
         </div>
       ) : null}
 
+      <TriageBar
+        threadKey={decoded}
+        pathway={triage?.pathway ?? null}
+        reviewed={Boolean(triage?.reviewed)}
+      />
+
       <div className="grid gap-3">
         {messages.map((m) => (
           <MessageCard key={m.id} m={m} />
@@ -107,6 +135,8 @@ export default async function ThreadPage({
           replyToId={latestInbound.id}
           to={latestInbound.fromName?.trim() || latestInbound.fromEmail || "sender"}
           subject={subject}
+          toList={toList}
+          ccList={ccList}
         />
       ) : (
         <p className="mt-5 text-sm text-muted">
