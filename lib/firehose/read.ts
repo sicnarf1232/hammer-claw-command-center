@@ -20,6 +20,9 @@ export interface ThreadSummary {
   flagged: boolean;
   archived: boolean;
   replied: boolean;
+  preview: string | null; // newest message snippet
+  lastDirection: "inbound" | "outbound";
+  unread: boolean; // newest message is inbound and still status 'new'
 }
 
 export type InboxView = "attention" | "flagged" | "all";
@@ -86,6 +89,9 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
         flagged: false,
         archived: false,
         replied: false,
+        preview: null,
+        lastDirection: "inbound",
+        unread: false,
       };
       byKey.set(key, t);
     }
@@ -98,17 +104,20 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
     if (e.status === "replied") t.replied = true;
     if (e.accountId != null && t.accountId == null) t.accountId = e.accountId;
     if (e.direction !== "outbound") t._parties.add(partyLabel(e));
-    // Newest message in the group sets subject, time, and the thread's status.
+    // Newest message in the group sets subject, time, status, preview, direction.
     if (at && (!t.lastAt || at > t.lastAt)) {
       t.lastAt = at;
       t.subject = cleanSubject(e.subject) || t.subject;
       t._latestStatus = e.status ?? "new";
+      t.preview = (e.bodyPreview ?? e.bodyText ?? "")?.slice(0, 160) || null;
+      t.lastDirection = e.direction === "outbound" ? "outbound" : "inbound";
     }
   }
 
   let out = Array.from(byKey.values()).map((t) => {
     t.parties = Array.from(t._parties).slice(0, 4);
     t.archived = t._latestStatus === "archived";
+    t.unread = t._latestStatus === "new" && t.lastDirection === "inbound";
     return t as ThreadSummary;
   });
 

@@ -2,6 +2,19 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Mobile revamp + inbox facelift (2026-06-30)
+
+- Responsive nav: the fixed 236px sidebar is now desktop-only. On mobile there's
+  a sticky top bar (logo + hamburger) that opens a slide-in drawer with the full
+  nav (backdrop, body-scroll lock, closes on navigate). Layout switched from a
+  flex row to a fixed sidebar + `md:pl-[236px]` offset; tighter mobile padding.
+- Inbox facelift (`components/InboxList.tsx`): premium mail-client look — sender
+  avatars (initials + per-account hue), instant search, date grouping (Today /
+  Yesterday / Earlier this week / month / older), unread dots, flagged accent
+  bar, sent glyph, snippet preview, account/attachment/replied chips, segmented
+  tab pills with counts. Thread summaries now carry a preview + newest-message
+  direction + unread. Thread view header stacks on mobile.
+
 ## Milestone 4: unified inbox (Mailstream folded into Inbox) (2026-06-30)
 
 - Decision (Jordan): merge Mailstream + the flagged Inbox into ONE thread-first

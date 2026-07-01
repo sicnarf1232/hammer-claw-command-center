@@ -30,7 +30,7 @@ export default async function ThreadPage({
       <Link href="/inbox" className="text-xs text-muted hover:text-fg">
         ← Inbox
       </Link>
-      <header className="mb-5 mt-2 flex items-start justify-between gap-4">
+      <header className="mb-5 mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight text-fg">{subject}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-muted">

@@ -50,14 +50,12 @@ export default function RootLayout({
       </head>
       <body>
         <BrandColorsProvider>
-          <div className="flex">
-            <Nav />
-            <main className="min-w-0 flex-1">
-              <div className="mx-auto max-w-[1360px] animate-fade-in px-6 py-8 pb-24 sm:px-9">
-                {children}
-              </div>
-            </main>
-          </div>
+          <Nav />
+          <main className="min-w-0 md:pl-[236px]">
+            <div className="mx-auto max-w-[1360px] animate-fade-in px-4 py-6 pb-24 sm:px-9 sm:py-8">
+              {children}
+            </div>
+          </main>
         </BrandColorsProvider>
       </body>
     </html>
