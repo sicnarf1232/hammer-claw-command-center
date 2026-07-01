@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { and, inArray, ne, sql } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
 import { emails } from "@/lib/db/schema";
 import { SELF_ADDRESSES } from "@/lib/firehose/map";
@@ -18,7 +18,12 @@ export async function POST() {
   const res = await getDb()
     .update(emails)
     .set({ direction: "outbound" })
-    .where(sql`lower(${emails.fromEmail}) = any(${lowered}) and ${emails.direction} <> 'outbound'`)
+    .where(
+      and(
+        inArray(sql`lower(${emails.fromEmail})`, lowered),
+        ne(emails.direction, "outbound"),
+      ),
+    )
     .returning({ id: emails.id });
   return NextResponse.json({ ok: true, relabeled: res.length, ids: res.map((r) => r.id) });
 }
