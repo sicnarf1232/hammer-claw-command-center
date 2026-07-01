@@ -14,6 +14,7 @@ import {
   SparkIcon,
   LibraryIcon,
   BrandIcon,
+  SettingsIcon,
   type IconProps,
 } from "./icons";
 import ThemeToggle from "./ThemeToggle";
@@ -31,6 +32,7 @@ const ITEMS: { href: string; label: string; Icon: ComponentType<IconProps> }[] =
     { href: "/quote", label: "Quote", Icon: QuoteIcon },
     { href: "/branding", label: "Branding", Icon: BrandIcon },
     { href: "/notifications", label: "Activity", Icon: ActivityIcon },
+    { href: "/settings", label: "Settings", Icon: SettingsIcon },
   ];
 
 // Film Room logo mark: a rounded square in the accent color with a small

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { getEmailById, markReplied } from "@/lib/firehose/actions";
 import { draftReply, aiConfigured, AiNotConfiguredError } from "@/lib/ai";
+import { getVoiceProfile, voiceInstructions } from "@/lib/voice";
 import {
   postReplyIntent,
   replyFlowConfigured,
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
       );
     }
     try {
+      const voice = voiceInstructions(await getVoiceProfile());
       const draft = await draftReply({
         fromName: email.fromName,
         fromEmail: email.fromEmail,
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
         bodyText: email.bodyText ?? email.bodyPreview,
         workstream: workstream as Workstream,
         instructions: typeof body.instructions === "string" ? body.instructions : undefined,
+        voice,
       });
       return NextResponse.json({ ok: true, body: draft });
     } catch (err) {
@@ -86,15 +89,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const replyBody = String(body.bodyText ?? "").trim();
-  if (!replyBody) {
-    return NextResponse.json(
-      { error: "Reply body is empty." },
-      { status: 400 },
-    );
-  }
-
+  // The rich editor sends bodyHtml (already formatted, greeting + sign-off
+  // included by the voice-aware draft). Legacy/plain callers send bodyText, which
+  // we escape and wrap with the identity signature.
   const identity = identityFor(workstream as Workstream);
+  const rawHtml = typeof body.bodyHtml === "string" ? body.bodyHtml.trim() : "";
+  const rawText = String(body.bodyText ?? "").trim();
+  if (!rawHtml && !rawText) {
+    return NextResponse.json({ error: "Reply body is empty." }, { status: 400 });
+  }
+  const bodyHtml = rawHtml
+    ? sanitizeHtml(rawHtml)
+    : toHtml(rawText, identity.label, identity.email!);
+
   const subject = String(body.subject ?? "").trim() ||
     `RE: ${email.subject ?? "(no subject)"}`;
   // Reply-all: the client passes the full recipient set (to + cc). Fall back to
@@ -106,7 +113,6 @@ export async function POST(req: NextRequest) {
         ? [email.fromEmail]
         : [];
   const cc = Array.isArray(body.cc) ? body.cc.map((x: unknown) => String(x)) : [];
-  const bodyHtml = toHtml(replyBody, identity.label, identity.email!);
 
   try {
     const result = await postReplyIntent({
@@ -133,6 +139,19 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Reply failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+// Keep the editor's HTML to a safe, mail-friendly subset. Drop script/style and
+// event handlers; the draft is created in Jordan's own Outlook, but we still send
+// clean markup. The rich reply body already carries its own greeting/sign-off.
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[\s\S]*?<\/\s*\1\s*>/gi, "")
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[^>]*>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/javascript:/gi, "")
+    .trim();
 }
 
 // Convert a plain-text reply into simple HTML with a signature block.

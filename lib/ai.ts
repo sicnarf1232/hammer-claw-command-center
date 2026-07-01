@@ -6,6 +6,7 @@ import {
   type Workstream,
 } from "@/lib/vault/types";
 import type { RawQuoteInput } from "@/lib/quote/types";
+import type { VoiceProfile } from "@/lib/voice";
 
 // AI drafting for email replies (Phase 2) and briefs (Phase 4). Optional:
 // without ANTHROPIC_API_KEY the app skips AI and Jordan writes the body himself.
@@ -47,48 +48,79 @@ function noEmDash(s: string): string {
   return s.replace(/—/g, ", ");
 }
 
+export type DraftKind = "reply" | "new" | "forward";
+
 export interface DraftReplyInput {
+  kind?: DraftKind; // reply (default), new email, or forward
   fromName?: string | null;
   fromEmail?: string | null;
   subject?: string | null;
   bodyText?: string | null;
   workstream: Workstream;
-  instructions?: string; // optional steer from Jordan ("decline politely", etc.)
+  instructions?: string; // optional steer from Jordan ("push back on lead time", etc.)
+  voice?: string; // compiled voice instructions (lib/voice voiceInstructions)
+  account?: string | null; // customer account, for grounding
 }
 
-// Draft a reply body (plain text). The route appends the signature and wraps to
-// HTML; this returns only the message body Jordan will review and edit.
+// Draft an email body as rich, ready-to-send HTML in Jordan's voice. Returns the
+// full body including greeting and sign-off (the voice profile supplies those).
+// Jordan reviews and edits before sending. Allowed HTML is deliberately narrow so
+// it renders cleanly in any mail client.
 export async function draftReply(input: DraftReplyInput): Promise<string> {
   const identity = identityFor(input.workstream);
   const brand = identity.brand ?? identity.label;
+  const kind = input.kind ?? "reply";
+
+  const jobLine =
+    kind === "new"
+      ? "You draft a NEW outbound email for Jordan Francis."
+      : kind === "forward"
+        ? "You draft a FORWARD note for Jordan Francis: a short lead-in above the forwarded message."
+        : "You draft an email REPLY for Jordan Francis.";
 
   const system = [
-    "You draft email replies for Jordan Francis. Jordan reviews and sends every draft, so write a complete, ready-to-send reply body.",
-    `This reply is sent from Jordan's ${brand} identity.`,
-    "House style rules, follow exactly:",
+    jobLine,
+    "Jordan reviews and sends every draft, so write a complete, ready-to-send message.",
+    `This message is sent from Jordan's ${brand} identity.`,
+    "",
+    "Format as clean, simple email HTML. Allowed tags ONLY: <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <h3>, <h4>, <a href>. ",
+    "- Use <strong> for key terms, dates, and part numbers. Use <ul>/<li> when listing items, options, or steps. Use short <p> paragraphs. Use an <h3>/<h4> only when the message has clear sections worth a header.",
+    "- Do NOT output <html>, <head>, <body>, <style>, class/style attributes, markdown, or a code fence. Output the body HTML only.",
+    "",
+    "House style, follow exactly:",
     "- Never use em dashes. Use commas, colons, or periods.",
-    "- Plain, direct, professional. No filler, no marketing voice.",
+    "- Direct and professional. No filler, no marketing voice.",
     "- Do not invent facts, prices, dates, part numbers, or commitments. If something is unknown, leave a clear bracketed placeholder like [confirm date].",
-    "Output only the reply body. No subject line, no greeting metadata, no signature block, no preamble, and no commentary about the draft.",
-  ].join("\n");
+    input.voice?.trim() ? "\n" + input.voice.trim() : "",
+    input.voice?.trim() ? "" : "Open with a brief greeting and close with a short sign-off and Jordan's name.",
+    "",
+    "Output only the message body HTML. No subject line and no commentary about the draft.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const parts = [
-    `Incoming email from ${input.fromName ?? input.fromEmail ?? "the sender"}${
-      input.fromEmail ? ` <${input.fromEmail}>` : ""
-    }.`,
+    kind === "reply"
+      ? `Incoming email from ${input.fromName ?? input.fromEmail ?? "the sender"}${
+          input.fromEmail ? ` <${input.fromEmail}>` : ""
+        }.`
+      : kind === "forward"
+        ? `You are forwarding a message${input.fromName ? ` originally from ${input.fromName}` : ""}.`
+        : "You are writing a new email.",
+    input.account ? `Customer account: ${input.account}` : "",
     `Subject: ${input.subject ?? "(no subject)"}`,
     "",
-    "Message:",
-    input.bodyText?.trim() || "(no body text was captured)",
-  ];
+    kind === "new" ? "" : "Message:",
+    kind === "new" ? "" : input.bodyText?.trim() || "(no body text was captured)",
+  ].filter(Boolean);
   if (input.instructions?.trim()) {
-    parts.push("", `Jordan's instruction for this reply: ${input.instructions.trim()}`);
+    parts.push("", `Jordan's instruction for this draft: ${input.instructions.trim()}`);
   }
-  parts.push("", "Write the reply body now.");
+  parts.push("", "Write the message body HTML now.");
 
   const res = await client().messages.create({
     model: model(),
-    max_tokens: 1500,
+    max_tokens: 1800,
     system,
     messages: [{ role: "user", content: parts.join("\n") }],
   });
@@ -99,7 +131,74 @@ export async function draftReply(input: DraftReplyInput): Promise<string> {
     .join("")
     .trim();
 
-  return noEmDash(text);
+  return noEmDash(stripFence(text));
+}
+
+// Strip a leading/trailing ``` or ```html fence the model sometimes adds.
+function stripFence(s: string): string {
+  return s
+    .replace(/^\s*```(?:html)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+}
+
+// Propose a voice profile from Jordan's real sent emails, so settings can offer
+// a strong first draft of "how Jordan sounds" that he edits rather than filling
+// a blank form. Returns the same shape lib/voice stores.
+export async function proposeVoiceProfile(samples: string[]): Promise<VoiceProfile> {
+  const system = [
+    "You analyze a person's real sent emails and describe their writing voice so an assistant can draft in it.",
+    "You are given several emails Jordan Francis actually sent. Infer his voice from THESE samples only, do not invent.",
+    "Return ONLY a JSON object, no markdown, no commentary. Schema:",
+    "{",
+    '  "greeting": string,   // his typical opener, use {first} for the recipient first name, e.g. "Hi {first},"',
+    '  "signoff": string,    // his typical closing line + name, e.g. "Thanks,\\nJordan"',
+    '  "formality": "casual"|"balanced"|"formal",',
+    '  "length": "brief"|"balanced"|"thorough",',
+    '  "traits": string[],       // 3-6 short tone descriptors, e.g. ["warm","direct","solution-first"]',
+    '  "usePhrases": string[],   // up to 6 characteristic phrases he really uses',
+    '  "avoidPhrases": string[], // filler he clearly avoids (infer conservatively)',
+    '  "summary": string         // 2-3 sentences describing his voice, written to instruct a drafting assistant',
+    "}",
+    "House style: never use em dashes in any field.",
+  ].join("\n");
+
+  const corpus = samples
+    .map((s, i) => `--- Sent email ${i + 1} ---\n${s.slice(0, 1500)}`)
+    .join("\n\n")
+    .slice(0, 12000);
+
+  const res = await client().messages.create({
+    model: model(),
+    max_tokens: 900,
+    system,
+    messages: [{ role: "user", content: `${corpus}\n\nReturn the JSON profile now.` }],
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  const raw = parseJsonObject(text);
+  const strList = (v: unknown, max: number): string[] =>
+    Array.isArray(v)
+      ? v.map((x) => noEmDash(String(x).trim())).filter(Boolean).slice(0, max)
+      : [];
+  const oneOf = <T extends string>(v: unknown, opts: T[], dflt: T): T =>
+    opts.includes(v as T) ? (v as T) : dflt;
+
+  return {
+    greeting: noEmDash(String(raw.greeting ?? "").trim()),
+    signoff: noEmDash(String(raw.signoff ?? "").trim()),
+    formality: oneOf(raw.formality, ["casual", "balanced", "formal"], "balanced"),
+    length: oneOf(raw.length, ["brief", "balanced", "thorough"], "balanced"),
+    traits: strList(raw.traits, 6),
+    usePhrases: strList(raw.usePhrases, 6),
+    avoidPhrases: strList(raw.avoidPhrases, 8),
+    summary: noEmDash(String(raw.summary ?? "").trim()),
+  };
 }
 
 // ---- Meeting triage (Granola pull) ----
