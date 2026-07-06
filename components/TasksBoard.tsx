@@ -2,12 +2,21 @@
 
 import { useEffect, useState } from "react";
 import type { TaskView } from "@/lib/taskView";
+import type { TaskMeta } from "@/lib/taskMeta";
 import TasksGrouped from "./TasksGrouped";
 import TasksTable from "./TasksTable";
 
 // Tasks page shell: toggles between the grouped-by-account view (default) and
 // the sortable table view. Choice persists across visits.
-export default function TasksBoard({ tasks, today }: { tasks: TaskView[]; today: string }) {
+export default function TasksBoard({
+  tasks,
+  today,
+  meta = {},
+}: {
+  tasks: TaskView[];
+  today: string;
+  meta?: Record<string, TaskMeta>;
+}) {
   const [view, setView] = useState<"grouped" | "table">("grouped");
 
   useEffect(() => {
@@ -33,7 +42,11 @@ export default function TasksBoard({ tasks, today }: { tasks: TaskView[]; today:
         </ViewBtn>
       </div>
 
-      {view === "grouped" ? <TasksGrouped tasks={tasks} today={today} /> : <TasksTable tasks={tasks} today={today} />}
+      {view === "grouped" ? (
+        <TasksGrouped tasks={tasks} today={today} meta={meta} />
+      ) : (
+        <TasksTable tasks={tasks} today={today} />
+      )}
     </div>
   );
 }

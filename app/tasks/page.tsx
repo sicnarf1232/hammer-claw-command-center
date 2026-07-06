@@ -2,6 +2,7 @@ import { vaultConfigured, getAllTasks } from "@/lib/vault";
 import { listAccounts } from "@/lib/accounts";
 import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
 import { todayISO } from "@/lib/dates";
+import { getTaskMeta, type TaskMeta } from "@/lib/taskMeta";
 import TasksBoard from "@/components/TasksBoard";
 import SetupNotice from "@/components/SetupNotice";
 
@@ -19,6 +20,7 @@ export default async function TasksPage() {
 
   let views: TaskView[] = [];
   let error: string | null = null;
+  let meta: Record<string, TaskMeta> = {};
   const today = todayISO();
   try {
     const [tasks, accounts] = await Promise.all([getAllTasks(), listAccounts()]);
@@ -30,6 +32,9 @@ export default async function TasksPage() {
       // show its tasks. Merit is the default view (TasksTable workstream
       // filter); Sloan/Personal stay available behind that filter.
       .filter((t) => t.workstream !== "nextech");
+    // App-side augmentation (checklist, last customer update) for the cards.
+    const metaMap = await getTaskMeta(views.map((v) => v.id)).catch(() => new Map());
+    meta = Object.fromEntries(metaMap);
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to read the vault.";
   }
@@ -41,7 +46,7 @@ export default async function TasksPage() {
           Could not read the vault: {error}
         </div>
       ) : (
-        <TasksBoard tasks={views} today={today} />
+        <TasksBoard tasks={views} today={today} meta={meta} />
       )}
     </Page>
   );

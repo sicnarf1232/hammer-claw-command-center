@@ -145,6 +145,77 @@ export async function draftReply(input: DraftReplyInput): Promise<string> {
   return noEmDash(stripFence(text));
 }
 
+export interface CustomerUpdateInput {
+  taskTitle: string;
+  account: string;
+  contactName?: string | null;
+  due?: string | null; // ISO
+  today: string; // ISO
+  blockedInternally?: boolean;
+  voice?: string;
+}
+
+// Draft a short proactive status update to a customer about an open task. Tone
+// follows the days-until-due (and whether it's blocked on internal work); never
+// reveals internal specifics.
+export async function draftCustomerUpdate(input: CustomerUpdateInput): Promise<string> {
+  const daysLeft = input.due
+    ? Math.round((new Date(input.due + "T12:00:00").getTime() - new Date(input.today + "T12:00:00").getTime()) / 86400000)
+    : null;
+
+  let stance: string;
+  if (input.blockedInternally) {
+    stance =
+      "This is held up on internal coordination. Reassure them it is moving, say you are 'still coordinating a few internal steps,' and give a next check-in. NEVER reveal internal specifics, names, or blockers.";
+  } else if (daysLeft != null && daysLeft < 0) {
+    stance = `This is ${-daysLeft} day(s) past the date. Briefly acknowledge the slip without over-apologizing, and commit to an update within 1 to 2 business days.`;
+  } else if (daysLeft != null && daysLeft <= 3) {
+    stance = `This is due in ${daysLeft} day(s). Give a proactive heads-up that you are on it and targeting ${input.due}.`;
+  } else {
+    stance = "This is on track. Send a brief reassurance that everything is on schedule, no action needed from them.";
+  }
+
+  const system = [
+    "You draft a SHORT customer status update email for Jordan Francis, sent from his Merit OEM identity.",
+    "Jordan reviews and sends it, so make it complete and ready to send.",
+    "Format as clean email HTML. Allowed tags ONLY: <p>, <br>, <strong>. Keep it to 2 to 4 short sentences.",
+    "Do NOT output <html>/<head>/<body>/<style>, class/style attributes, markdown, or a code fence.",
+    "House style: never use em dashes; use commas, colons, or periods. Direct and warm, no marketing voice.",
+    "Do not invent facts, dates, prices, or commitments. Use a bracketed placeholder like [confirm date] if unsure.",
+    stance,
+    input.voice?.trim() ? "\n" + input.voice.trim() : "Open with a brief greeting and close with a short sign-off and Jordan's name.",
+    "Output only the message body HTML.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const user = [
+    `Customer account: ${input.account}`,
+    input.contactName ? `Contact: ${input.contactName}` : "",
+    `Task / topic: ${input.taskTitle}`,
+    input.due ? `Target date on file: ${input.due}` : "No firm date on file.",
+    "",
+    "Write the update body HTML now.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const res = await client().messages.create({
+    model: fastModel(),
+    max_tokens: 600,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  return noEmDash(stripFence(text));
+}
+
 // Strip a leading/trailing ``` or ```html fence the model sometimes adds.
 function stripFence(s: string): string {
   return s

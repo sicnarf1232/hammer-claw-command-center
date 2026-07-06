@@ -93,15 +93,25 @@ export default function BuildYourDay({ tasks, today }: { tasks: TaskView[]; toda
   const loaded = useRef(false);
 
   useEffect(() => {
+    // Seed from localStorage immediately (offline mirror), then reconcile with
+    // the server plan so the day survives across devices.
     setPlan(loadPlan(today));
     setRollover(loadRollover(today));
-    loaded.current = true;
     const now = new Date();
     setNowMin(now.getHours() * 60 + now.getMinutes());
     fetch("/api/calendar/today")
       .then((r) => r.json())
       .then((d) => setEvents(Array.isArray(d?.events) ? d.events : []))
       .catch(() => {});
+    fetch(`/api/day-plan?date=${today}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.plan && Object.keys(d.plan).length) setPlan(d.plan as Plan);
+      })
+      .catch(() => {})
+      .finally(() => {
+        loaded.current = true;
+      });
   }, [today]);
 
   useEffect(() => {
@@ -109,6 +119,11 @@ export default function BuildYourDay({ tasks, today }: { tasks: TaskView[]; toda
     try {
       localStorage.setItem(planKey(today), JSON.stringify(plan));
     } catch {}
+    fetch("/api/day-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: today, plan }),
+    }).catch(() => {});
   }, [plan, today]);
 
   const byId = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);

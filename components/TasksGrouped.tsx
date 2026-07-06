@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import type { TaskView } from "@/lib/taskView";
+import type { TaskMeta, ChecklistStep } from "@/lib/taskMeta";
 import { customerHue, initials } from "@/lib/customerHues";
 import { SearchIcon, ChevronDownIcon } from "./icons";
 
@@ -38,7 +38,15 @@ interface Group {
   overdue: number;
 }
 
-export default function TasksGrouped({ tasks, today }: { tasks: TaskView[]; today: string }) {
+export default function TasksGrouped({
+  tasks,
+  today,
+  meta = {},
+}: {
+  tasks: TaskView[];
+  today: string;
+  meta?: Record<string, TaskMeta>;
+}) {
   const [rows, setRows] = useState(tasks);
   const [q, setQ] = useState("");
   const [ws, setWs] = useState("merit");
@@ -143,7 +151,14 @@ export default function TasksGrouped({ tasks, today }: { tasks: TaskView[]; toda
                 {open ? (
                   <div className="space-y-1.5 px-2.5 pb-2.5">
                     {g.tasks.map((t) => (
-                      <TaskCard key={t.id} t={t} today={today} onComplete={() => complete(t)} showAccount={!g.slug} />
+                      <TaskCard
+                        key={t.id}
+                        t={t}
+                        today={today}
+                        meta={meta[t.id]}
+                        onComplete={() => complete(t)}
+                        showAccount={!g.slug}
+                      />
                     ))}
                   </div>
                 ) : null}
@@ -156,27 +171,110 @@ export default function TasksGrouped({ tasks, today }: { tasks: TaskView[]; toda
   );
 }
 
+function daysUntilNum(due: string | undefined, today: string): number | null {
+  return daysUntil(due, today);
+}
+
+function isSameDay(iso: string | null, today: string): boolean {
+  return !!iso && iso.slice(0, 10) === today;
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "Never";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Denver" });
+}
+
 function TaskCard({
   t,
   today,
+  meta,
   onComplete,
   showAccount,
 }: {
   t: TaskView;
   today: string;
+  meta?: TaskMeta;
   onComplete: () => void;
   showAccount: boolean;
 }) {
   const u = urgency(t.due, today);
-  const quoteParams = new URLSearchParams();
-  if (t.customer && t.customer !== "internal") quoteParams.set("customer", t.customer);
+  const hasAccount = !!t.customer && t.customer !== "internal";
+  const d = daysUntilNum(t.due, today);
+  const eligible = hasAccount && d != null && d <= 5; // account + within 5 days/overdue
+
+  const [open, setOpen] = useState(false);
+  const [checklist, setChecklist] = useState<ChecklistStep[]>(meta?.checklist ?? []);
+  const [lastUpdate, setLastUpdate] = useState<string | null>(meta?.lastCustomerUpdateISO ?? null);
+  const [newStep, setNewStep] = useState("");
+  const [draft, setDraft] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const updatedToday = isSameDay(lastUpdate, today);
+  const blockedInternally =
+    (t.taskStatus ?? "").toLowerCase() === "blocked" || checklist.some((s) => s.blocking && !s.done);
+  const doneSteps = checklist.filter((s) => s.done).length;
+
+  async function persistChecklist(next: ChecklistStep[]) {
+    setChecklist(next);
+    await fetch("/api/tasks/meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: t.id, checklist: next }),
+    }).catch(() => {});
+  }
+  function addStep() {
+    const text = newStep.trim();
+    if (!text) return;
+    persistChecklist([...checklist, { id: `s${Date.now()}`, text, done: false }]);
+    setNewStep("");
+  }
+  function toggleStep(id: string) {
+    persistChecklist(checklist.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
+  }
+  function toggleBlocking(id: string) {
+    persistChecklist(checklist.map((s) => (s.id === id ? { ...s, blocking: !s.blocking } : s)));
+  }
+
+  async function draftUpdate() {
+    setDrafting(true);
+    setCopied(false);
+    try {
+      const res = await fetch("/api/tasks/update-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskTitle: cleanTitle(t.title), account: t.customer, due: t.due ?? null, blockedInternally }),
+      });
+      const data = await res.json();
+      setDraft(res.ok ? htmlToText(data.body ?? "") : `Draft failed: ${data.error ?? "unknown error"}`);
+    } catch {
+      setDraft("Draft failed: network error.");
+    } finally {
+      setDrafting(false);
+    }
+  }
+  async function markSent() {
+    await fetch("/api/tasks/meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: t.id, markCustomerUpdated: true }),
+    }).catch(() => {});
+    setLastUpdate(new Date().toISOString());
+  }
+  async function copyDraft() {
+    if (!draft) return;
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true);
+    } catch {}
+  }
 
   return (
     <div
-      className="rounded-xl border border-border bg-surface px-3 py-2"
+      className="rounded-xl border border-border bg-surface"
       style={u.color ? { borderLeft: `3px solid ${u.color}` } : undefined}
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2.5 px-3 py-2">
         <button
           type="button"
           onClick={onComplete}
@@ -186,27 +284,160 @@ function TaskCard({
         >
           ✓
         </button>
-        <div className="min-w-0 flex-1">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="min-w-0 flex-1 text-left">
           <div className="flex items-start justify-between gap-2">
             <span className="text-sm font-medium text-fg">{cleanTitle(t.title)}</span>
-            {u.label ? (
-              <span className="shrink-0 text-2xs font-semibold" style={{ color: u.color ?? "var(--muted)" }}>
-                {u.label}
+            <div className="flex shrink-0 items-center gap-2">
+              {u.label ? (
+                <span className="text-2xs font-semibold" style={{ color: u.color ?? "var(--muted)" }}>
+                  {u.label}
+                </span>
+              ) : null}
+              <span className="text-muted transition-transform" style={{ transform: open ? "rotate(90deg)" : "none" }}>
+                ›
               </span>
-            ) : null}
+            </div>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-2xs text-muted">
-            {showAccount && t.customer && t.customer !== "internal" ? (
-              <span className="font-medium text-fg/70">{t.customer}</span>
-            ) : null}
+            {showAccount && hasAccount ? <span className="font-medium text-fg/70">{t.customer}</span> : null}
             {t.type ? <span>{t.type}</span> : null}
-            {t.taskStatus ? <span className="capitalize">{t.taskStatus}</span> : null}
+            {checklist.length ? <span>{doneSteps}/{checklist.length} steps</span> : null}
+            {blockedInternally ? <span className="font-semibold text-warm">blocked internally</span> : null}
           </div>
-          {t.description ? <p className="mt-1 line-clamp-2 text-xs text-muted">{t.description}</p> : null}
-        </div>
+        </button>
+        {eligible ? (
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(true);
+              if (!draft) draftUpdate();
+            }}
+            className="shrink-0 rounded-lg px-2 py-1 text-2xs font-semibold text-white"
+            style={{ background: updatedToday ? "var(--line-2)" : u.color ?? "var(--accent)" }}
+            title={updatedToday ? "Already updated today" : "Draft a customer update"}
+          >
+            {updatedToday ? "Updated" : "Send update"}
+          </button>
+        ) : null}
       </div>
+
+      {open ? (
+        <div className="grid gap-3 border-t border-border px-3 py-3 md:grid-cols-2">
+          {/* Internal progress */}
+          <div>
+            <div className="eyebrow mb-1.5 text-[10px] text-muted">Internal progress</div>
+            {checklist.length ? (
+              <div className="mb-2 h-1 w-full overflow-hidden rounded-full bg-surface2">
+                <div className="h-full rounded-full bg-accent" style={{ width: `${(doneSteps / checklist.length) * 100}%` }} />
+              </div>
+            ) : null}
+            <div className="space-y-1">
+              {checklist.map((s) => (
+                <div key={s.id} className="flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => toggleStep(s.id)}
+                    className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] ${
+                      s.done ? "border-accent bg-accent text-white" : "border-line2 text-transparent"
+                    }`}
+                  >
+                    ✓
+                  </button>
+                  <span className={`flex-1 ${s.done ? "text-muted line-through" : "text-fg/85"}`}>{s.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleBlocking(s.id)}
+                    className={`shrink-0 text-[9px] font-semibold uppercase ${s.blocking ? "text-warm" : "text-muted/50 hover:text-muted"}`}
+                    title="Toggle blocking"
+                  >
+                    block
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-1.5 flex gap-1.5">
+              <input
+                value={newStep}
+                onChange={(e) => setNewStep(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addStep()}
+                placeholder="Add step…"
+                className="input flex-1 px-2 py-1 text-xs"
+              />
+              <button type="button" onClick={addStep} className="rounded-lg border border-border px-2 py-1 text-xs text-fg/70 hover:text-fg">
+                Add
+              </button>
+            </div>
+          </div>
+
+          {/* Customer update */}
+          <div className="rounded-lg bg-surface2 p-2.5">
+            <div className="flex items-center justify-between">
+              <div className="eyebrow text-[10px] text-muted">Customer update</div>
+              <span className="text-2xs text-muted">Last: {fmtDate(lastUpdate)}</span>
+            </div>
+            {!hasAccount ? (
+              <p className="mt-2 text-2xs text-muted">Link this task to an account to draft an update.</p>
+            ) : (
+              <>
+                {draft == null ? (
+                  <button
+                    type="button"
+                    onClick={draftUpdate}
+                    disabled={drafting}
+                    className="btn-outline mt-2 w-full text-xs"
+                  >
+                    {drafting ? "Drafting…" : blockedInternally ? "Draft \"still working on it\"" : "Draft update"}
+                  </button>
+                ) : (
+                  <>
+                    <textarea
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      className="input mt-2 min-h-[6rem] w-full resize-y text-xs leading-relaxed"
+                    />
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <button type="button" onClick={copyDraft} className="btn-outline flex-1 text-xs">
+                        {copied ? "Copied ✓" : "Copy"}
+                      </button>
+                      <button type="button" onClick={markSent} className="btn-primary flex-1 text-xs">
+                        Mark sent
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDraft(null)}
+                        aria-label="Discard draft"
+                        className="rounded-lg border border-border px-2 py-1 text-xs text-muted hover:text-fg"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {t.description ? (
+            <p className="whitespace-pre-wrap text-xs text-muted md:col-span-2">{t.description}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+// Flatten the AI's small HTML update into plain text for the editable textarea.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<\/(p|div|h[1-6])>/gi, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function groupByAccount(tasks: TaskView[], today: string): Group[] {
