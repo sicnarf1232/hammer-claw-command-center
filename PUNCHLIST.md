@@ -319,3 +319,15 @@ vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
 - [ ] Logo storage: pushed to Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set,
       else stored inline as a data URL in `brand_kits.logo_url` (works, heavier
       row). Provision a Blob store to switch to hosted URLs.
+
+## Build Your Day — calendar feed (Phase 2/4)
+- [ ] The planner reads `GET /api/calendar/today`, which returns today's events
+      cached under settings key `calendar:<YYYY-MM-DD>`. The app never calls
+      Microsoft Graph directly (CLAUDE.md rule), so a Power Automate flow must POST
+      the day's events. Build "HC Calendar Push": trigger = recurrence (or Outlook
+      "When an event is starting"), action = Graph GET /me/calendarView for today's
+      range -> Select into `[{id,title,startISO,endISO,location}]` -> POST to
+      `/api/webhooks/calendar` (endpoint TODO in Phase 4). Until then the timeline
+      shows tasks only (events empty).
+- [ ] Day-plan persistence is localStorage per day (`day-plan:<date>`). Phase 4
+      swaps this for `/api/day-plan` (server-side) so it survives across devices.

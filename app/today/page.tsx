@@ -3,7 +3,7 @@ import { getTodayTasks } from "@/lib/today";
 import { listAccounts } from "@/lib/accounts";
 import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
 import type { Task } from "@/lib/vault/types";
-import TaskList from "@/components/TaskList";
+import TodayTabs from "@/components/TodayTabs";
 import SetupNotice from "@/components/SetupNotice";
 
 // Always read fresh from the vault; never statically cache the task list.
@@ -48,15 +48,8 @@ export default async function TodayPage() {
         <div className="card max-w-2xl border-danger/30 p-5 text-sm text-danger">
           Could not read the vault: {error}
         </div>
-      ) : views.length === 0 ? (
-        <div className="card max-w-2xl p-8 text-center">
-          <div className="text-sm font-medium text-fg">
-            Nothing due today or overdue
-          </div>
-          <p className="mt-1 text-sm text-muted">You are clear for now.</p>
-        </div>
       ) : (
-        <TaskList tasks={views} today={today} defaultGroup="due" />
+        <TodayTabs tasks={views} today={today} />
       )}
     </Page>
   );
@@ -74,7 +67,7 @@ function Page({
       <header className="mb-6">
         <h1 className="display-title text-2xl text-fg">Today</h1>
         <p className="mt-1 text-sm text-muted">
-          Open tasks due today or overdue
+          Your focus queue and day planner
           {today ? (
             <>
               {" "}
