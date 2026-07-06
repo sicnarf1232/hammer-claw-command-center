@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { customerHue, initials } from "@/lib/customerHues";
 
@@ -208,10 +208,71 @@ function FolderLink({ f, active, dot }: { f: Folder; active: boolean; dot?: bool
 }
 
 function Row({ t, first }: { t: InboxThread; first: boolean }) {
+  const router = useRouter();
   const hue = customerHue(t.accountName || t.who);
   const outbound = t.lastDirection === "outbound";
   const path = t.pathway ? PATHWAY[t.pathway] : null;
   const high = t.priority === "high";
+  const unmapped = !t.accountName && t.needsReview;
+  // Second state dot: amber "needs action" — AI-flagged for a reply and not yet
+  // reviewed. Clears only when Jordan marks the thread reviewed.
+  const needsAction = (t.needsReply || t.needsReview) && !t.reviewed;
+
+  const [flagged, setFlagged] = useState(t.flagged);
+  const [archived, setArchived] = useState(false);
+  const [pathway, setPathway] = useState(t.pathway);
+  const [menu, setMenu] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function threadAction(action: "flag" | "unflag" | "archive") {
+    setBusy(true);
+    try {
+      await fetch("/api/inbox/thread-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: t.key, action }),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onFlag(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = !flagged;
+    setFlagged(next);
+    await threadAction(next ? "flag" : "unflag");
+  }
+
+  async function onArchive(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setArchived(true);
+    await threadAction("archive");
+    router.refresh();
+  }
+
+  async function onPathway(e: React.MouseEvent, key: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setPathway(key);
+    setMenu(false);
+    setBusy(true);
+    try {
+      await fetch("/api/inbox/triage-set", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: t.key, pathway: key }),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (archived) return null;
+  const curPath = pathway ? PATHWAY[pathway] : null;
+
   return (
     <Link
       href={`/inbox/${encodeURIComponent(t.key)}`}
@@ -219,22 +280,39 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
         first ? "" : "border-t border-border"
       }`}
     >
-      {t.flagged || high ? (
+      {flagged || high ? (
         <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: "var(--due)" }} />
       ) : null}
 
-      <div
-        className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-        style={{ background: hue.hue }}
-      >
-        {initials(t.who)}
-      </div>
+      {unmapped ? (
+        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-line2 text-sm font-bold text-muted">
+          ?
+        </div>
+      ) : (
+        <div
+          className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          style={{ background: hue.hue }}
+        >
+          {initials(t.who)}
+        </div>
+      )}
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             {t.unread ? (
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--accent)" }} />
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ background: "var(--accent)" }}
+                title="Unread"
+              />
+            ) : null}
+            {needsAction ? (
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ background: "var(--warm)" }}
+                title="Needs action"
+              />
             ) : null}
             <span className={`truncate text-sm ${t.unread ? "font-bold text-fg" : "font-semibold text-fg/90"}`}>
               {t.who}
@@ -245,7 +323,22 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
               </span>
             ) : null}
           </div>
-          <span className="shrink-0 text-2xs tabular-nums text-muted">{rel(t.lastAtISO)}</span>
+          {/* Hover reveal: timestamp swaps for the quick-action bar. */}
+          <span className="shrink-0 text-2xs tabular-nums text-muted group-hover:opacity-0">{rel(t.lastAtISO)}</span>
+          <ActionBar
+            flagged={flagged}
+            busy={busy}
+            menu={menu}
+            curPath={curPath}
+            onToggleMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setMenu((m) => !m);
+            }}
+            onPathway={onPathway}
+            onFlag={onFlag}
+            onArchive={onArchive}
+          />
         </div>
 
         <div className="mt-0.5 flex items-center gap-1.5">
@@ -270,15 +363,14 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
               High
             </span>
           ) : null}
-          {path ? (
+          {curPath ? (
             <span
               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
-              style={{ background: withAlpha(path.color), color: path.color }}
+              style={{ background: withAlpha(curPath.color), color: curPath.color }}
             >
-              {path.label}
+              {curPath.label}
             </span>
           ) : null}
-          {t.reviewed ? <span className="chip border-ok/40 text-ok">✓ Reviewed</span> : null}
           {t.accountName ? (
             <span
               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
@@ -286,9 +378,12 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
             >
               {t.accountName}
             </span>
-          ) : t.needsReview ? (
-            <span className="chip border-warning/40 text-warning">Needs review</span>
+          ) : unmapped ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line2 px-2 py-0.5 text-2xs font-semibold text-muted">
+              <LinkGlyph /> Link account
+            </span>
           ) : null}
+          {t.reviewed ? <span className="chip border-ok/40 text-ok">✓ Reviewed</span> : null}
           {t.replied ? <span className="chip border-ok/40 text-ok">Replied</span> : null}
           {t.hasAttachments ? (
             <span className="chip border-border text-fg/55">
@@ -298,6 +393,92 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+// Quick actions revealed on row hover: pathway assign (popover), flag, archive.
+function ActionBar({
+  flagged,
+  busy,
+  menu,
+  curPath,
+  onToggleMenu,
+  onPathway,
+  onFlag,
+  onArchive,
+}: {
+  flagged: boolean;
+  busy: boolean;
+  menu: boolean;
+  curPath: { label: string; color: string } | null;
+  onToggleMenu: (e: React.MouseEvent) => void;
+  onPathway: (e: React.MouseEvent, key: string) => void;
+  onFlag: (e: React.MouseEvent) => void;
+  onArchive: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute right-3 top-2.5 z-10 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 sm:right-4"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="relative">
+        <IconBtn label="Assign pathway" onClick={onToggleMenu} active={menu} disabled={busy}>
+          <TagGlyph />
+        </IconBtn>
+        {menu ? (
+          <div className="absolute right-0 top-8 w-40 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-elevated">
+            {Object.entries(PATHWAY).map(([key, p]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={(e) => onPathway(e, key)}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-surface2 ${
+                  curPath?.label === p.label ? "font-semibold text-fg" : "text-fg/75"
+                }`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: p.color }} />
+                {p.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <IconBtn label={flagged ? "Unflag" : "Flag"} onClick={onFlag} active={flagged} disabled={busy}>
+        <FlagGlyph filled={flagged} />
+      </IconBtn>
+      <IconBtn label="Archive" onClick={onArchive} disabled={busy}>
+        <ArchiveGlyph />
+      </IconBtn>
+    </div>
+  );
+}
+
+function IconBtn({
+  children,
+  label,
+  onClick,
+  active,
+  disabled,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onClick: (e: React.MouseEvent) => void;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-surface text-muted transition-colors hover:text-fg disabled:opacity-40 ${
+        active ? "text-accent" : ""
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -392,6 +573,38 @@ function SparkGlyph({ className }: { className?: string }) {
   return (
     <svg className={className ?? "h-4 w-4"} viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 2l1.9 5.6a2 2 0 0 0 1.3 1.3L21 11l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 11l5.8-1.9a2 2 0 0 0 1.3-1.3z" />
+    </svg>
+  );
+}
+function TagGlyph() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2H2v10l9.29 9.29a2 2 0 0 0 2.83 0l7.17-7.17a2 2 0 0 0 0-2.83z" />
+      <path d="M7 7h.01" />
+    </svg>
+  );
+}
+function FlagGlyph({ filled }: { filled?: boolean }) {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <path d="M4 22v-7" />
+    </svg>
+  );
+}
+function ArchiveGlyph() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" />
+    </svg>
+  );
+}
+function LinkGlyph() {
+  return (
+    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />
+      <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
     </svg>
   );
 }
