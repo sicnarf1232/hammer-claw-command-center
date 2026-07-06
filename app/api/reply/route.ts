@@ -12,6 +12,7 @@ import {
 } from "@/lib/powerAutomate";
 import { identityFor, canDraftAs } from "@/lib/workstreams";
 import { isWorkstream, type Workstream } from "@/lib/vault/types";
+import { gatherAttachments, type AttachmentRef } from "@/lib/mailOut";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -124,6 +125,11 @@ export async function POST(req: NextRequest) {
         : [];
   const cc = Array.isArray(body.cc) ? body.cc.map((x: unknown) => String(x)) : [];
 
+  // Attach-to-reply: resolve any library docs / stored attachments / uploads the
+  // user chose into base64 payloads for Flow B.
+  const attachmentRefs: AttachmentRef[] = Array.isArray(body.attachments) ? body.attachments : [];
+  const attachments = attachmentRefs.length ? await gatherAttachments(attachmentRefs).catch(() => []) : [];
+
   try {
     const result = await postMailIntent({
       action: "reply",
@@ -133,6 +139,7 @@ export async function POST(req: NextRequest) {
       subject,
       bodyHtml,
       fromIdentity: workstream as Workstream,
+      attachments: attachments.length ? attachments : undefined,
     });
     if (!result.ok) {
       return NextResponse.json(

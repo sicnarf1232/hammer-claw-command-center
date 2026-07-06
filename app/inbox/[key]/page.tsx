@@ -10,6 +10,7 @@ import {
 import { markRead } from "@/lib/firehose/actions";
 import { suggestTasksForThread } from "@/lib/firehose/suggest";
 import { suggestDocsForThread } from "@/lib/firehose/docSuggest";
+import { crossCustomerPlaybook } from "@/lib/firehose/playbook";
 import { suggestAccountForEmail, listDbAccounts } from "@/lib/firehose/senderSuggest";
 import { isInternal } from "@/lib/firehose/map";
 import { docTypeLabel } from "@/lib/documents";
@@ -60,6 +61,19 @@ export default async function ThreadPage({
   const ccList = [...everyone].filter((a) => !self.has(a) && a !== primaryTo);
   const toList = primaryTo ? [primaryTo] : [];
 
+  // Participant map: everyone on the thread (minus Jordan), split into external
+  // (customer) and internal (Merit) with display names.
+  const nameByEmail = new Map<string, string>();
+  for (const m of messages) {
+    if (m.fromEmail) nameByEmail.set(m.fromEmail.toLowerCase(), m.fromName?.trim() || m.fromEmail);
+    for (const r of m.recipients ?? []) if (r?.email) nameByEmail.set(r.email.toLowerCase(), r.name?.trim() || r.email);
+  }
+  const participants = [...everyone]
+    .filter((a) => a !== JORDAN)
+    .map((a) => ({ email: a, name: nameByEmail.get(a) ?? a, internal: isInternal(a) }));
+  const externalParticipants = participants.filter((p) => !p.internal);
+  const internalParticipants = participants.filter((p) => p.internal);
+
   // Ensure this thread is triaged (one Haiku call when stale), then read it back.
   let triage: TriageRow | null = null;
   if (aiConfigured()) {
@@ -99,6 +113,12 @@ export default async function ThreadPage({
     latestInbound && triage?.pathway !== "noise" && triage?.pathway !== "fyi"
       ? await suggestDocsForThread(acct?.name ?? null, suggestText, 3).catch(() => [])
       : [];
+
+  // Cross-customer playbook: prior work on the same kind of thing for other
+  // accounts. Only for quality/PCN and quote pathways.
+  const playbook = await crossCustomerPlaybook(triage?.pathway ?? null, acct?.name ?? null, suggestText).catch(
+    () => null,
+  );
 
   // Sender suggestion: only for an EXTERNAL, unmapped inbound sender. Internal
   // (@merit.com / meritoem.com) is never a customer, so no card. Offer both the
@@ -156,6 +176,41 @@ export default async function ThreadPage({
           />
         </div>
       </header>
+
+      {participants.length ? (
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-border bg-surface px-3 py-2.5">
+          {externalParticipants.length ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="eyebrow text-[9px] text-muted">External</span>
+              {externalParticipants.map((p) => (
+                <span
+                  key={p.email}
+                  className="rounded-full px-2 py-0.5 text-2xs font-semibold"
+                  style={{ background: "var(--due-soft)", color: "var(--due-ink)" }}
+                  title={p.email}
+                >
+                  {p.name}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {internalParticipants.length ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="eyebrow text-[9px] text-muted">Internal</span>
+              {internalParticipants.map((p) => (
+                <span
+                  key={p.email}
+                  className="rounded-full px-2 py-0.5 text-2xs font-semibold"
+                  style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+                  title={p.email}
+                >
+                  {p.name}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {senderSuggestion ? (
         <SenderSuggest
@@ -273,6 +328,42 @@ export default async function ThreadPage({
         </div>
       ) : null}
 
+      {playbook && playbook.items.length ? (
+        <details className="mb-4 rounded-2xl border" style={{ borderColor: "var(--warm)", background: "var(--warm-soft)" }}>
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold" style={{ color: "var(--warm)" }}>
+            <PlaybookGlyph />
+            Cross-customer playbook
+            <span className="rounded-full bg-surface px-2 py-0.5 text-2xs font-bold" style={{ color: "var(--warm)" }}>
+              {playbook.items.length}
+            </span>
+            <span className="ml-auto text-2xs font-normal text-muted">
+              How we handled this for other accounts
+            </span>
+          </summary>
+          <div className="px-4 pb-3">
+            <ul className="space-y-1.5">
+              {playbook.items.map((it) => (
+                <li key={it.id}>
+                  <a
+                    href={`/api/documents/file?id=${it.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-sm transition-colors hover:bg-surface2"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-medium text-fg">📎 {it.title}</span>
+                    <span className="shrink-0 text-2xs text-muted">{docTypeLabel(it.docType)}</span>
+                    {it.account ? <span className="shrink-0 text-2xs font-semibold text-warm">{it.account}</span> : null}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-2xs text-muted">
+              Precedent from your document library. Reuse the approach, not the customer specifics.
+            </p>
+          </div>
+        </details>
+      ) : null}
+
       <TriageBar
         threadKey={decoded}
         pathway={triage?.pathway ?? null}
@@ -292,6 +383,7 @@ export default async function ThreadPage({
           subject={subject}
           toList={toList}
           ccList={ccList}
+          suggestedDocs={docSuggestions.map((d) => ({ id: d.id, title: d.title, docType: d.docType }))}
         />
       ) : (
         <p className="mt-5 text-sm text-muted">
@@ -416,6 +508,15 @@ function SparkGlyph() {
   return (
     <svg className="h-3.5 w-3.5 text-accent" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M12 2l1.9 5.6a2 2 0 0 0 1.3 1.3L21 11l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 11l5.8-1.9a2 2 0 0 0 1.3-1.3z" />
+    </svg>
+  );
+}
+
+function PlaybookGlyph() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
     </svg>
   );
 }

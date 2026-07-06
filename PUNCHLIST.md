@@ -331,3 +331,11 @@ vault conventions (rolling docs under `/Rolling/` with `type: Rolling Series`;
       shows tasks only (events empty).
 - [ ] Day-plan persistence is localStorage per day (`day-plan:<date>`). Phase 4
       swaps this for `/api/day-plan` (server-side) so it survives across devices.
+
+## Action composer (#12) — deferred to Phase 4
+- [ ] Thread "Add action from this thread" (Create task / Link to existing) is
+      blocked on the task model. Vault tasks (source of truth) have no create
+      writeback, and the `task_emails` link table references cutover DB task ids,
+      which don't correspond to vault task ids (sourceFile:sourceLine). Phase 4
+      adds the task schema (linked_thread_key, checklist) + a vault task-append
+      writeback; build the composer against that.

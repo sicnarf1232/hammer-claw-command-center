@@ -7,28 +7,67 @@ import { useRouter } from "next/navigation";
 // editor: "Draft with AI" fills it with formatted HTML in Jordan's voice, and the
 // prompt-in box lets him steer the draft for complex replies. Reply-all defaults
 // on when others were copied.
+type Attachment =
+  | { key: string; label: string; ref: { kind: "document"; id: number } }
+  | { key: string; label: string; ref: { kind: "upload"; name: string; contentType?: string; base64: string } };
+
+export interface SuggestedDoc {
+  id: number;
+  title: string;
+  docType: string;
+}
+
 export default function ReplyBox({
   replyToId,
   to,
   subject,
   toList,
   ccList,
+  suggestedDocs = [],
 }: {
   replyToId: number;
   to: string;
   subject: string;
   toList: string[];
   ccList: string[];
+  suggestedDocs?: SuggestedDoc[];
 }) {
   const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<"" | "draft" | "send">("");
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [steer, setSteer] = useState("");
   const [empty, setEmpty] = useState(true);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const hasOthers = ccList.length > 0 || toList.length > 1;
   const [replyAll, setReplyAll] = useState(hasOthers);
+
+  function addDoc(d: SuggestedDoc) {
+    const key = `doc:${d.id}`;
+    setAttachments((prev) => (prev.some((a) => a.key === key) ? prev : [...prev, { key, label: d.title, ref: { kind: "document", id: d.id } }]));
+  }
+  function removeAttachment(key: string) {
+    setAttachments((prev) => prev.filter((a) => a.key !== key));
+  }
+  async function onPickFiles(files: FileList | null) {
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      const base64 = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+        r.readAsDataURL(file);
+      });
+      const key = `up:${file.name}:${file.size}`;
+      setAttachments((prev) =>
+        prev.some((a) => a.key === key)
+          ? prev
+          : [...prev, { key, label: file.name, ref: { kind: "upload", name: file.name, contentType: file.type || undefined, base64 } }],
+      );
+    }
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   const primaryTo = toList[0] ?? to;
   const recipients = replyAll
@@ -95,6 +134,7 @@ export default function ReplyBox({
           subject: `RE: ${subject}`,
           to: recipients.to,
           cc: recipients.cc,
+          attachments: attachments.map((a) => a.ref),
         }),
       });
       const data = await res.json();
@@ -104,6 +144,7 @@ export default function ReplyBox({
         // refresh so the just-sent message appears in the thread.
         if (editorRef.current) editorRef.current.innerHTML = "";
         setEmpty(true);
+        setAttachments([]);
         setNote("Sent. Reply again below if you need to follow up.");
         router.refresh();
       }
@@ -180,6 +221,40 @@ export default function ReplyBox({
         data-placeholder="Write your reply, or draft one with AI and edit it."
         className="reply-editor input min-h-[9rem] w-full resize-y overflow-auto text-sm leading-relaxed"
       />
+
+      {/* Attach-to-reply: chips for chosen files + one-tap suggested docs + upload. */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {attachments.map((a) => (
+          <span key={a.key} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface2 px-2 py-0.5 text-2xs text-fg/80">
+            📎 <span className="max-w-[160px] truncate">{a.label}</span>
+            <button type="button" onClick={() => removeAttachment(a.key)} aria-label="Remove attachment" className="text-muted hover:text-danger">
+              ×
+            </button>
+          </span>
+        ))}
+        <button type="button" onClick={() => fileRef.current?.click()} className="rounded-full border border-dashed border-line2 px-2 py-0.5 text-2xs text-muted hover:text-fg">
+          + Attach file
+        </button>
+        <input ref={fileRef} type="file" multiple hidden onChange={(e) => onPickFiles(e.target.files)} />
+      </div>
+
+      {suggestedDocs.length ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-2xs text-muted">Suggested:</span>
+          {suggestedDocs
+            .filter((d) => !attachments.some((a) => a.key === `doc:${d.id}`))
+            .map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => addDoc(d)}
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-2xs text-fg/70 hover:border-accent hover:text-accent"
+              >
+                + <span className="max-w-[160px] truncate">{d.title}</span>
+              </button>
+            ))}
+        </div>
+      ) : null}
 
       {note ? <div className="mt-2 text-xs text-ok">{note}</div> : null}
       {error ? <div className="mt-2 text-xs text-danger">{error}</div> : null}
