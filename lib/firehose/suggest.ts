@@ -8,6 +8,7 @@ import type { Task, Account } from "@/lib/vault/types";
 // auto-link; it suggests. A real learning/link layer can come later.
 
 export interface TaskSuggestion {
+  id: string; // vault task id (sourceFile:sourceLine) for linking
   title: string;
   customer: string | null;
   due: string | null;
@@ -63,6 +64,7 @@ export async function suggestTasksForThread(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map(({ t, score }) => ({
+      id: t.id,
       title: t.title.replace(/\[[A-Za-z][\w-]*::[^\]]*\]/g, "").trim(),
       customer: t.customer ?? null,
       due: t.due ?? null,
