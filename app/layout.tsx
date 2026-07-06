@@ -32,6 +32,9 @@ try {
     document.documentElement.classList.add('dark');
   }
 } catch (e) { document.documentElement.classList.add('dark'); }
+try {
+  document.documentElement.style.setProperty('--nav-w', localStorage.getItem('nav-collapsed') === '1' ? '64px' : '236px');
+} catch (e) {}
 `;
 
 export default function RootLayout({
@@ -51,7 +54,7 @@ export default function RootLayout({
       <body>
         <BrandColorsProvider>
           <Nav />
-          <main className="min-w-0 md:pl-[236px]">
+          <main className="min-w-0 transition-[padding] duration-200 md:pl-[var(--nav-w,236px)]">
             <div className="mx-auto max-w-[1360px] animate-fade-in px-4 py-6 pb-24 sm:px-9 sm:py-8">
               {children}
             </div>

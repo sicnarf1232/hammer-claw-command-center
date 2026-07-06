@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ComponentType } from "react";
 import {
+  DashboardIcon,
   TodayIcon,
   TasksIcon,
   InboxIcon,
@@ -15,101 +16,151 @@ import {
   LibraryIcon,
   BrandIcon,
   SettingsIcon,
+  ChevronLeftIcon,
   type IconProps,
 } from "./icons";
 import ThemeToggle from "./ThemeToggle";
 
-const ITEMS: { href: string; label: string; Icon: ComponentType<IconProps> }[] =
-  [
-    { href: "/today", label: "Today", Icon: TodayIcon },
-    { href: "/ask", label: "Ask", Icon: SparkIcon },
-    { href: "/tasks", label: "Tasks", Icon: TasksIcon },
-    { href: "/inbox", label: "Inbox", Icon: InboxIcon },
-    { href: "/accounts", label: "Accounts", Icon: AccountsIcon },
-    { href: "/contacts", label: "Contacts", Icon: AccountsIcon },
-    { href: "/meetings", label: "Meetings", Icon: MeetingsIcon },
-    { href: "/library", label: "Library", Icon: LibraryIcon },
-    { href: "/quote", label: "Quote", Icon: QuoteIcon },
-    { href: "/branding", label: "Branding", Icon: BrandIcon },
-    { href: "/notifications", label: "Activity", Icon: ActivityIcon },
-    { href: "/settings", label: "Settings", Icon: SettingsIcon },
-  ];
+type Item = {
+  href: string;
+  label: string;
+  Icon: ComponentType<IconProps>;
+  dot?: "accent" | "danger";
+};
 
-// Film Room logo mark: a rounded square in the accent color with a small
-// skewed film-strip glyph.
-function LogoMark() {
+// Two-tier nav (Main St. handoff §2.2). Primary destinations, a TOOLS group, and
+// a bottom utility group.
+const PRIMARY: Item[] = [
+  { href: "/dashboard", label: "Dashboard", Icon: DashboardIcon },
+  { href: "/inbox", label: "Inbox", Icon: InboxIcon, dot: "accent" },
+  { href: "/accounts", label: "Accounts", Icon: AccountsIcon },
+  { href: "/meetings", label: "Meetings", Icon: MeetingsIcon },
+];
+const SECONDARY: Item[] = [
+  { href: "/today", label: "Today", Icon: TodayIcon },
+  { href: "/ask", label: "Ask", Icon: SparkIcon },
+  { href: "/tasks", label: "Tasks", Icon: TasksIcon },
+  { href: "/contacts", label: "Contacts", Icon: AccountsIcon },
+  { href: "/quote", label: "Quote", Icon: QuoteIcon },
+  { href: "/library", label: "Library", Icon: LibraryIcon },
+];
+const BOTTOM: Item[] = [
+  { href: "/branding", label: "Branding", Icon: BrandIcon },
+  { href: "/notifications", label: "Activity", Icon: ActivityIcon, dot: "danger" },
+  { href: "/settings", label: "Settings", Icon: SettingsIcon },
+];
+
+// Mobile bottom tab bar (§2.3).
+const MOBILE_TABS: Item[] = [
+  { href: "/dashboard", label: "Home", Icon: DashboardIcon },
+  { href: "/inbox", label: "Inbox", Icon: InboxIcon },
+  { href: "/accounts", label: "Accounts", Icon: AccountsIcon },
+  { href: "/today", label: "Today", Icon: TodayIcon },
+];
+
+function isActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+function setNavWidth(collapsed: boolean) {
+  document.documentElement.style.setProperty("--nav-w", collapsed ? "64px" : "236px");
+}
+
+// Main St. wordmark: swaps by theme via CSS (ivory logo on dark, navy on light).
+function Wordmark({ collapsed }: { collapsed: boolean }) {
+  if (collapsed) {
+    return (
+      <>
+        <img src="/logos/mainst-mark-light.png" alt="Main St." className="hidden h-7 w-7 object-contain dark:block" />
+        <img src="/logos/mainst-mark-dark.png" alt="Main St." className="block h-7 w-7 object-contain dark:hidden" />
+      </>
+    );
+  }
+  return (
+    <>
+      <img src="/logos/mainst-logo-light.png" alt="Main St." className="hidden h-6 w-auto object-contain dark:block" />
+      <img src="/logos/mainst-logo-dark.png" alt="Main St." className="block h-6 w-auto object-contain dark:hidden" />
+    </>
+  );
+}
+
+function Dot({ kind }: { kind: "accent" | "danger" }) {
   return (
     <span
-      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px]"
-      style={{ background: "var(--accent)", boxShadow: "0 4px 12px rgb(81 69 230 / 0.32)" }}
-      aria-hidden
-    >
-      <span className="flex items-end gap-[3px]">
-        <span className="block w-1 rounded-[2px]" style={{ height: 15, background: "var(--accent-ink)", transform: "skewX(-12deg)" }} />
-        <span className="block w-1 rounded-[2px]" style={{ height: 10, background: "var(--accent-ink)", opacity: 0.7, transform: "skewX(-12deg)" }} />
-      </span>
-    </span>
+      className="h-1.5 w-1.5 shrink-0 rounded-full"
+      style={{
+        background: kind === "danger" ? "var(--due)" : "var(--accent)",
+        boxShadow: `0 0 8px ${kind === "danger" ? "var(--due)" : "var(--accent)"}`,
+      }}
+    />
   );
 }
 
-function Wordmark() {
+function NavItem({
+  item,
+  active,
+  collapsed,
+  onNavigate,
+}: {
+  item: Item;
+  active: boolean;
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
   return (
-    <span className="leading-none">
-      <span className="block font-display text-[18px] font-extrabold uppercase tracking-tight text-fg">
-        Film Room
-      </span>
-      <span
-        className="mt-1 block font-display text-[8px] font-extrabold uppercase text-muted"
-        style={{ letterSpacing: "0.22em" }}
-      >
-        Meeting Intelligence
-      </span>
-    </span>
-  );
-}
-
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
-  const pathname = usePathname();
-  return (
-    <nav className="flex flex-col gap-0.5">
-      {ITEMS.map(({ href, label, Icon }) => {
-        const active = pathname === href || pathname.startsWith(href + "/");
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onNavigate}
-            aria-current={active ? "page" : undefined}
-            className="flex items-center gap-3 rounded-[11px] px-3 py-2.5 text-sm font-semibold transition-colors"
-            style={
-              active
-                ? {
-                    background: "var(--accent-soft)",
-                    color: "var(--accent)",
-                    boxShadow: "inset 3px 0 0 var(--accent)",
-                  }
-                : { color: "var(--ink-2)" }
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      title={collapsed ? item.label : undefined}
+      className={`group relative flex items-center rounded-[11px] text-sm font-semibold transition-colors ${
+        collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"
+      }`}
+      style={
+        active
+          ? {
+              background: "var(--accent-soft)",
+              color: "var(--accent)",
+              boxShadow: "inset 2.5px 0 0 var(--accent)",
             }
-          >
-            <Icon className="h-[18px] w-[18px] shrink-0" />
-            <span>{label}</span>
-          </Link>
-        );
-      })}
-    </nav>
+          : { color: "var(--ink-2)" }
+      }
+    >
+      <span className="relative flex items-center">
+        <item.Icon className="h-[18px] w-[18px] shrink-0" />
+        {collapsed && item.dot ? (
+          <span className="absolute -right-1 -top-1">
+            <Dot kind={item.dot} />
+          </span>
+        ) : null}
+      </span>
+      {!collapsed ? (
+        <>
+          <span className="flex-1">{item.label}</span>
+          {item.dot ? <Dot kind={item.dot} /> : null}
+        </>
+      ) : null}
+    </Link>
   );
 }
 
 export default function Nav() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); // mobile "More" drawer
+  const [collapsed, setCollapsed] = useState(false);
 
-  // Close the drawer on navigation.
+  // Restore collapse preference.
+  useEffect(() => {
+    const c = localStorage.getItem("nav-collapsed") === "1";
+    setCollapsed(c);
+    setNavWidth(c);
+  }, []);
+
+  // Close the drawer on navigation; auto-collapse the desktop rail on navigate.
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
-  // Lock body scroll while the drawer is open.
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
@@ -117,53 +168,113 @@ export default function Nav() {
     };
   }, [open]);
 
+  function toggleCollapse() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("nav-collapsed", next ? "1" : "0");
+      setNavWidth(next);
+      return next;
+    });
+  }
+
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[236px] flex-col border-r border-border bg-surface px-3.5 py-[18px] md:flex">
-        <Link href="/meetings" className="flex items-center gap-3 px-2.5 pb-5 pt-1.5">
-          <LogoMark />
-          <Wordmark />
-        </Link>
-        <NavLinks />
-        <div className="mt-auto">
-          <ThemeToggle />
+      <aside
+        className="fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-border bg-nav py-[18px] transition-[width] duration-200 md:flex"
+        style={{ width: "var(--nav-w, 236px)" }}
+      >
+        <div className={`flex items-center pb-5 pt-1 ${collapsed ? "justify-center px-2" : "justify-between px-3.5"}`}>
+          <Link href="/dashboard" className="flex items-center">
+            <Wordmark collapsed={collapsed} />
+          </Link>
+          {!collapsed ? (
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              aria-label="Collapse sidebar"
+              className="flex h-7 w-7 items-center justify-center rounded-[8px] text-muted hover:bg-surface2 hover:text-fg"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
+
+        {collapsed ? (
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            aria-label="Expand sidebar"
+            className="mx-2 mb-2 flex h-7 items-center justify-center rounded-[8px] text-muted hover:bg-surface2 hover:text-fg"
+          >
+            <ChevronLeftIcon className="h-4 w-4 rotate-180" />
+          </button>
+        ) : null}
+
+        <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5">
+          {PRIMARY.map((it) => (
+            <NavItem key={it.href} item={it} active={isActive(pathname, it.href)} collapsed={collapsed} />
+          ))}
+
+          <div className={`my-2 ${collapsed ? "mx-1" : "mx-1"}`}>
+            <div className="border-t border-border" />
+            {!collapsed ? (
+              <div className="eyebrow mt-2.5 px-1.5 text-[9.5px] text-muted">Tools</div>
+            ) : null}
+          </div>
+
+          {SECONDARY.map((it) => (
+            <NavItem key={it.href} item={it} active={isActive(pathname, it.href)} collapsed={collapsed} />
+          ))}
+        </div>
+
+        <div className="mt-2 flex flex-col gap-0.5 border-t border-border px-2.5 pt-2.5">
+          {BOTTOM.map((it) => (
+            <NavItem key={it.href} item={it} active={isActive(pathname, it.href)} collapsed={collapsed} />
+          ))}
+          <ThemeToggle collapsed={collapsed} />
         </div>
       </aside>
 
-      {/* Mobile top bar */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface/85 px-4 backdrop-blur-md md:hidden">
-        <Link href="/meetings" className="flex items-center gap-2.5">
-          <LogoMark />
-          <span className="font-display text-[15px] font-extrabold uppercase tracking-tight text-fg">
-            Film Room
-          </span>
-        </Link>
+      {/* Mobile bottom tab bar */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex h-16 items-stretch border-t border-border bg-nav/95 backdrop-blur-md md:hidden">
+        {MOBILE_TABS.map((it) => {
+          const active = isActive(pathname, it.href);
+          return (
+            <Link
+              key={it.href}
+              href={it.href}
+              className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-semibold"
+              style={{ color: active ? "var(--accent)" : "var(--ink-3)" }}
+            >
+              <it.Icon className="h-[20px] w-[20px]" />
+              {it.label}
+            </Link>
+          );
+        })}
         <button
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Open menu"
-          className="flex h-10 w-10 items-center justify-center rounded-[11px] border border-border bg-surface text-fg active:scale-95"
+          className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-semibold"
+          style={{ color: "var(--ink-3)" }}
         >
           <MenuIcon />
+          More
         </button>
-      </header>
+      </nav>
 
-      {/* Mobile drawer */}
+      {/* Mobile "More" drawer */}
       {open ? (
         <div className="fixed inset-0 z-50 md:hidden">
           <button
             type="button"
             aria-label="Close menu"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
+            className="absolute inset-0 animate-fade-in bg-black/50 backdrop-blur-sm"
           />
-          <div className="absolute inset-y-0 left-0 flex w-[82%] max-w-[300px] flex-col border-r border-border bg-surface px-3.5 py-4 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between px-1">
-              <div className="flex items-center gap-3">
-                <LogoMark />
-                <Wordmark />
-              </div>
+          <div className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-[22px] border-t border-border bg-nav px-3.5 pb-8 pt-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <Wordmark collapsed={false} />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -173,11 +284,19 @@ export default function Nav() {
                 <CloseIcon />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <NavLinks onNavigate={() => setOpen(false)} />
-            </div>
-            <div className="mt-3 border-t border-border pt-3">
-              <ThemeToggle />
+            <div className="grid grid-cols-1 gap-0.5">
+              {[...PRIMARY, ...SECONDARY, ...BOTTOM].map((it) => (
+                <NavItem
+                  key={it.href}
+                  item={it}
+                  active={isActive(pathname, it.href)}
+                  collapsed={false}
+                  onNavigate={() => setOpen(false)}
+                />
+              ))}
+              <div className="mt-1 border-t border-border pt-1">
+                <ThemeToggle collapsed={false} />
+              </div>
             </div>
           </div>
         </div>
@@ -189,7 +308,7 @@ export default function Nav() {
 function MenuIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-      <path d="M3 6h18M3 12h18M3 18h18" />
+      <path d="M4 6h16M4 12h16M4 18h16" />
     </svg>
   );
 }
