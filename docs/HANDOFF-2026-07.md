@@ -273,6 +273,28 @@ editable). Everything customer-facing (replies, updates) is human-in-the-loop.
 
 ---
 
+## Session close-out (2026-07-06)
+
+- **Tag:** `v1.0-redesign` → commit `5386da6` (restore point before cutover work).
+- **Tests:** `npm test` → **191 passed / 26 files**. **Build:** `next build`
+  → **clean** (warnings only, unchanged from the session baseline).
+- **Live deploy:** production deployment on Vercel is from `5386da6` (created
+  3s after the commit; latest Ready prod deploy). Auto-deploy on push confirmed.
+- **Local-only audit (step 4): nothing lives only on this machine.**
+  - `.env.local` contains only keys that came from `vercel env pull` — the Neon
+    Postgres bundle (`DATABASE_URL`, `PG*`, `POSTGRES_*`, `NEON_*`,
+    `VITE_NEON_AUTH_URL`) and Vercel/Turbo system vars (`VERCEL_*`, `TURBO_*`,
+    `NX_DAEMON`). All reproducible via `vercel env pull`; none are hand-authored
+    secrets missing from `.env.example`. `.env.example` documents a few keys not
+    present locally (`ANTHROPIC_MODEL`, `BLOB_READ_WRITE_TOKEN`, `CRON_SECRET`,
+    `NOTIFY_WEBHOOK_URL`, `TOHC_FOLDER`, `VAULT_ROOT`) — expected; local dev does
+    not need them and Blob/secrets live in Vercel.
+  - **No manual Neon SQL was run this session.** All new schema this session is
+    self-provisioning (`task_meta` via `ensureSchema()`; day-plan/calendar via
+    `app_settings`). The two *unverified* manual `ALTER TABLE`s (`documents.spec`,
+    `brand_kits.paper`) predate this session and remain in PUNCHLIST.
+  - No local one-off scripts outside the repo; scratchpad holds nothing needed.
+
 ## Quick file index (new/changed this session)
 Pages: `app/dashboard/page.tsx`, `app/today/page.tsx`, `app/tasks/page.tsx`,
 `app/contacts/page.tsx`, `app/inbox/[key]/page.tsx`, `app/page.tsx`,
