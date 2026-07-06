@@ -16,8 +16,10 @@ const config: Config = {
     extend: {
       colors: {
         page: t("--c-page"),
+        nav: t("--c-nav"),
         surface: t("--c-surface"),
         surface2: t("--c-surface-2"),
+        hi: t("--c-hi"),
         fg: t("--c-fg"),
         muted: t("--c-muted"),
         border: t("--c-border"),
@@ -49,21 +51,23 @@ const config: Config = {
       borderColor: { DEFAULT: t("--c-border") },
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: [
-          "var(--font-display)",
-          "var(--font-sans)",
-          "ui-sans-serif",
-          "sans-serif",
-        ],
+        display: ["var(--font-display)", "ui-sans-serif", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
       fontSize: {
         // Tightened, consistent scale
         "2xs": ["0.6875rem", { lineHeight: "1rem" }], // 11px
       },
+      borderRadius: {
+        sm: "6px",
+        md: "9px",
+        lg: "12px",
+        xl: "16px",
+      },
       boxShadow: {
-        card: "0 2px 14px rgb(81 69 230 / 0.05)",
-        elevated: "0 10px 24px rgb(81 69 230 / 0.12)",
+        card: "0 2px 14px rgb(54 179 166 / 0.05)",
+        elevated: "0 10px 24px rgb(54 179 166 / 0.12)",
+        seaglass: "0 8px 20px rgb(54 179 166 / 0.28)",
       },
       keyframes: {
         "fade-in": {

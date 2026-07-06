@@ -20,18 +20,18 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Film Room — Meeting Intelligence",
-  description: "Meeting intelligence over the Hammer Claw vault.",
+  title: "Main St.",
+  description: "Your command center over the vault.",
 };
 
-// Set the theme class before paint to avoid a flash of the wrong theme.
+// Dark is the default (Main St.). Only an explicit "light" preference opts out,
+// applied before paint to avoid a flash of the wrong theme.
 const themeScript = `
 try {
-  var t = localStorage.getItem('theme');
-  if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+  if (localStorage.getItem('theme') !== 'light') {
     document.documentElement.classList.add('dark');
   }
-} catch (e) {}
+} catch (e) { document.documentElement.classList.add('dark'); }
 `;
 
 export default function RootLayout({
