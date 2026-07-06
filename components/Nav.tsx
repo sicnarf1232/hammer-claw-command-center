@@ -66,21 +66,30 @@ function setNavWidth(collapsed: boolean) {
   document.documentElement.style.setProperty("--nav-w", collapsed ? "64px" : "236px");
 }
 
-// Main St. wordmark: swaps by theme via CSS (ivory logo on dark, navy on light).
-function Wordmark({ collapsed }: { collapsed: boolean }) {
-  if (collapsed) {
-    return (
-      <>
-        <img src="/logos/mainst-mark-light.png" alt="Main St." className="hidden h-7 w-7 object-contain dark:block" />
-        <img src="/logos/mainst-mark-dark.png" alt="Main St." className="block h-7 w-7 object-contain dark:hidden" />
-      </>
-    );
-  }
+// Main St. brand: the transparent icon mark (theme-swapped — ivory mark on dark,
+// navy mark on light) paired with a text wordmark in the display face. The
+// packaged PNGs are square lockups with a baked background, so they only work as
+// the standalone mark; the "Main St." wordmark is set in type for crispness.
+function MarkImg({ className }: { className?: string }) {
   return (
     <>
-      <img src="/logos/mainst-logo-light.png" alt="Main St." className="hidden h-6 w-auto object-contain dark:block" />
-      <img src="/logos/mainst-logo-dark.png" alt="Main St." className="block h-6 w-auto object-contain dark:hidden" />
+      <img src="/logos/mainst-mark-light.png" alt="" aria-hidden className={`hidden object-contain dark:block ${className ?? ""}`} />
+      <img src="/logos/mainst-mark-dark.png" alt="" aria-hidden className={`block object-contain dark:hidden ${className ?? ""}`} />
     </>
+  );
+}
+
+function Wordmark({ collapsed }: { collapsed: boolean }) {
+  if (collapsed) {
+    return <MarkImg className="h-8 w-8" />;
+  }
+  return (
+    <span className="flex items-center gap-2">
+      <MarkImg className="h-8 w-8" />
+      <span className="font-display text-[19px] font-bold leading-none tracking-tight text-fg">
+        Main St<span className="text-accent">.</span>
+      </span>
+    </span>
   );
 }
 
