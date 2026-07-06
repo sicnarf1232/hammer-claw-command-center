@@ -2,7 +2,7 @@ import { vaultConfigured, getAllTasks } from "@/lib/vault";
 import { listAccounts } from "@/lib/accounts";
 import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
 import { todayISO } from "@/lib/dates";
-import TasksTable from "@/components/TasksTable";
+import TasksBoard from "@/components/TasksBoard";
 import SetupNotice from "@/components/SetupNotice";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export default async function TasksPage() {
           Could not read the vault: {error}
         </div>
       ) : (
-        <TasksTable tasks={views} today={today} />
+        <TasksBoard tasks={views} today={today} />
       )}
     </Page>
   );
