@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 // Milestone 2 #5: the brain chat. Asks /api/ask, which grounds the answer in the
 // live vault. Light conversational memory (recent turns sent back).
@@ -24,6 +25,19 @@ export default function AskBrain() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const params = useSearchParams();
+  const seeded = useRef(false);
+
+  // A ?q= param (e.g. from the dashboard Ask bar) auto-asks once on load.
+  useEffect(() => {
+    if (seeded.current) return;
+    const q = params.get("q");
+    if (q && q.trim()) {
+      seeded.current = true;
+      ask(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   async function ask(question: string) {
     const q = question.trim();
