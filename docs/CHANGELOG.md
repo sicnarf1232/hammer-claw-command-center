@@ -2,6 +2,38 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Main St. redesign — full 4-phase visual + feature rebuild (2026-07-06)
+
+Executed `DESIGN_HANDOFF.md` straight through. See `docs/HANDOFF-2026-07.md` for
+the exhaustive state, punchlist reconcile, data-layer status, and AI map.
+
+- **Phase 1 — foundation:** Sea Glass palette + Söhne display face + dark default
+  (`globals.css`, `tailwind.config.ts`, `layout.tsx`). Two-tier collapsible nav
+  with mobile bottom bar (`Nav.tsx`). Inbox list reskin: 2-dot state, hover
+  quick-actions (`/api/inbox/thread-action`), unmapped-sender treatment.
+- **Phase 2 — pages:** New `/dashboard` (now the default route; root redirects
+  here) with commits / inbox snapshot / accounts / rail + floating Ask bar.
+  Today gains a "Build Your Day" planner tab (timeline, greedy plan-my-day,
+  rollover). Tasks default to grouped-by-account with urgency + nudge bar +
+  view toggle. Contacts rebuilt as relationship health (last-touch + reply
+  badges derived from the firehose).
+- **Phase 3 — inbox thread panels:** participant map, cross-customer playbook
+  (`lib/firehose/playbook.ts`), attach-to-reply (`ReplyBox` + `/api/reply`),
+  action composer "link to existing task".
+- **Phase 4 — data layer:** `/api/day-plan` (server plan persistence),
+  `/api/webhooks/calendar` + `/api/calendar/today` (calendar feed, flow-fed),
+  `task_meta` table augmenting vault tasks (checklist / linked thread /
+  last-customer-update), expandable task cards with urgency-toned AI "Send
+  update" drafts (`draftCustomerUpdate`, Sonnet 5).
+- **Nav logo fix:** the packaged `mainst-logo-*.png` are opaque 1254² square
+  lockups; render the transparent mark + a type wordmark instead.
+
+Decisions (full list in HANDOFF §6): default route → `/dashboard`; dark is
+default; `task_meta` = DB-only app-state keyed by the vault task id (markdown
+stays truth — the DB-CUTOVER "DB becomes truth" flip was NOT applied, cutover is
+still Stage 1 / seed-only). Deferred (PUNCHLIST): HC Calendar Push flow, vault
+task-create writeback, notification push channel.
+
 ## Inbox: folders, inline-attachment fix, smart panels (2026-07-01)
 
 - Inline attachments: signature logos / embedded images no longer count as
