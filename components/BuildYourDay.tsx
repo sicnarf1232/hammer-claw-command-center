@@ -43,14 +43,34 @@ function loadPlan(today: string): Plan {
   }
 }
 
-// Yesterday's not-done blocks roll into today (intention moves; task stays open).
-function loadRollover(today: string): Set<string> {
+function yesterdayOf(today: string): string {
+  const d = new Date(today + "T12:00:00");
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function notDoneIds(prev: Plan): Set<string> {
+  return new Set(Object.entries(prev).filter(([, b]) => !b.done).map(([id]) => id));
+}
+
+// Yesterday's not-done blocks roll into today (intention moves; task stays
+// open). The SERVER day plan is the source (it survives new devices and
+// cleared storage); localStorage is only the fetch-failure fallback.
+async function loadRollover(today: string): Promise<Set<string>> {
+  const y = yesterdayOf(today);
   try {
-    const d = new Date(today + "T12:00:00");
-    d.setDate(d.getDate() - 1);
-    const y = d.toISOString().slice(0, 10);
-    const prev = JSON.parse(localStorage.getItem(planKey(y)) || "{}") as Plan;
-    return new Set(Object.entries(prev).filter(([, b]) => !b.done).map(([id]) => id));
+    const res = await fetch(`/api/day-plan?date=${y}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.plan && typeof data.plan === "object") {
+        return notDoneIds(data.plan as Plan);
+      }
+    }
+  } catch {
+    // fall through to the local mirror
+  }
+  try {
+    return notDoneIds(JSON.parse(localStorage.getItem(planKey(y)) || "{}") as Plan);
   } catch {
     return new Set();
   }
@@ -96,7 +116,7 @@ export default function BuildYourDay({ tasks, today }: { tasks: TaskView[]; toda
     // Seed from localStorage immediately (offline mirror), then reconcile with
     // the server plan so the day survives across devices.
     setPlan(loadPlan(today));
-    setRollover(loadRollover(today));
+    loadRollover(today).then(setRollover).catch(() => {});
     const now = new Date();
     setNowMin(now.getHours() * 60 + now.getMinutes());
     fetch("/api/calendar/today")
