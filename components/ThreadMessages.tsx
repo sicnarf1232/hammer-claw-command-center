@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReplyBox, { type SuggestedDoc } from "@/components/ReplyBox";
-import ThreadChat from "@/components/ThreadChat";
+import InboxBrain, { INSERT_REPLY_EVENT } from "@/components/InboxBrain";
 
 // The thread conversation (2026-07-07 overhaul, v2 after Jordan's review):
 // newest first; people render as NAME chips with the address + contact card on
@@ -65,6 +65,24 @@ export default function ThreadMessages({
       .join("");
     setPreset((prev) => ({ html, nonce: (prev?.nonce ?? 0) + 1 }));
   }
+
+  // The layout's brain panel can push a draft even when no reply is open:
+  // anchor the latest inbound message and prefill the composer.
+  useEffect(() => {
+    const onInsert = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (typeof text !== "string" || !text) return;
+      setAnchorId((cur) => {
+        if (cur != null) return cur;
+        const latestInbound = messages.find((m) => m.direction === "inbound");
+        return latestInbound?.id ?? messages[0]?.id ?? null;
+      });
+      useAsReply(text);
+    };
+    window.addEventListener(INSERT_REPLY_EVENT, onInsert);
+    return () => window.removeEventListener(INSERT_REPLY_EVENT, onInsert);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   // FOCUS MODE: a full-screen workspace over the content area. Left: the
   // thread collapsed to a rail. Center: the composer with the anchored message
@@ -141,7 +159,7 @@ export default function ThreadMessages({
             </div>
 
             <aside className="hidden w-80 shrink-0 lg:block">
-              <ThreadChat threadKey={threadKey} onUseAsReply={useAsReply} />
+              <InboxBrain onUseAsReply={useAsReply} />
             </aside>
           </div>
         </div>

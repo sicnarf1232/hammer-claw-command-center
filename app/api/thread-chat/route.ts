@@ -10,9 +10,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-// Conversational brain over one email thread (inbox focus mode). Display-only:
-// nothing is stored or sent; Jordan inserts a draft into the composer himself.
-// body: { threadKey, history: [{role:"user"|"assistant", content}] }
+const MAX_CONTEXT_THREADS = 4;
+
+// The inbox brain: a persistent chat over one OR MORE email threads. The
+// client sends the running history, the thread keys added as context, and the
+// currently-open thread; the model sees them all, labeled. Display-only:
+// nothing is stored or sent; Jordan inserts drafts into the composer himself.
+// body: { history: [{role, content}], contextKeys?: string[], activeThreadKey?: string }
 export async function POST(req: NextRequest) {
   if (!dbConfigured()) {
     return NextResponse.json({ error: "Database not configured." }, { status: 503 });
@@ -24,7 +28,6 @@ export async function POST(req: NextRequest) {
     );
   }
   const body = await req.json().catch(() => null);
-  const threadKey = String(body?.threadKey ?? "");
   const history = Array.isArray(body?.history)
     ? body.history
         .filter(
@@ -38,39 +41,81 @@ export async function POST(req: NextRequest) {
           content: m.content,
         }))
     : [];
-  if (!threadKey || !history.length || history[history.length - 1].role !== "user") {
+  const activeKey =
+    typeof body?.activeThreadKey === "string" && body.activeThreadKey
+      ? body.activeThreadKey
+      : null;
+  const contextKeys: string[] = Array.isArray(body?.contextKeys)
+    ? body.contextKeys.filter((k: unknown): k is string => typeof k === "string" && !!k)
+    : [];
+  if (!history.length || history[history.length - 1].role !== "user") {
     return NextResponse.json(
-      { error: "threadKey and a history ending with a user message are required." },
+      { error: "A history ending with a user message is required." },
+      { status: 400 },
+    );
+  }
+
+  // Active thread first, then added context, capped.
+  const keys = Array.from(new Set([activeKey, ...contextKeys].filter((k): k is string => !!k)))
+    .slice(0, MAX_CONTEXT_THREADS);
+  if (!keys.length) {
+    return NextResponse.json(
+      { error: "Open a thread (or add one to context) so the brain has something to read." },
       { status: 400 },
     );
   }
 
   try {
-    const { subject, messages } = await getThread(threadKey);
-    if (!messages.length) {
-      return NextResponse.json({ error: "Thread not found." }, { status: 404 });
-    }
-    const seen = new Map<string, string>();
-    for (const m of messages) {
-      if (m.fromEmail) seen.set(m.fromEmail.toLowerCase(), m.fromName?.trim() || m.fromEmail);
-      for (const r of m.recipients ?? []) {
-        if (r?.email) seen.set(r.email.toLowerCase(), r.name?.trim() || r.email);
+    const participants = new Map<string, string>();
+    const sections: string[] = [];
+    let firstSubject = "";
+    for (const key of keys) {
+      const { subject, messages } = await getThread(key).catch(() => ({
+        subject: "",
+        messages: [],
+      }));
+      if (!messages.length) continue;
+      if (!firstSubject) firstSubject = subject;
+      for (const m of messages) {
+        if (m.fromEmail) {
+          participants.set(
+            m.fromEmail.toLowerCase(),
+            m.fromName?.trim() || m.fromEmail,
+          );
+        }
+        for (const r of m.recipients ?? []) {
+          if (r?.email) participants.set(r.email.toLowerCase(), r.name?.trim() || r.email);
+        }
       }
+      const text = [...messages]
+        .reverse()
+        .map((m) => {
+          const at = (m.sentAt ?? m.receivedAt)?.toISOString().slice(0, 16) ?? "";
+          const who = m.fromName?.trim() || m.fromEmail || "unknown";
+          return `[${m.direction === "outbound" ? "JORDAN" : who} ${at}]\n${formatEmailBody(m).main}`;
+        })
+        .join("\n\n---\n\n")
+        .slice(0, 9000);
+      const label =
+        key === activeKey ? "CURRENTLY OPEN THREAD" : "CONTEXT THREAD";
+      sections.push(`=== ${label}: "${subject}" ===\n${text}`);
     }
-    const participants = [...seen]
+    if (!sections.length) {
+      return NextResponse.json({ error: "No readable threads." }, { status: 404 });
+    }
+
+    const participantLines = [...participants]
       .map(([email, name]) => `${name} <${email}> [${isInternal(email) ? "Merit" : "External"}]`)
       .join("\n");
-    const threadText = [...messages]
-      .reverse()
-      .map((m) => {
-        const at = (m.sentAt ?? m.receivedAt)?.toISOString().slice(0, 16) ?? "";
-        const who = m.fromName?.trim() || m.fromEmail || "unknown";
-        return `[${m.direction === "outbound" ? "JORDAN" : who} ${at}]\n${formatEmailBody(m).main}`;
-      })
-      .join("\n\n---\n\n");
 
     const voice = voiceInstructions(await getVoiceProfile().catch(() => null));
-    const result = await threadChat({ subject, threadText, participants, history, voice });
+    const result = await threadChat({
+      subject: firstSubject || "Inbox",
+      threadText: sections.join("\n\n\n"),
+      participants: participantLines,
+      history,
+      voice,
+    });
     return NextResponse.json({ ok: true, text: result.text, model: result.modelUsed });
   } catch (err) {
     if (err instanceof AiNotConfiguredError) {

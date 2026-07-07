@@ -154,7 +154,7 @@ export default async function ThreadPage({
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="max-w-none">
       <Link href="/inbox" className="text-xs text-muted hover:text-fg">
         ← Inbox
       </Link>
