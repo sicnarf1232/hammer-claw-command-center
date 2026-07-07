@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import * as XLSX from "xlsx";
 import {
   parseSpreadsheet,
   headerSignature,
@@ -12,8 +11,7 @@ import {
 } from "./engine";
 
 function csvBytes(csv: string): Uint8Array {
-  const wb = XLSX.read(csv, { type: "string" });
-  return new Uint8Array(XLSX.write(wb, { type: "array", bookType: "csv" }));
+  return new TextEncoder().encode(csv);
 }
 
 const CSV = [
