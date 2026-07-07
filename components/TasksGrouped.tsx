@@ -311,7 +311,7 @@ function TaskCard({
           onClick={onComplete}
           aria-label="Mark done"
           title="Mark done"
-          className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-transparent transition-colors hover:border-success hover:text-success"
+          className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-fg/35 text-transparent transition-colors hover:border-success hover:text-success"
         >
           ✓
         </button>

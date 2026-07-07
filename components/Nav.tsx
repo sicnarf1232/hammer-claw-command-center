@@ -20,6 +20,7 @@ import {
   type IconProps,
 } from "./icons";
 import ThemeToggle from "./ThemeToggle";
+import NotificationBell from "./NotificationBell";
 
 type Item = {
   href: string;
@@ -238,6 +239,7 @@ export default function Nav() {
         </div>
 
         <div className="mt-2 flex flex-col gap-0.5 border-t border-border px-2.5 pt-2.5">
+          <NotificationBell collapsed={collapsed} />
           {BOTTOM.map((it) => (
             <NavItem key={it.href} item={it} active={isActive(pathname, it.href)} collapsed={collapsed} />
           ))}

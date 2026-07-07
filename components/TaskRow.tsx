@@ -70,10 +70,10 @@ export default function TaskRow({
           onClick={toggle}
           disabled={busy}
           aria-label={done ? "Reopen task" : "Complete task"}
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
             done
               ? "border-success bg-success text-white"
-              : "border-border text-transparent hover:border-success hover:text-success/40"
+              : "border-fg/35 text-transparent hover:border-success hover:text-success/40"
           }`}
         >
           {done ? (
