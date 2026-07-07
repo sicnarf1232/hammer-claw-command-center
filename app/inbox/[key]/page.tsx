@@ -17,9 +17,10 @@ import { docTypeLabel } from "@/lib/documents";
 import { aiConfigured } from "@/lib/ai";
 import ThreadActions from "@/components/ThreadActions";
 import TriageBar from "@/components/TriageBar";
-import ReplyBox from "@/components/ReplyBox";
 import SenderSuggest from "@/components/SenderSuggest";
 import ThreadActionComposer from "@/components/ThreadActionComposer";
+import ThreadMessages, { type ThreadMsg } from "@/components/ThreadMessages";
+import { formatEmailBody } from "@/lib/emailFormat";
 
 const JORDAN = "jordan.francis@merit.com";
 
@@ -47,8 +48,8 @@ export default async function ThreadPage({
   // Reply targets the most recent inbound message (reply to the customer).
   const latestInbound = [...messages].reverse().find((m) => m.direction === "inbound");
 
-  // Reply-all recipient set: everyone on the thread except Jordan. Primary "to"
-  // is the last inbound sender; everyone else lands in Cc.
+  // Sending identities on this thread (Jordan + any outbound sender): never
+  // reply to ourselves.
   const self = new Set<string>([JORDAN]);
   for (const m of messages) {
     if (m.direction === "outbound" && m.fromEmail) self.add(m.fromEmail.toLowerCase());
@@ -58,9 +59,11 @@ export default async function ThreadPage({
     if (m.fromEmail) everyone.add(m.fromEmail.toLowerCase());
     for (const r of m.recipients ?? []) if (r?.email) everyone.add(r.email.toLowerCase());
   }
-  const primaryTo = latestInbound?.fromEmail?.toLowerCase() ?? null;
-  const ccList = [...everyone].filter((a) => !self.has(a) && a !== primaryTo);
-  const toList = primaryTo ? [primaryTo] : [];
+
+  // Conversation view: newest first, each message carrying its own reply set.
+  const threadMsgs: ThreadMsg[] = [...messages]
+    .reverse()
+    .map((m) => toThreadMsg(m, self));
 
   // Participant map: everyone on the thread (minus Jordan), split into external
   // (customer) and internal (Merit) with display names.
@@ -361,124 +364,64 @@ export default async function ThreadPage({
         />
       </div>
 
-      <div className="grid gap-3">
-        {messages.map((m) => (
-          <MessageCard key={m.id} m={m} />
-        ))}
-      </div>
-
-      {latestInbound ? (
-        <ReplyBox
-          replyToId={latestInbound.id}
-          to={latestInbound.fromName?.trim() || latestInbound.fromEmail || "sender"}
-          subject={subject}
-          toList={toList}
-          ccList={ccList}
-          suggestedDocs={docSuggestions.map((d) => ({ id: d.id, title: d.title, docType: d.docType }))}
-        />
-      ) : (
-        <p className="mt-5 text-sm text-muted">
-          This thread has no inbound message to reply to.
-        </p>
-      )}
+      <ThreadMessages
+        messages={threadMsgs}
+        subject={subject}
+        defaultAnchorId={latestInbound?.id ?? null}
+        suggestedDocs={docSuggestions.map((d) => ({ id: d.id, title: d.title, docType: d.docType }))}
+      />
     </div>
   );
 }
 
-function MessageCard({ m }: { m: ThreadMessage }) {
-  const outbound = m.direction === "outbound";
-  const body = bodyOf(m);
-  return (
-    <article className={`card p-4 ${outbound ? "border-l-2 border-l-accent2" : ""}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-fg">
-            {m.fromName?.trim() || m.fromEmail || "Unknown"}
-            <span
-              className={`ml-2 rounded-full px-1.5 py-0.5 text-2xs font-medium ${
-                outbound ? "bg-accentSoft text-accent2" : "bg-surface2 text-fg/60"
-              }`}
-            >
-              {outbound ? "Sent" : "Received"}
-            </span>
-            {m.flagged ? <span className="ml-1" title="Flagged">🚩</span> : null}
-          </div>
-          {m.recipients && m.recipients.length > 0 ? (
-            <div className="mt-0.5 truncate text-xs text-muted">
-              to{" "}
-              {m.recipients
-                .filter((r) => r.role !== "from")
-                .map((r) => r.name || r.email)
-                .join(", ")}
-            </div>
-          ) : null}
-        </div>
-        <div className="shrink-0 text-2xs tabular-nums text-muted">
-          {fmt(m.sentAt ?? m.receivedAt ?? m.createdAt)}
-        </div>
-      </div>
+// Serialize a message for the client conversation view: cleaned body split
+// from its quoted history, internal/external, and the reply-all set anchored
+// to THIS message (inbound: reply to the sender + copy the rest; outbound:
+// follow up with the same recipients).
+function toThreadMsg(m: ThreadMessage, selfSet: Set<string>): ThreadMsg {
+  const { main, quoted } = formatEmailBody(m);
+  const recips = (m.recipients ?? [])
+    .filter((r) => r?.email && r.role !== "from")
+    .map((r) => ({ email: r.email.toLowerCase(), name: r.name ?? r.email, cc: r.role === "cc" }));
+  const from = m.fromEmail?.toLowerCase() ?? null;
 
-      {body ? (
-        <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-fg/85">
-          {body}
-        </div>
-      ) : (
-        <div className="mt-3 text-sm italic text-muted">(no text body)</div>
-      )}
-
-      {m.attachments.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
-          {m.attachments.map((a) => (
-            <a
-              key={a.id}
-              href={`/api/email-attachments/file?id=${a.id}${
-                a.isImage || a.contentType === "application/pdf" ? "" : "&download=1"
-              }`}
-              target="_blank"
-              rel="noreferrer"
-              className={`chip border-border ${
-                a.blobUrl ? "text-fg/75 hover:text-accent" : "cursor-default text-fg/40"
-              }`}
-              title={a.blobUrl ? "Open attachment" : "Not retained"}
-            >
-              {a.isImage ? "🖼 " : "📎 "}
-              {a.fileName || "attachment"}
-              {a.sizeBytes ? ` · ${kb(a.sizeBytes)}` : ""}
-            </a>
-          ))}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function bodyOf(m: ThreadMessage): string {
-  if (m.bodyText?.trim()) return collapse(m.bodyText);
-  if (m.bodyHtml?.trim()) {
-    return collapse(
-      m.bodyHtml
-        .replace(/<style[\s\S]*?<\/style>/gi, " ")
-        .replace(/<head[\s\S]*?<\/head>/gi, " ")
-        .replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&nbsp;/gi, " ")
-        .replace(/&amp;/gi, "&")
-        .replace(/&lt;/gi, "<")
-        .replace(/&gt;/gi, ">"),
-    );
+  let replyTo: string[] = [];
+  let replyCc: string[] = [];
+  if (m.direction === "inbound" && from) {
+    replyTo = [from];
+    replyCc = dedupe(recips.map((r) => r.email).filter((a) => !selfSet.has(a) && a !== from));
+  } else {
+    // Outbound: continue to the same audience.
+    replyTo = dedupe(recips.filter((r) => !r.cc).map((r) => r.email).filter((a) => !selfSet.has(a)));
+    replyCc = dedupe(recips.filter((r) => r.cc).map((r) => r.email).filter((a) => !selfSet.has(a)));
+    if (!replyTo.length) replyTo = replyCc.splice(0, replyCc.length);
   }
-  return m.bodyPreview?.trim() || "";
+
+  return {
+    id: m.id,
+    direction: m.direction === "outbound" ? "outbound" : "inbound",
+    internal: from ? isInternal(from) : m.direction === "outbound",
+    fromLabel: m.fromName?.trim() || m.fromEmail || "Unknown",
+    toLine: recips.length ? recips.map((r) => r.name).join(", ") : null,
+    atLabel: fmt(m.sentAt ?? m.receivedAt ?? m.createdAt),
+    bodyMain: main,
+    bodyQuoted: quoted,
+    flagged: m.flagged,
+    attachments: m.attachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      sizeBytes: a.sizeBytes,
+      isImage: a.isImage,
+      isPdf: a.contentType === "application/pdf",
+      hasBlob: Boolean(a.blobUrl),
+    })),
+    replyTo,
+    replyCc,
+  };
 }
 
-function collapse(s: string): string {
-  return s.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-}
-
-function kb(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+function dedupe(arr: string[]): string[] {
+  return Array.from(new Set(arr));
 }
 
 function fmt(d: Date | null): string {

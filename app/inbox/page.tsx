@@ -2,6 +2,7 @@ import Link from "next/link";
 import { dbConfigured } from "@/lib/db";
 import { listThreads, accountNames, type ThreadSummary } from "@/lib/firehose/read";
 import { getTriageMap, type TriageRow } from "@/lib/firehose/triage";
+import { linkedTaskContextForThreads } from "@/lib/inboxContext";
 import InboxList, { type InboxThread, type Folder } from "@/components/InboxList";
 import SetupNotice from "@/components/SetupNotice";
 
@@ -61,9 +62,12 @@ export default async function InboxPage({
   const active = FOLDERS.find((f) => f.key === folderKey)!;
   const shown = all.filter((t) => active.match(t, triage.get(t.key))).slice(0, 200);
 
-  const accounts = await accountNames(
-    shown.map((t) => t.accountId).filter((x): x is number => x != null),
-  );
+  const [accounts, linkedTasks] = await Promise.all([
+    accountNames(shown.map((t) => t.accountId).filter((x): x is number => x != null)),
+    linkedTaskContextForThreads(shown.map((t) => t.key)).catch(
+      () => new Map<string, never>(),
+    ),
+  ]);
 
   const threads: InboxThread[] = shown.map((t) => {
     const acct = t.accountId != null ? accounts.get(t.accountId) : undefined;
@@ -90,6 +94,7 @@ export default async function InboxPage({
       priority: tr?.priority ?? null,
       needsReply: Boolean(tr?.needsReply),
       reviewed: Boolean(tr?.reviewed),
+      linkedTask: linkedTasks.get(t.key) ?? null,
     };
   });
 

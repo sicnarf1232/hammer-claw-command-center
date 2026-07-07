@@ -96,3 +96,31 @@ export async function setChecklist(taskId: string, checklist: ChecklistStep[]): 
   const json = JSON.stringify(checklist);
   await upsert(taskId, sql`checklist = ${json}::jsonb`);
 }
+
+// Reverse lookup: which task ids are linked to each of these thread keys.
+// Feeds the inbox "why this matters" context (2026-07-07 overhaul).
+export async function taskIdsByLinkedThread(
+  threadKeys: string[],
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  const unique = Array.from(new Set(threadKeys)).filter(Boolean);
+  if (!unique.length || !dbConfigured()) return out;
+  try {
+    await ensureSchema();
+    const res = await getDb().execute(sql`
+      select task_id, linked_thread_key from task_meta
+      where linked_thread_key = any(${unique})
+    `);
+    for (const row of rowsOf(res)) {
+      const key = String(row.linked_thread_key ?? "");
+      const taskId = String(row.task_id ?? "");
+      if (!key || !taskId) continue;
+      const list = out.get(key) ?? [];
+      list.push(taskId);
+      out.set(key, list);
+    }
+  } catch {
+    // table absent pre-first-use
+  }
+  return out;
+}

@@ -27,6 +27,8 @@ export interface InboxThread {
   priority: string | null;
   needsReply: boolean;
   reviewed: boolean;
+  // The most urgent open task linked to this thread: the "why this matters".
+  linkedTask: { taskId: string; title: string; due: string | null; overdue: boolean } | null;
 }
 
 export interface Folder {
@@ -298,6 +300,7 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
       )}
 
       <div className="min-w-0 flex-1">
+        {/* Lead with the MATTER (subject), not the sender. */}
         <div className="flex items-baseline justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             {t.unread ? (
@@ -314,8 +317,9 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
                 title="Needs action"
               />
             ) : null}
+            {outbound ? <SentGlyph /> : null}
             <span className={`truncate text-sm ${t.unread ? "font-bold text-fg" : "font-semibold text-fg/90"}`}>
-              {t.who}
+              {t.subject}
             </span>
             {t.count > 1 ? (
               <span className="shrink-0 rounded-full bg-surface2 px-1.5 text-2xs font-semibold tabular-nums text-fg/60">
@@ -341,23 +345,30 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
           />
         </div>
 
-        <div className="mt-0.5 flex items-center gap-1.5">
-          {outbound ? <SentGlyph /> : null}
-          <span className={`truncate text-sm ${t.unread ? "font-semibold text-fg/90" : "text-fg/75"}`}>
-            {t.subject}
-          </span>
-        </div>
-
-        {t.summary ? (
-          <div className="mt-1 flex items-start gap-1.5">
-            <SparkGlyph className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
-            <span className="line-clamp-2 text-xs text-fg/70">{t.summary}</span>
-          </div>
-        ) : t.preview ? (
-          <div className="mt-0.5 truncate text-xs text-muted">{t.preview}</div>
-        ) : null}
-
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {/* WHY it matters: linked past-due task, pathway, priority, account. */}
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {t.linkedTask ? (
+            <span
+              className="inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-2xs font-bold"
+              style={
+                t.linkedTask.overdue
+                  ? { background: "var(--due-soft)", color: "var(--due)" }
+                  : { background: "var(--surface-2)", color: "var(--ink-2, inherit)" }
+              }
+              title={t.linkedTask.title}
+            >
+              <TaskGlyph />
+              <span className="truncate">
+                {t.linkedTask.overdue
+                  ? `Task overdue${t.linkedTask.due ? ` ${shortDate(t.linkedTask.due)}` : ""}`
+                  : t.linkedTask.due
+                    ? `Task due ${shortDate(t.linkedTask.due)}`
+                    : "Linked task"}
+                {": "}
+                {t.linkedTask.title}
+              </span>
+            </span>
+          ) : null}
           {high ? (
             <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold text-dueInk" style={{ background: "var(--due-soft)" }}>
               High
@@ -391,8 +402,35 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
             </span>
           ) : null}
         </div>
+
+        {/* Sender demoted to context: who said it, plus the AI gist. */}
+        <div className="mt-1 flex items-start gap-1.5 text-xs">
+          <span className="shrink-0 font-medium text-fg/60">{t.who}</span>
+          {t.summary ? (
+            <span className="line-clamp-2 min-w-0 text-fg/70">
+              <SparkGlyph className="mr-1 inline h-3 w-3 text-accent" />
+              {t.summary}
+            </span>
+          ) : t.preview ? (
+            <span className="min-w-0 truncate text-muted">{t.preview}</span>
+          ) : null}
+        </div>
       </div>
     </Link>
+  );
+}
+
+function shortDate(iso: string): string {
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function TaskGlyph() {
+  return (
+    <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
   );
 }
 

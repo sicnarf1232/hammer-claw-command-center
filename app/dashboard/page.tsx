@@ -110,13 +110,24 @@ export default async function DashboardPage() {
                     href={`/inbox/${encodeURIComponent(t.key)}`}
                     className={`block px-3 py-2.5 transition-colors hover:bg-surface2 ${i === 0 ? "" : "border-t border-border"}`}
                   >
+                    {/* The matter leads; the "because" is the second line. */}
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-fg">{t.who}</span>
+                      <span className="truncate text-sm font-semibold text-fg">{t.subject}</span>
                       {t.pathway ? (
                         <span className="shrink-0 text-2xs font-semibold text-accent">{PATHWAY_LABEL[t.pathway] ?? t.pathway}</span>
                       ) : null}
                     </div>
-                    <div className="truncate text-xs text-muted">{t.summary ?? t.subject}</div>
+                    {t.linkedTask ? (
+                      <div className={`truncate text-2xs font-semibold ${t.linkedTask.overdue ? "text-due" : "text-fg/70"}`}>
+                        {t.linkedTask.overdue ? "Task overdue" : "Linked task"}
+                        {t.linkedTask.due ? ` (${t.linkedTask.due})` : ""}: {t.linkedTask.title}
+                      </div>
+                    ) : null}
+                    <div className="truncate text-xs text-muted">
+                      <span className="text-fg/60">{t.who}</span>
+                      {t.accountName ? <span className="text-fg/50"> · {t.accountName}</span> : null}
+                      {t.summary ? <> — {t.summary}</> : null}
+                    </div>
                   </Link>
                 ))}
               </div>

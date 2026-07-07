@@ -6,6 +6,7 @@ import { listAccounts, getAccountsWithStats, type AccountWithStats } from "@/lib
 import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
 import { listThreads, accountNames } from "@/lib/firehose/read";
 import { getTriageMap } from "@/lib/firehose/triage";
+import { linkedTaskContextForThreads } from "@/lib/inboxContext";
 import { recentNotifications } from "@/lib/notify";
 
 export interface InboxSnapshotThread {
@@ -16,6 +17,7 @@ export interface InboxSnapshotThread {
   accountName: string | null;
   atISO: string | null;
   pathway: string | null;
+  linkedTask: { title: string; due: string | null; overdue: boolean } | null;
 }
 
 export interface UpcomingMeeting {
@@ -92,11 +94,17 @@ async function inboxSnapshot(): Promise<DashboardData["inbox"]> {
     }).length;
 
     const topThree = attention.slice(0, 3);
-    const acctMap = await accountNames(
-      topThree.map((t) => t.accountId).filter((x): x is number => x != null),
-    );
+    const [acctMap, linkedTasks] = await Promise.all([
+      accountNames(
+        topThree.map((t) => t.accountId).filter((x): x is number => x != null),
+      ),
+      linkedTaskContextForThreads(topThree.map((t) => t.key)).catch(
+        () => new Map<string, never>(),
+      ),
+    ]);
     const threads: InboxSnapshotThread[] = topThree.map((t) => {
       const tr = triage.get(t.key);
+      const linked = linkedTasks.get(t.key);
       return {
         key: t.key,
         who: t.parties.length ? t.parties.join(", ") : "You",
@@ -105,6 +113,9 @@ async function inboxSnapshot(): Promise<DashboardData["inbox"]> {
         accountName: t.accountId != null ? (acctMap.get(t.accountId)?.name ?? null) : null,
         atISO: t.lastAt ? t.lastAt.toISOString() : null,
         pathway: tr?.pathway ?? null,
+        linkedTask: linked
+          ? { title: linked.title, due: linked.due, overdue: linked.overdue }
+          : null,
       };
     });
 
