@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ReplyBox, { type SuggestedDoc } from "@/components/ReplyBox";
+import ThreadChat from "@/components/ThreadChat";
 
 // The thread conversation (2026-07-07 overhaul, v2 after Jordan's review):
 // newest first; people render as NAME chips with the address + contact card on
@@ -43,84 +44,106 @@ export interface ThreadMsg {
 export default function ThreadMessages({
   messages, // newest first
   subject,
+  threadKey,
   suggestedDocs,
   workstream,
 }: {
   messages: ThreadMsg[];
   subject: string;
+  threadKey: string;
   suggestedDocs: SuggestedDoc[];
   workstream?: string;
 }) {
   const [anchorId, setAnchorId] = useState<number | null>(null);
+  const [preset, setPreset] = useState<{ html: string; nonce: number } | null>(null);
   const anchor = messages.find((m) => m.id === anchorId) ?? null;
 
-  // FOCUS MODE: thread collapses to a rail; the reply owns the main panel.
+  function useAsReply(text: string) {
+    const html = text
+      .split(/\n{2,}/)
+      .map((p) => `<p>${p.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>")}</p>`)
+      .join("");
+    setPreset((prev) => ({ html, nonce: (prev?.nonce ?? 0) + 1 }));
+  }
+
+  // FOCUS MODE: a full-screen workspace over the content area. Left: the
+  // thread collapsed to a rail. Center: the composer with the anchored message
+  // pinned. Right: the thread brain (chat), which can draft into the composer.
   if (anchor) {
     return (
-      <div className="flex gap-4">
-        <aside className="hidden w-64 shrink-0 md:block">
-          <button
-            type="button"
-            onClick={() => setAnchorId(null)}
-            className="mb-2 w-full rounded-lg border border-border px-2.5 py-1.5 text-left text-xs text-fg/70 hover:text-fg"
-          >
-            ← Back to the full thread
-          </button>
-          <div className="space-y-1.5">
-            {messages.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setAnchorId(m.id)}
-                className={`block w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                  m.id === anchor.id
-                    ? "border-accent bg-accentSoft"
-                    : "border-border bg-surface hover:bg-surface2"
-                }`}
-                style={{
-                  borderLeft: `3px solid ${m.internal ? "var(--accent2, var(--accent))" : "var(--warm)"}`,
-                }}
-              >
-                <div className="flex items-baseline justify-between gap-1.5">
-                  <span className="truncate text-xs font-semibold text-fg">{m.from.name}</span>
-                  <span className="shrink-0 text-2xs text-muted">{m.atLabel}</span>
-                </div>
-                <div className="line-clamp-2 text-2xs text-muted">{m.bodyMain || "(no text)"}</div>
-              </button>
-            ))}
+      <div
+        className="fixed inset-y-0 right-0 z-40 overflow-auto p-3 pb-20 md:p-5 md:pb-5"
+        style={{ left: "var(--nav-w, 0px)", background: "var(--bg, var(--surface))" }}
+      >
+        <div className="flex h-full min-h-0 flex-col gap-3">
+          <div className="flex shrink-0 items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setAnchorId(null)}
+              className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-fg/70 hover:text-fg"
+            >
+              ← Back to the full thread
+            </button>
+            <span className="min-w-0 truncate text-sm font-semibold text-fg">{subject}</span>
           </div>
-        </aside>
 
-        <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => setAnchorId(null)}
-            className="mb-2 text-xs text-muted hover:text-fg md:hidden"
-          >
-            ← Back to the full thread
-          </button>
-          <div className="mb-3 rounded-xl border border-border bg-surface2 p-3">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs text-muted">
-                Replying to <span className="font-semibold text-fg">{anchor.from.name}</span>
-                {anchor.direction === "outbound" ? " (your message, same audience)" : ""}
-              </span>
-              <span className="shrink-0 text-2xs text-muted">{anchor.atLabel}</span>
+          <div className="flex min-h-0 flex-1 gap-4">
+            <aside className="hidden w-60 shrink-0 overflow-auto md:block">
+              <div className="space-y-1.5">
+                {messages.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setAnchorId(m.id)}
+                    className={`block w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                      m.id === anchor.id
+                        ? "border-accent bg-accentSoft"
+                        : "border-border bg-surface hover:bg-surface2"
+                    }`}
+                    style={{
+                      borderLeft: `3px solid ${m.internal ? "var(--accent2, var(--accent))" : "var(--warm)"}`,
+                    }}
+                  >
+                    <div className="flex items-baseline justify-between gap-1.5">
+                      <span className="truncate text-xs font-semibold text-fg">{m.from.name}</span>
+                      <span className="shrink-0 text-2xs text-muted">{m.atLabel}</span>
+                    </div>
+                    <div className="line-clamp-2 text-2xs text-muted">{m.bodyMain || "(no text)"}</div>
+                  </button>
+                ))}
+              </div>
+            </aside>
+
+            <div className="min-w-0 flex-1 overflow-auto">
+              <div className="mb-3 rounded-xl border border-border bg-surface2 p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-muted">
+                    Replying to <span className="font-semibold text-fg">{anchor.from.name}</span>
+                    {anchor.direction === "outbound" ? " (your message, same audience)" : ""}
+                  </span>
+                  <span className="shrink-0 text-2xs text-muted">{anchor.atLabel}</span>
+                </div>
+                <div className="mt-1.5 max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-fg/70">
+                  {anchor.bodyMain || "(no text body)"}
+                </div>
+              </div>
+              <ReplyBox
+                key={anchor.id}
+                replyToId={anchor.id}
+                to={anchor.from.name}
+                subject={subject}
+                toList={anchor.replyTo}
+                ccList={anchor.replyCc}
+                suggestedDocs={suggestedDocs}
+                workstream={workstream}
+                preset={preset}
+              />
             </div>
-            <div className="mt-1.5 max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-fg/70">
-              {anchor.bodyMain || "(no text body)"}
-            </div>
+
+            <aside className="hidden w-80 shrink-0 lg:block">
+              <ThreadChat threadKey={threadKey} onUseAsReply={useAsReply} />
+            </aside>
           </div>
-          <ReplyBox
-            key={anchor.id}
-            replyToId={anchor.id}
-            to={anchor.from.name}
-            subject={subject}
-            toList={anchor.replyTo}
-            ccList={anchor.replyCc}
-            suggestedDocs={suggestedDocs}
-            workstream={workstream}
-          />
         </div>
       </div>
     );

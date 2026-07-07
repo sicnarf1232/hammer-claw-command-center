@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { identityFor } from "@/lib/workstreams";
 import { isWorkstream } from "@/lib/vault/types";
@@ -27,6 +27,7 @@ export default function ReplyBox({
   ccList,
   suggestedDocs = [],
   workstream = "merit",
+  preset = null,
 }: {
   replyToId: number;
   to: string;
@@ -38,6 +39,9 @@ export default function ReplyBox({
   // server-side); the prop exists so a Sloan address is a page-level change,
   // not a component rewrite.
   workstream?: string;
+  // Externally-provided draft (thread brain "Insert into reply"). A new nonce
+  // replaces the editor content.
+  preset?: { html: string; nonce: number } | null;
 }) {
   const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
@@ -80,6 +84,14 @@ export default function ReplyBox({
   const recipients = replyAll
     ? { to: toList.length ? toList : [primaryTo], cc: ccList }
     : { to: [primaryTo], cc: [] as string[] };
+
+  useEffect(() => {
+    if (preset && editorRef.current) {
+      editorRef.current.innerHTML = preset.html;
+      syncEmpty();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset?.nonce]);
 
   function syncEmpty() {
     const html = editorRef.current?.innerHTML ?? "";

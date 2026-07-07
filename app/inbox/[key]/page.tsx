@@ -374,6 +374,7 @@ export default async function ThreadPage({
       <ThreadMessages
         messages={threadMsgs}
         subject={subject}
+        threadKey={decoded}
         suggestedDocs={docSuggestions.map((d) => ({ id: d.id, title: d.title, docType: d.docType }))}
       />
     </div>
@@ -390,13 +391,26 @@ function personRef(
   cards: Map<string, PersonCard>,
 ): PersonRef {
   const card = cards.get(email);
+  const fallback = fallbackName?.trim();
+  const name =
+    card?.fullName ??
+    (fallback && !fallback.includes("@") ? fallback : prettyLocalPart(email));
   return {
     email,
-    name: card?.fullName ?? fallbackName?.trim() ?? email,
+    name,
     title: card?.title ?? null,
     accountName: card?.accountName ?? null,
     internal: isInternal(email) || card?.classification === "internal",
   };
+}
+
+// Last-resort display name from the address local part: "jordan.francis" ->
+// "Jordan Francis"; a separator-free local part just gets capitalized.
+function prettyLocalPart(email: string): string {
+  const local = email.split("@")[0] ?? email;
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (!parts.length) return email;
+  return parts.map((p) => p[0].toUpperCase() + p.slice(1)).join(" ");
 }
 
 function toThreadMsg(

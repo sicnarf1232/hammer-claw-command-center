@@ -222,6 +222,58 @@ export async function personCardsForEmails(
         classification: r.classification,
       });
     }
+    // Second pass: resolve addresses with no people-row email match by NAME
+    // heuristics against the people table, so "mblackham@merit.com" shows as
+    // Michael Blackham. Two patterns: first.last and <initial><lastname>.
+    const unmatched = unique.filter((e) => !out.has(e));
+    if (unmatched.length) {
+      const all = await getDb()
+        .select({
+          fullName: peopleT.fullName,
+          title: peopleT.title,
+          phone: peopleT.phone,
+          classification: peopleT.classification,
+          accountName: accountsT.name,
+        })
+        .from(peopleT)
+        .leftJoin(accountsT, eq(peopleT.accountId, accountsT.id));
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+      for (const email of unmatched) {
+        const local = email.split("@")[0] ?? "";
+        const parts = local.split(/[._-]+/).filter(Boolean);
+        let hit: (typeof all)[number] | undefined;
+        if (parts.length >= 2) {
+          // first.last: both tokens appear in the full name.
+          hit = all.find((p) => {
+            const n = norm(p.fullName);
+            return n.startsWith(norm(parts[0])) && n.endsWith(norm(parts[parts.length - 1]));
+          });
+        } else if (parts.length === 1 && parts[0].length > 3) {
+          // <initial><lastname>: mblackham -> M... Blackham. Require a unique match.
+          const initial = parts[0][0];
+          const last = norm(parts[0].slice(1));
+          const candidates = all.filter((p) => {
+            const words = p.fullName.trim().toLowerCase().split(/\s+/);
+            return (
+              words.length >= 2 &&
+              words[0].startsWith(initial) &&
+              norm(words[words.length - 1]) === last
+            );
+          });
+          if (candidates.length === 1) hit = candidates[0];
+        }
+        if (hit) {
+          out.set(email, {
+            email,
+            fullName: hit.fullName,
+            title: hit.title,
+            phone: hit.phone,
+            accountName: hit.accountName ?? null,
+            classification: hit.classification,
+          });
+        }
+      }
+    }
   } catch {
     // people table absent pre-seed
   }

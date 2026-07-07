@@ -811,3 +811,55 @@ export async function generateBrief(args: {
 
   return noEmDash(text);
 }
+
+// ---- Thread chat (inbox focus mode, 2026-07-07): a conversational brain over
+// ONE email thread. Answers questions about the thread and drafts replies on
+// request; output is display-only until Jordan inserts it into the composer.
+
+export interface ThreadChatInput {
+  subject: string;
+  threadText: string; // formatted thread, newest first, senders labeled
+  participants: string; // "Name <email> [Merit|Account]" lines
+  history: Array<{ role: "user" | "assistant"; content: string }>;
+  voice?: string;
+}
+
+export async function threadChat(input: ThreadChatInput): Promise<{
+  text: string;
+  modelUsed: string;
+}> {
+  const system = [
+    "You are Jordan Francis's email assistant inside his command center, focused on ONE email thread.",
+    "You can: summarize the thread, extract facts/asks/dates, reason about next steps, and DRAFT replies or new messages when asked.",
+    "Ground everything in the thread and participant list below. Do not invent facts, prices, dates, or commitments.",
+    "When drafting a reply: write the full body in Jordan's voice, ready to send, addressed to whoever he named (default: the latest customer sender). Plain text, short paragraphs, no subject line unless asked.",
+    input.voice ? `Jordan's voice profile: ${input.voice}` : "",
+    "House style: never use em dashes (use commas, colons, or periods).",
+    "",
+    `Subject: ${input.subject}`,
+    "Participants:",
+    input.participants,
+    "",
+    "Thread (newest first):",
+    input.threadText.slice(0, 24000),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const res = await client().messages.create({
+    model: model(),
+    max_tokens: 1500,
+    system,
+    messages: input.history.slice(-12).map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+  return { text: noEmDash(text), modelUsed: res.model };
+}
