@@ -1,12 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { dbConfigured } from "@/lib/db";
+import { eq } from "drizzle-orm";
+import { dbConfigured, getDb, accounts as accountsT } from "@/lib/db";
 import { resolveReviewPerson } from "@/lib/peopleDb";
+import { createAccount } from "@/lib/writeback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Resolve a who-is-who review-queue entry (DB-CUTOVER stage 3).
-// body: { id, dismiss: true } or { id, classification: "internal"|"customer", accountId? }
+// body: { id, dismiss: true }
+//    or { id, classification: "internal"|"customer", accountId? }
+//    or { id, classification: "customer", newAccountName } -> creates the
+//       account first (same path as the meeting classifier), then links.
 export async function POST(req: NextRequest) {
   if (!dbConfigured()) {
     return NextResponse.json({ error: "Database not configured." }, { status: 503 });
@@ -28,7 +33,17 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const accountId = Number.isInteger(body?.accountId) ? Number(body.accountId) : null;
+    let accountId = Number.isInteger(body?.accountId) ? Number(body.accountId) : null;
+    const newAccountName = String(body?.newAccountName ?? "").trim();
+    if (classification === "customer" && newAccountName) {
+      const created = await createAccount(newAccountName);
+      const [row] = await getDb()
+        .select({ id: accountsT.id })
+        .from(accountsT)
+        .where(eq(accountsT.slug, created.slug))
+        .limit(1);
+      accountId = row?.id ?? null;
+    }
     await resolveReviewPerson(id, { kind: "classify", classification, accountId });
     return NextResponse.json({ ok: true });
   } catch (err) {

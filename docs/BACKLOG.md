@@ -6,18 +6,22 @@ plan (and delete it here) when it gets scheduled.
 
 ## From the 2026-07-07 visual review (Main St. live pass)
 
-### 1. Dashboard inbox snapshot + inbox list: information hierarchy (medium)
+### 1. Inbox + dashboard email overhaul (medium-large)
 
-Today a row leads with the SENDER in big bold type and the description as
-plain text below. The sender is rarely the point. A needs-reply email matters
-because of what it is attached to: a project, an opportunity, a past-due task.
-Rework the row hierarchy so the "why this matters" is the visual lead for
-needs-reply items (linked task due date, account/opportunity, triage pathway),
-with sender secondary. Applies to the dashboard center email section and
-`components/InboxList.tsx` together (one design, two surfaces).
-Sequencing note: the "because it is linked to X" context gets much richer
-after Phase 2 (DB-backed tasks + `task_meta.linked_thread_key` +
-`task_emails`), so this lands best post-cutover.
+One design across the dashboard email section, `components/InboxList.tsx`,
+and the thread page. From the 2026-07-07 reviews:
+
+- **Hierarchy**: a row leads with the SENDER in big bold type; the sender is
+  rarely the point. Lead with why it matters (linked project/opportunity/
+  past-due task, triage pathway); sender secondary. Richer post-Phase-2
+  (task_meta.linked_thread_key + task_emails are DB-queryable).
+- **Thread order**: newest message on top.
+- **Internal vs external**: a clear visual distinction between Merit-internal
+  participants/messages and customer ones within a thread.
+- **Reply to a specific message**, not just the whole thread (ReplyBox
+  currently anchors to the latest inbound only; let any message be the
+  reply anchor).
+- **Formatting cleanup** of rendered email bodies.
 
 ### 2. Build Your Day: editable plan + timer + AI day shaping (large, own phase)
 
@@ -35,5 +39,21 @@ After "Plan my day" the blocks are take-it-or-leave-it. Wanted:
   to an existing task where one matches, otherwise suggests creating a task
   (depends on Phase 2 DB-first task creation).
 
+### 5. People merge / delete tool (small-medium)
+
+When the import's dedupe misses (two rows for one human), let the user merge
+one person into another (re-point person_aliases, emails.person_id,
+meeting_attendees, tasks.owner_person_id; keep the richer fields; add the
+loser's name as an alias) or delete a junk person row outright. Natural home:
+the /contacts review queue or a person profile action.
+
+### 6. Quote drafts + default brand setting (small; fold into Phase 4)
+
+Let a quote be saved as a DRAFT (server-side; the quote_drafts table already
+exists and is unused by the builder, which only persists to localStorage).
+Default quote header stays Merit red, but the default becomes a setting once
+Phase 4 threads brand kits through quote rendering (template registry).
+
 (Items 3 and 4, circle contrast and the notification bell, shipped 2026-07-07
-during Phase 2.)
+during Phase 2. Review-queue verbiage + inline account creation shipped same
+day after the seed review.)
