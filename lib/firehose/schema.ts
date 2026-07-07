@@ -96,6 +96,15 @@ const DDL: string[] = [
   `ALTER TABLE "email_triage" ADD COLUMN IF NOT EXISTS "reviewed" boolean NOT NULL DEFAULT false`,
   `ALTER TABLE "email_triage" ADD COLUMN IF NOT EXISTS "manual" boolean NOT NULL DEFAULT false`,
   `ALTER TABLE "email_triage" ADD COLUMN IF NOT EXISTS "reviewed_at" timestamptz`,
+  // Provenance (Phase 1): rows are AI-authored until Jordan touches them; the
+  // AI's original values are frozen into ai_snapshot on first manual correction.
+  `ALTER TABLE "email_triage" ADD COLUMN IF NOT EXISTS "ai_generated" boolean NOT NULL DEFAULT true`,
+  `ALTER TABLE "email_triage" ADD COLUMN IF NOT EXISTS "ai_snapshot" jsonb`,
+  // Backfill: the pre-fix writer stamped this literal regardless of the model
+  // that actually ran (it was really the fast model). That exact string was only
+  // ever written by the bug, so this is safe to re-run; the fixed writer records
+  // the model reported by the API response.
+  `UPDATE "email_triage" SET "model" = 'unknown (pre-fix)' WHERE "model" = 'claude-haiku-4-5-20251001'`,
 ];
 
 // Run the DDL once per warm lambda. A failed run does not latch, so the next

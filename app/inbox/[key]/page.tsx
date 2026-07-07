@@ -343,6 +343,8 @@ export default async function ThreadPage({
         threadKey={decoded}
         pathway={triage?.pathway ?? null}
         reviewed={Boolean(triage?.reviewed)}
+        aiGenerated={Boolean(triage?.aiGenerated) && !triage?.manual}
+        model={triage?.model ?? null}
       />
 
       <div className="mt-4">

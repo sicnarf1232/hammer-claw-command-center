@@ -13,15 +13,21 @@ const PATHWAYS: { key: string; label: string }[] = [
 ];
 
 // Manual triage controls: pick a pathway, or confirm the thread is reviewed
-// (which clears it from Needs-attention). Latches so AI won't overwrite.
+// (which clears it from Needs-attention). Latches so AI won't overwrite. While
+// the row is still AI-authored, a provenance chip names the model; tapping any
+// pathway is the one-tap correction (the AI's values are kept in ai_snapshot).
 export default function TriageBar({
   threadKey,
   pathway,
   reviewed,
+  aiGenerated = false,
+  model = null,
 }: {
   threadKey: string;
   pathway: string | null;
   reviewed: boolean;
+  aiGenerated?: boolean;
+  model?: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -45,7 +51,17 @@ export default function TriageBar({
   return (
     <div className="card mb-4 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="eyebrow text-muted">Triage</span>
+        <span className="flex items-center gap-2">
+          <span className="eyebrow text-muted">Triage</span>
+          {aiGenerated && !isReviewed ? (
+            <span
+              className="rounded-full border border-border bg-surface px-2 py-0.5 text-2xs text-muted"
+              title="This triage was set by AI and not yet confirmed. Tap a pathway to correct it or Mark reviewed to confirm."
+            >
+              AI{model ? `: ${model}` : ""}
+            </span>
+          ) : null}
+        </span>
         <button
           type="button"
           disabled={busy !== null}

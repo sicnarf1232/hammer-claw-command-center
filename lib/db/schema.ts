@@ -395,7 +395,19 @@ export const emailTriage = pgTable(
     priority: text("priority"),
     needsReply: boolean("needs_reply").notNull().default(false),
     signature: text("signature"),
+    // True model that served the triage call (from the API response). Rows
+    // written before the Phase 1 fix carry 'unknown (pre-fix)'.
     model: text("model"),
+    // Provenance: true while the stored values are AI-authored and untouched.
+    // First manual correction flips it and freezes the AI values in aiSnapshot.
+    aiGenerated: boolean("ai_generated").notNull().default(true),
+    aiSnapshot: jsonb("ai_snapshot").$type<{
+      summary: string | null;
+      pathway: string | null;
+      priority: string | null;
+      needsReply: boolean;
+      model: string | null;
+    }>(),
     // Manual triage: Jordan set the pathway/reviewed himself, so auto-triage must
     // not clobber it. reviewed removes the thread from Needs-attention.
     reviewed: boolean("reviewed").notNull().default(false),

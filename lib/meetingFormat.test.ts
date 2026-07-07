@@ -11,6 +11,7 @@ import {
 import type { TriagedMeeting } from "./ai";
 
 const baseTriage: TriagedMeeting = {
+  modelUsed: "claude-sonnet-5",
   workstream: "merit",
   account: "MicroVention Terumo",
   bucket: "Terumo",

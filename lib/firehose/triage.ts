@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
 import { emailTriage } from "@/lib/db/schema";
 import { aiConfigured, triageEmailThread } from "@/lib/ai";
@@ -87,7 +87,7 @@ export async function ensureTriageForKeys(
   }
 
   const db = getDb();
-  // Small concurrency so a batch of Haiku calls finishes quickly.
+  // Small concurrency so a batch of fast-model calls finishes quickly.
   const chunks = chunk(todo, 3);
   for (const group of chunks) {
     await Promise.all(
@@ -116,7 +116,10 @@ export async function ensureTriageForKeys(
               priority: t.priority,
               needsReply: t.needsReply,
               signature: item.signature,
-              model: process.env.ANTHROPIC_FAST_MODEL ?? "claude-haiku-4-5-20251001",
+              // Provenance: the model the API actually served, never assumed
+              // from config (the two can differ when env overrides change).
+              model: t.modelUsed,
+              aiGenerated: true,
               updatedAt: new Date(),
             })
             .onConflictDoUpdate({
@@ -127,6 +130,8 @@ export async function ensureTriageForKeys(
                 priority: t.priority,
                 needsReply: t.needsReply,
                 signature: item.signature,
+                model: t.modelUsed,
+                aiGenerated: true,
                 updatedAt: new Date(),
               },
             });
@@ -158,14 +163,32 @@ export interface ManualTriageInput {
   summary?: string;
 }
 
-// Jordan manually triages a thread. Sets manual=true so auto-triage won't
-// overwrite it. Upserts the triage row (creates one if the thread was never
-// auto-triaged).
-export async function setManualTriage(key: string, input: ManualTriageInput): Promise<void> {
-  await ensureFirehoseSchema();
-  const db = getDb();
-  const now = new Date();
-  const updates: Partial<typeof emailTriage.$inferInsert> = { manual: true, updatedAt: now };
+// The slice of a triage row that manualTriageUpdates needs to decide whether to
+// freeze an AI snapshot.
+export interface ManualTriagePrev {
+  summary: string | null;
+  pathway: string | null;
+  priority: string | null;
+  needsReply: boolean;
+  model: string | null;
+  aiGenerated: boolean;
+  aiSnapshot: unknown;
+}
+
+// Pure: compute the upsert for a manual triage action. Any manual touch flips
+// aiGenerated off; when the prior row was still AI-authored, its values are
+// frozen into aiSnapshot exactly once so the correction is stored alongside
+// what the model originally said (and which model said it).
+export function manualTriageUpdates(
+  input: ManualTriageInput,
+  prev: ManualTriagePrev | null,
+  now: Date,
+): Partial<typeof emailTriage.$inferInsert> {
+  const updates: Partial<typeof emailTriage.$inferInsert> = {
+    manual: true,
+    aiGenerated: false,
+    updatedAt: now,
+  };
   if (input.pathway !== undefined) {
     updates.pathway = input.pathway;
     // Pathway drives needs-reply unless explicitly overridden below.
@@ -177,6 +200,31 @@ export async function setManualTriage(key: string, input: ManualTriageInput): Pr
     updates.reviewed = input.reviewed;
     updates.reviewedAt = input.reviewed ? now : null;
   }
+  if (prev && prev.aiGenerated && prev.aiSnapshot == null) {
+    updates.aiSnapshot = {
+      summary: prev.summary,
+      pathway: prev.pathway,
+      priority: prev.priority,
+      needsReply: prev.needsReply,
+      model: prev.model,
+    };
+  }
+  return updates;
+}
+
+// Jordan manually triages a thread. Sets manual=true so auto-triage won't
+// overwrite it. Upserts the triage row (creates one if the thread was never
+// auto-triaged).
+export async function setManualTriage(key: string, input: ManualTriageInput): Promise<void> {
+  await ensureFirehoseSchema();
+  const db = getDb();
+  const now = new Date();
+  const [prevRow] = await db
+    .select()
+    .from(emailTriage)
+    .where(eq(emailTriage.threadKey, key))
+    .limit(1);
+  const updates = manualTriageUpdates(input, prevRow ?? null, now);
   await db
     .insert(emailTriage)
     .values({
@@ -187,6 +235,7 @@ export async function setManualTriage(key: string, input: ManualTriageInput): Pr
       reviewed: updates.reviewed ?? false,
       reviewedAt: updates.reviewedAt ?? null,
       manual: true,
+      aiGenerated: false,
       signature: "manual",
       updatedAt: now,
     })

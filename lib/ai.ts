@@ -315,6 +315,7 @@ export interface TriagedMeeting {
   numbers: string[]; // "numbers that matter": quantities, dollars, dates, timelines
   watchouts: string[]; // risks, blockers, timing pressure
   fullNotes: FullNotesSection[]; // detailed notes grouped into subsections
+  modelUsed: string; // true model that served the call (provenance)
 }
 
 export interface TriageInput {
@@ -384,7 +385,7 @@ export async function triageMeeting(
     .join("")
     .trim();
 
-  return normalizeTriage(parseJsonObject(text), input);
+  return { ...normalizeTriage(parseJsonObject(text), input), modelUsed: res.model };
 }
 
 // Pull the first balanced JSON object out of a model response (tolerates a
@@ -401,7 +402,7 @@ function parseJsonObject(text: string): Record<string, unknown> {
 function normalizeTriage(
   raw: Record<string, unknown>,
   input: TriageInput,
-): TriagedMeeting {
+): Omit<TriagedMeeting, "modelUsed"> {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
   const strOrNull = (v: unknown): string | null => {
     const s = str(v).trim();
@@ -482,6 +483,7 @@ export interface SeriesUpdateInput {
 export interface SeriesUpdate {
   logBullets: string[]; // 3-5 concise bullets for this meeting's log entry
   currentState: string; // rewritten Current State markdown
+  modelUsed: string; // true model that served the call (provenance)
 }
 
 // Maintain a rolling-series note when a matching meeting is filed: produce a
@@ -532,7 +534,7 @@ export async function updateSeries(
   const currentState = noEmDash(
     typeof raw.currentState === "string" ? raw.currentState.trim() : "",
   );
-  return { logBullets: bullets, currentState };
+  return { logBullets: bullets, currentState, modelUsed: res.model };
 }
 
 // ---- Brain: answer a question grounded in the vault (Milestone 2 #5) ----
@@ -671,8 +673,9 @@ function mapFreeformQuote(raw: Record<string, unknown>): RawQuoteInput {
   };
 }
 
-// ---- Email triage (Milestone 4). Haiku classifies a thread into a pathway +
-// priority + a one-line summary, so the inbox can surface what needs action.
+// ---- Email triage (Milestone 4). The fast model classifies a thread into a
+// pathway + priority + a one-line summary, so the inbox can surface what needs
+// action. The result carries the true model name for the provenance column.
 export type EmailPathway =
   | "needs-reply"
   | "quote-request"
@@ -686,6 +689,8 @@ export interface EmailTriageResult {
   pathway: EmailPathway;
   priority: "high" | "medium" | "low";
   needsReply: boolean;
+  /** The model that actually served this call (from the API response), for provenance. */
+  modelUsed: string;
 }
 
 export interface TriageThreadInput {
@@ -763,6 +768,7 @@ export async function triageEmailThread(
     pathway,
     priority,
     needsReply: Boolean(raw.needs_reply) || pathway === "needs-reply",
+    modelUsed: res.model,
   };
 }
 
