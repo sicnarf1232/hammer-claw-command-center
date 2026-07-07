@@ -22,6 +22,9 @@ import MeetingClassifier from "@/components/MeetingClassifier";
 import { personNameMatches } from "@/lib/vault/people";
 import SetupNotice from "@/components/SetupNotice";
 import PullFromGranola from "@/components/PullFromGranola";
+import ProposalQueue, { type QueueProposal } from "@/components/ProposalQueue";
+import { listProposals } from "@/lib/proposals/store";
+import type { MeetingFilePayload, SeriesUpdatePayload } from "@/lib/proposals/types";
 import MeetingsHub from "@/components/MeetingsHub";
 import { granolaConfigured } from "@/lib/granola";
 import { meetingNoteToEditable } from "@/lib/meetingEdit";
@@ -88,6 +91,28 @@ export default async function MeetingsPage({
   const candidates = await getSeriesCandidates().catch(() => []);
   const accounts = await listAccounts().catch(() => []);
 
+  // AI proposals awaiting review (Granola filings + series updates). The queue
+  // is the only path from staged AI output to a vault write.
+  const pendingProposals = await listProposals("pending").catch(() => []);
+  const queueItems: QueueProposal[] = pendingProposals.map((p) => {
+    const isMeeting = p.kind === "meeting-file";
+    const mp = isMeeting ? (p.payload as MeetingFilePayload) : null;
+    const spd = !isMeeting ? (p.payload as SeriesUpdatePayload) : null;
+    return {
+      id: p.id,
+      kind: p.kind,
+      parentId: p.parentId,
+      summary: p.summary,
+      model: p.model,
+      createdAt: p.createdAt.toISOString(),
+      path: mp?.path ?? spd?.seriesPath ?? null,
+      content: mp?.content ?? (spd ? seriesPreview(spd) : null),
+      contactsToAdd: mp?.contactsToAdd
+        ? { accountName: mp.contactsToAdd.accountName, names: mp.contactsToAdd.names }
+        : null,
+    };
+  });
+
   return (
     <div>
       {granolaConfigured() && (
@@ -95,6 +120,7 @@ export default async function MeetingsPage({
           <PullFromGranola />
         </div>
       )}
+      <ProposalQueue proposals={queueItems} />
       {error ? (
         <div className="card max-w-2xl border-danger/30 p-5 text-sm text-danger">
           {error}
@@ -443,6 +469,17 @@ async function SeriesDetail({ path }: { path: string }) {
 }
 
 /* ================================ shared bits ============================== */
+
+// Human-readable preview of a staged series update for the review queue.
+function seriesPreview(p: SeriesUpdatePayload): string {
+  return [
+    `Log entry for ${p.meetingTitle} (${p.date}):`,
+    ...p.logBullets.map((b) => `- ${b}`),
+    "",
+    "New Current State:",
+    p.currentState,
+  ].join("\n");
+}
 
 function DetailError({ message }: { message: string }) {
   return (
