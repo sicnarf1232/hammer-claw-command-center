@@ -33,6 +33,7 @@ import {
 } from "@/lib/accountsDb";
 import { dbSetPersonClassification } from "@/lib/peopleDb";
 import { dbSaveMeetingContent, dbReclassifyMeeting } from "@/lib/meetingsDb";
+import { dbCompleteTask, DB_TASK_FILE } from "@/lib/tasksDb";
 import { getDb, meetings as meetingsT } from "@/lib/db";
 import { eq } from "drizzle-orm";
 
@@ -51,6 +52,9 @@ export async function completeTask(
   sourceLine: number,
   done = true,
 ): Promise<{ commitSha: string; path: string }> {
+  if (sourceFile === DB_TASK_FILE || (await cutoverActive())) {
+    return dbCompleteTask(sourceFile, sourceLine, done);
+  }
   const file = await getFile(sourceFile);
   if (!file) throw new WriteBackError(`Source file not found: ${sourceFile}`);
 

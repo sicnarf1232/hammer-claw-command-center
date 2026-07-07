@@ -350,6 +350,7 @@ export default async function ThreadPage({
       <div className="mt-4">
         <ThreadActionComposer
           threadKey={decoded}
+          customer={acct?.name ?? null}
           tasks={taskSuggestions.map((s) => ({
             id: s.id,
             title: s.title,

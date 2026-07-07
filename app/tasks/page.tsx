@@ -4,7 +4,9 @@ import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
 import { todayISO } from "@/lib/dates";
 import { getTaskMeta, type TaskMeta } from "@/lib/taskMeta";
 import TasksBoard from "@/components/TasksBoard";
+import QuickAddTask from "@/components/QuickAddTask";
 import SetupNotice from "@/components/SetupNotice";
+import { cutoverActive } from "@/lib/dbSource";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -21,9 +23,12 @@ export default async function TasksPage() {
   let views: TaskView[] = [];
   let error: string | null = null;
   let meta: Record<string, TaskMeta> = {};
+  let accountNames: string[] = [];
   const today = todayISO();
+  const canQuickAdd = await cutoverActive().catch(() => false);
   try {
     const [tasks, accounts] = await Promise.all([getAllTasks(), listAccounts()]);
+    accountNames = accounts.map((a) => a.name);
     const lookup = buildAccountLookup(accounts);
     views = tasks
       .filter((t) => !t.done)
@@ -46,7 +51,10 @@ export default async function TasksPage() {
           Could not read the vault: {error}
         </div>
       ) : (
-        <TasksBoard tasks={views} today={today} meta={meta} />
+        <>
+          {canQuickAdd ? <QuickAddTask accounts={accountNames} /> : null}
+          <TasksBoard tasks={views} today={today} meta={meta} />
+        </>
       )}
     </Page>
   );

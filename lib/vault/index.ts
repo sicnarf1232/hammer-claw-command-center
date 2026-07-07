@@ -21,6 +21,7 @@ import {
 } from "./seriesDetect";
 import { indexRowFromPath } from "@/lib/meetingFormat";
 import { rosterFromDb } from "@/lib/peopleDb";
+import { tasksFromDb } from "@/lib/tasksDb";
 import {
   meetingNotesFromDb,
   meetingNoteByPathFromDb,
@@ -95,6 +96,8 @@ export async function getAllTasksFromVault(): Promise<Task[]> {
 }
 
 export async function getAllTasks(): Promise<Task[]> {
+  const fromDb = await tasksFromDb().catch(() => null);
+  if (fromDb) return fromDb;
   return getAllTasksFromVault();
 }
 
