@@ -22,6 +22,14 @@ ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "origin" text NOT NULL DEFAULT 'see
 ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "confirmed_by" text;
 ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "superseded_by" integer;
 
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "workstream" text;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "customer" text;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "created_field" text;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "scheduled" text;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "thread" text;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "completed" text;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "fields" jsonb;
+
 CREATE TABLE IF NOT EXISTS "task_emails" (
   "task_id" integer NOT NULL,
   "email_id" integer NOT NULL,

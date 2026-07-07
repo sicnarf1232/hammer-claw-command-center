@@ -56,6 +56,27 @@ export interface InSeries {
   sourcePath?: string;
   account?: string;
 }
+// A standalone vault task (getAllTasks): Jordan's real task list, living in
+// task files and account notes. Distinct from meeting action items, though a
+// dual-captured item can appear as both (same sourcePath:sourceLine).
+export interface InStandaloneTask {
+  sourcePath: string;
+  sourceLine: number;
+  title: string;
+  done: boolean;
+  due?: string;
+  priority?: string;
+  status?: string;
+  description?: string;
+  notes?: string;
+  customer?: string; // display name, or "internal"
+  workstream?: string;
+  created?: string;
+  scheduled?: string;
+  thread?: string;
+  completed?: string;
+  fields?: Record<string, string>;
+}
 
 export type Classification = "internal" | "customer" | "unknown";
 
@@ -109,6 +130,14 @@ export interface TaskRec {
   notes?: string;
   ownerKey?: string;
   accountSlug?: string;
+  // Vault task contract (filled from the standalone parse when available).
+  workstream?: string;
+  customer?: string;
+  created?: string;
+  scheduled?: string;
+  thread?: string;
+  completed?: string;
+  fields?: Record<string, string>;
 }
 export interface SeriesRec {
   name: string;
@@ -147,6 +176,7 @@ export function reconcile(input: {
   roster: InRosterEntry[];
   meetings: InMeeting[];
   series: InSeries[];
+  standaloneTasks?: InStandaloneTask[];
 }): ReconcileResult {
   const accounts: AccountRec[] = input.accounts.map((a) => ({
     slug: a.slug,
@@ -347,6 +377,49 @@ export function reconcile(input: {
       seriesName: m.series,
       attendeeKeys,
     });
+  }
+
+  // 5) Standalone vault tasks (Jordan's real task list). A dual-captured
+  // meeting action item shares its (sourcePath, sourceLine); the standalone
+  // parse is the richer record, so it enriches rather than duplicates.
+  const taskByKey = new Map(tasks.map((t) => [`${t.sourcePath}:${t.sourceLine}`, t]));
+  for (const st of input.standaloneTasks ?? []) {
+    const key = `${st.sourcePath}:${st.sourceLine}`;
+    const contract = {
+      workstream: st.workstream,
+      customer: st.customer,
+      created: st.created,
+      scheduled: st.scheduled,
+      thread: st.thread,
+      completed: st.completed,
+      fields: st.fields,
+    };
+    const existing = taskByKey.get(key);
+    if (existing) {
+      Object.assign(existing, contract);
+      if (!existing.accountSlug && st.customer && st.customer !== "internal") {
+        existing.accountSlug = slugFor(st.customer);
+      }
+      continue;
+    }
+    const rec: TaskRec = {
+      sourcePath: st.sourcePath,
+      sourceLine: st.sourceLine,
+      text: st.title,
+      done: st.done,
+      due: st.due,
+      priority: st.priority,
+      status: st.status,
+      isJordans: true, // standalone vault tasks are Jordan's by definition
+      description: st.description,
+      notes: st.notes,
+      ownerKey: selfKey ?? undefined,
+      accountSlug:
+        st.customer && st.customer !== "internal" ? slugFor(st.customer) : undefined,
+      ...contract,
+    };
+    tasks.push(rec);
+    taskByKey.set(key, rec);
   }
 
   const series: SeriesRec[] = input.series.map((s) => ({

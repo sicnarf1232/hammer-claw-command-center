@@ -292,6 +292,15 @@ export const tasks = pgTable(
     isJordans: boolean("is_jordans").notNull().default(false),
     description: text("description"),
     notes: text("notes"),
+    // Vault task contract fields (Phase 2): carried directly so app-created
+    // tasks need no source file, and seeded ones round-trip through export.
+    workstream: text("workstream"),
+    customer: text("customer"), // display name, or "internal"
+    createdField: text("created_field"),
+    scheduled: text("scheduled"),
+    thread: text("thread"),
+    completed: text("completed"),
+    fields: jsonb("fields").$type<Record<string, string>>(),
     sourcePath: text("source_path"),
     sourceLine: integer("source_line"),
     origin: text("origin").notNull().default("seed"), // seed | app | proposal

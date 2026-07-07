@@ -113,6 +113,17 @@ const STATEMENTS: string[] = [
     `alter table ${t} add column if not exists superseded_by integer`,
   ]),
 
+  // Full vault-task contract on the tasks table (Phase 2): standalone vault
+  // tasks join meeting action items in the seed, and app-created tasks need
+  // these fields directly (no source file to derive them from).
+  `alter table tasks add column if not exists workstream text`,
+  `alter table tasks add column if not exists customer text`,
+  `alter table tasks add column if not exists created_field text`,
+  `alter table tasks add column if not exists scheduled text`,
+  `alter table tasks add column if not exists thread text`,
+  `alter table tasks add column if not exists completed text`,
+  `alter table tasks add column if not exists fields jsonb`,
+
   // task_emails previously existed only in never-run migration 0003; the
   // quick-add thread linking (Phase 2) needs it for real.
   `create table if not exists task_emails (

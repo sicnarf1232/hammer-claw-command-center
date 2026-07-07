@@ -1,11 +1,17 @@
 import {
   getAllMeetings,
+  getAllTasks,
   getRoster,
   getSeriesList,
   type Series,
 } from "@/lib/vault";
 import { listAccounts } from "@/lib/accounts";
-import { reconcile, type ReconcileResult, type InMeeting } from "./reconcile";
+import {
+  reconcile,
+  type ReconcileResult,
+  type InMeeting,
+  type InStandaloneTask,
+} from "./reconcile";
 
 // IO layer for the cutover seed: gather the vault data, run the pure
 // reconciliation, and (optionally) write the result into the DB. The dry run
@@ -13,12 +19,36 @@ import { reconcile, type ReconcileResult, type InMeeting } from "./reconcile";
 // would create. Applying is gated on POSTGRES_URL and an explicit confirm.
 
 export async function gatherAndReconcile(): Promise<ReconcileResult> {
-  const [meetings, accounts, roster, seriesList] = await Promise.all([
+  const [meetings, accounts, roster, seriesList, vaultTasks] = await Promise.all([
     getAllMeetings(),
     listAccounts(),
     getRoster(),
     getSeriesList(),
+    getAllTasks(),
   ]);
+
+  // Jordan's standalone vault tasks (the Tasks page content). Meeting action
+  // items arrive separately below; reconcile dedupes dual-captured ones by
+  // (sourcePath, sourceLine).
+  const standaloneTasks: InStandaloneTask[] = vaultTasks.map((t) => ({
+    sourcePath: t.sourceFile,
+    sourceLine: t.sourceLine,
+    title: t.title,
+    done: t.done,
+    due: t.due,
+    priority: t.priority,
+    status: t.taskStatus,
+    description: t.description || undefined,
+    notes: t.notes || undefined,
+    customer:
+      t.customer === "internal" ? "internal" : t.customer?.display ?? undefined,
+    workstream: typeof t.workstream === "string" ? t.workstream : undefined,
+    created: t.created,
+    scheduled: t.scheduled,
+    thread: t.thread,
+    completed: t.completed,
+    fields: Object.keys(t.fields ?? {}).length ? t.fields : undefined,
+  }));
 
   const inMeetings: InMeeting[] = meetings.map((m) => ({
     sourcePath: m.path,
@@ -76,5 +106,6 @@ export async function gatherAndReconcile(): Promise<ReconcileResult> {
       sourcePath: s.path,
       account: undefined,
     })),
+    standaloneTasks,
   });
 }

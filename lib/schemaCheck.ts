@@ -79,8 +79,9 @@ export const EXPECTED_SCHEMA: Record<string, string[]> = {
   tasks: [
     "id", "meeting_id", "owner_person_id", "account_id", "text", "done",
     "due", "priority", "status", "is_jordans", "description", "notes",
-    "source_path", "source_line", "origin", "confirmed_by", "superseded_by",
-    "created_at", "updated_at",
+    "workstream", "customer", "created_field", "scheduled", "thread",
+    "completed", "fields", "source_path", "source_line", "origin",
+    "confirmed_by", "superseded_by", "created_at", "updated_at",
   ],
 
   // lib/firehose/schema.ts
