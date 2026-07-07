@@ -1,7 +1,7 @@
 import {
   getAllMeetings,
   getAllTasks,
-  getRoster,
+  getRosterFromVault,
   getSeriesList,
   type Series,
 } from "@/lib/vault";
@@ -24,7 +24,7 @@ export async function gatherAndReconcile(): Promise<ReconcileResult> {
   const [meetings, accounts, roster, seriesList, vaultTasks] = await Promise.all([
     getAllMeetings(),
     listAccountsFromVault(),
-    getRoster(),
+    getRosterFromVault(),
     getSeriesList(),
     getAllTasks(),
   ]);

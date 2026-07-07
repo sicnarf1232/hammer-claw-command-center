@@ -20,6 +20,7 @@ import {
   type DetectMeetingInput,
 } from "./seriesDetect";
 import { indexRowFromPath } from "@/lib/meetingFormat";
+import { rosterFromDb } from "@/lib/peopleDb";
 import { splitFrontmatter } from "./frontmatter";
 import { todayISO, isISODate, isOnOrBefore } from "@/lib/dates";
 import type {
@@ -120,11 +121,19 @@ export async function getOpenTasks(): Promise<Task[]> {
     });
 }
 
-export async function getRoster(): Promise<Roster> {
+// The VAULT roster parse. Used by the cutover seed and the export; app code
+// reads getRoster() below, which prefers the DB once seeded.
+export async function getRosterFromVault(): Promise<Roster> {
   if (!isVaultConfigured()) throw new VaultNotConfiguredError();
   const file = await getFile(ROSTER_PATH);
   if (!file) return new Map();
   return parseRoster(file.content);
+}
+
+export async function getRoster(): Promise<Roster> {
+  const fromDb = await rosterFromDb().catch(() => null);
+  if (fromDb) return fromDb;
+  return getRosterFromVault();
 }
 
 export interface ResolvedMeeting extends MeetingsIndexRow {

@@ -31,6 +31,7 @@ import {
   dbEditAccountNote,
   dbAddAccountContacts,
 } from "@/lib/accountsDb";
+import { dbSetPersonClassification } from "@/lib/peopleDb";
 
 // Mutations that write back into the vault as small, atomic git commits.
 // Each reads the latest file first (writeFile re-reads the SHA), never
@@ -162,6 +163,9 @@ export async function setPersonClassification(
 ): Promise<{ commitSha: string }> {
   const clean = name.trim();
   if (!clean) throw new WriteBackError("A person name is required.");
+  if (await cutoverActive()) {
+    return dbSetPersonClassification(clean, classification, account);
+  }
   const file = await getFile(ROSTER_PATH);
   if (!file) throw new WriteBackError(`Roster not found: ${ROSTER_PATH}`);
 
