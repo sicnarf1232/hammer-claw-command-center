@@ -19,8 +19,9 @@ import ThreadActions from "@/components/ThreadActions";
 import TriageBar from "@/components/TriageBar";
 import SenderSuggest from "@/components/SenderSuggest";
 import ThreadActionComposer from "@/components/ThreadActionComposer";
-import ThreadMessages, { type ThreadMsg } from "@/components/ThreadMessages";
+import ThreadMessages, { type ThreadMsg, type PersonRef } from "@/components/ThreadMessages";
 import { formatEmailBody } from "@/lib/emailFormat";
+import { personCardsForEmails, type PersonCard } from "@/lib/peopleDb";
 
 const JORDAN = "jordan.francis@merit.com";
 
@@ -60,10 +61,16 @@ export default async function ThreadPage({
     for (const r of m.recipients ?? []) if (r?.email) everyone.add(r.email.toLowerCase());
   }
 
+  // Contact cards for everyone on the thread (name-first chips with the
+  // address + title/account on hover).
+  const cards = await personCardsForEmails([...everyone]).catch(
+    () => new Map<string, PersonCard>(),
+  );
+
   // Conversation view: newest first, each message carrying its own reply set.
   const threadMsgs: ThreadMsg[] = [...messages]
     .reverse()
-    .map((m) => toThreadMsg(m, self));
+    .map((m) => toThreadMsg(m, self, cards));
 
   // Participant map: everyone on the thread (minus Jordan), split into external
   // (customer) and internal (Merit) with display names.
@@ -367,7 +374,6 @@ export default async function ThreadPage({
       <ThreadMessages
         messages={threadMsgs}
         subject={subject}
-        defaultAnchorId={latestInbound?.id ?? null}
         suggestedDocs={docSuggestions.map((d) => ({ id: d.id, title: d.title, docType: d.docType }))}
       />
     </div>
@@ -378,7 +384,26 @@ export default async function ThreadPage({
 // from its quoted history, internal/external, and the reply-all set anchored
 // to THIS message (inbound: reply to the sender + copy the rest; outbound:
 // follow up with the same recipients).
-function toThreadMsg(m: ThreadMessage, selfSet: Set<string>): ThreadMsg {
+function personRef(
+  email: string,
+  fallbackName: string | null | undefined,
+  cards: Map<string, PersonCard>,
+): PersonRef {
+  const card = cards.get(email);
+  return {
+    email,
+    name: card?.fullName ?? fallbackName?.trim() ?? email,
+    title: card?.title ?? null,
+    accountName: card?.accountName ?? null,
+    internal: isInternal(email) || card?.classification === "internal",
+  };
+}
+
+function toThreadMsg(
+  m: ThreadMessage,
+  selfSet: Set<string>,
+  cards: Map<string, PersonCard>,
+): ThreadMsg {
   const { main, quoted } = formatEmailBody(m);
   const recips = (m.recipients ?? [])
     .filter((r) => r?.email && r.role !== "from")
@@ -401,8 +426,8 @@ function toThreadMsg(m: ThreadMessage, selfSet: Set<string>): ThreadMsg {
     id: m.id,
     direction: m.direction === "outbound" ? "outbound" : "inbound",
     internal: from ? isInternal(from) : m.direction === "outbound",
-    fromLabel: m.fromName?.trim() || m.fromEmail || "Unknown",
-    toLine: recips.length ? recips.map((r) => r.name).join(", ") : null,
+    from: personRef(from ?? "", m.fromName, cards),
+    recipients: recips.map((r) => personRef(r.email, r.name, cards)),
     atLabel: fmt(m.sentAt ?? m.receivedAt ?? m.createdAt),
     bodyMain: main,
     bodyQuoted: quoted,

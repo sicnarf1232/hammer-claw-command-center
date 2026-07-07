@@ -226,6 +226,22 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // The pathway popover closes on outside click / Escape (it used to stay
+  // open until another explicit toggle).
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(false);
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menu]);
+
   async function threadAction(action: "flag" | "unflag" | "archive") {
     setBusy(true);
     try {

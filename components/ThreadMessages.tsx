@@ -3,10 +3,18 @@
 import { useState } from "react";
 import ReplyBox, { type SuggestedDoc } from "@/components/ReplyBox";
 
-// The thread conversation (2026-07-07 overhaul): newest message first, a clear
-// internal-vs-external distinction per message, quoted history collapsed
-// behind a toggle, and a Reply button on EVERY message that anchors the reply
-// box (recipients derive from the chosen message, not just the latest inbound).
+// The thread conversation (2026-07-07 overhaul, v2 after Jordan's review):
+// newest first; people render as NAME chips with the address + contact card on
+// hover/tap; Reply on a message enters FOCUS MODE where the thread collapses
+// to a compact rail on the left and the reply composer takes the main panel.
+
+export interface PersonRef {
+  name: string; // display name (falls back to the address)
+  email: string;
+  title: string | null;
+  accountName: string | null;
+  internal: boolean;
+}
 
 export interface ThreadMsgAttachment {
   id: number;
@@ -20,15 +28,14 @@ export interface ThreadMsgAttachment {
 export interface ThreadMsg {
   id: number;
   direction: "inbound" | "outbound";
-  internal: boolean; // sender is Merit-internal
-  fromLabel: string;
-  toLine: string | null;
+  internal: boolean;
+  from: PersonRef;
+  recipients: PersonRef[];
   atLabel: string;
   bodyMain: string;
   bodyQuoted: string | null;
   flagged: boolean;
   attachments: ThreadMsgAttachment[];
-  // Reply-all set anchored to THIS message.
   replyTo: string[];
   replyCc: string[];
 }
@@ -36,62 +43,146 @@ export interface ThreadMsg {
 export default function ThreadMessages({
   messages, // newest first
   subject,
-  defaultAnchorId,
   suggestedDocs,
   workstream,
 }: {
   messages: ThreadMsg[];
   subject: string;
-  defaultAnchorId: number | null;
   suggestedDocs: SuggestedDoc[];
   workstream?: string;
 }) {
-  const [anchorId, setAnchorId] = useState<number | null>(defaultAnchorId);
+  const [anchorId, setAnchorId] = useState<number | null>(null);
+  const anchor = messages.find((m) => m.id === anchorId) ?? null;
+
+  // FOCUS MODE: thread collapses to a rail; the reply owns the main panel.
+  if (anchor) {
+    return (
+      <div className="flex gap-4">
+        <aside className="hidden w-64 shrink-0 md:block">
+          <button
+            type="button"
+            onClick={() => setAnchorId(null)}
+            className="mb-2 w-full rounded-lg border border-border px-2.5 py-1.5 text-left text-xs text-fg/70 hover:text-fg"
+          >
+            ← Back to the full thread
+          </button>
+          <div className="space-y-1.5">
+            {messages.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setAnchorId(m.id)}
+                className={`block w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                  m.id === anchor.id
+                    ? "border-accent bg-accentSoft"
+                    : "border-border bg-surface hover:bg-surface2"
+                }`}
+                style={{
+                  borderLeft: `3px solid ${m.internal ? "var(--accent2, var(--accent))" : "var(--warm)"}`,
+                }}
+              >
+                <div className="flex items-baseline justify-between gap-1.5">
+                  <span className="truncate text-xs font-semibold text-fg">{m.from.name}</span>
+                  <span className="shrink-0 text-2xs text-muted">{m.atLabel}</span>
+                </div>
+                <div className="line-clamp-2 text-2xs text-muted">{m.bodyMain || "(no text)"}</div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => setAnchorId(null)}
+            className="mb-2 text-xs text-muted hover:text-fg md:hidden"
+          >
+            ← Back to the full thread
+          </button>
+          <div className="mb-3 rounded-xl border border-border bg-surface2 p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xs text-muted">
+                Replying to <span className="font-semibold text-fg">{anchor.from.name}</span>
+                {anchor.direction === "outbound" ? " (your message, same audience)" : ""}
+              </span>
+              <span className="shrink-0 text-2xs text-muted">{anchor.atLabel}</span>
+            </div>
+            <div className="mt-1.5 max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-fg/70">
+              {anchor.bodyMain || "(no text body)"}
+            </div>
+          </div>
+          <ReplyBox
+            key={anchor.id}
+            replyToId={anchor.id}
+            to={anchor.from.name}
+            subject={subject}
+            toList={anchor.replyTo}
+            ccList={anchor.replyCc}
+            suggestedDocs={suggestedDocs}
+            workstream={workstream}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-3">
       {messages.map((m) => (
-        <div key={m.id}>
-          <MessageCard
-            m={m}
-            isAnchor={anchorId === m.id}
-            onReply={() => setAnchorId(m.id)}
-          />
-          {anchorId === m.id ? (
-            <div className="mt-2 border-l-2 border-accent/40 pl-3">
-              <ReplyBox
-                key={m.id}
-                replyToId={m.id}
-                to={m.fromLabel}
-                subject={subject}
-                toList={m.replyTo}
-                ccList={m.replyCc}
-                suggestedDocs={suggestedDocs}
-                workstream={workstream}
-              />
-            </div>
-          ) : null}
-        </div>
+        <MessageCard key={m.id} m={m} onReply={() => setAnchorId(m.id)} />
       ))}
-      {anchorId === null && messages.length > 0 ? (
-        <p className="text-sm text-muted">
-          This thread has no inbound message to reply to. Use Reply on a sent
-          message to follow up with the same people.
-        </p>
-      ) : null}
     </div>
   );
 }
 
-function MessageCard({
-  m,
-  isAnchor,
-  onReply,
-}: {
-  m: ThreadMsg;
-  isAnchor: boolean;
-  onReply: () => void;
-}) {
+// Name-first person chip: the address lives underneath the name in the hover
+// card, together with title / account / profile link.
+function PersonChip({ p, muted = false }: { p: PersonRef; muted?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className="group/person relative inline-block"
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`cursor-pointer ${
+          muted ? "text-xs text-muted hover:text-fg" : "text-sm font-semibold text-fg"
+        } underline-offset-2 hover:underline`}
+      >
+        {p.name}
+      </button>
+      <span
+        className={`absolute left-0 top-full z-30 mt-1 w-60 rounded-xl border border-border bg-surface p-3 shadow-elevated ${
+          open ? "block" : "hidden group-hover/person:block"
+        }`}
+      >
+        <span className="block text-sm font-semibold text-fg">{p.name}</span>
+        {p.title ? <span className="mt-0.5 block text-xs text-muted">{p.title}</span> : null}
+        <span className="mt-1 block break-all font-mono text-2xs text-fg/70">{p.email}</span>
+        <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-2xs font-semibold ${
+              p.internal ? "bg-accentSoft text-accent2" : "text-warm"
+            }`}
+            style={p.internal ? undefined : { background: "var(--warm-soft, var(--surface-2))" }}
+          >
+            {p.internal ? "Merit" : p.accountName ?? "External"}
+          </span>
+          <a
+            href={`/people/${encodeURIComponent(p.name)}`}
+            className="text-2xs text-accent hover:underline"
+          >
+            View profile →
+          </a>
+        </span>
+      </span>
+    </span>
+  );
+}
+
+function MessageCard({ m, onReply }: { m: ThreadMsg; onReply: () => void }) {
   const [showQuoted, setShowQuoted] = useState(false);
   return (
     <article
@@ -102,8 +193,8 @@ function MessageCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm font-semibold text-fg">{m.fromLabel}</span>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <PersonChip p={m.from} />
             <span
               className={`shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold ${
                 m.internal ? "bg-accentSoft text-accent2" : "text-warm"
@@ -119,8 +210,16 @@ function MessageCard({
             ) : null}
             {m.flagged ? <span title="Flagged">🚩</span> : null}
           </div>
-          {m.toLine ? (
-            <div className="mt-0.5 truncate text-xs text-muted">to {m.toLine}</div>
+          {m.recipients.length ? (
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+              <span>to</span>
+              {m.recipients.map((r, i) => (
+                <span key={r.email} className="inline-flex items-center">
+                  <PersonChip p={r} muted />
+                  {i < m.recipients.length - 1 ? <span>,</span> : null}
+                </span>
+              ))}
+            </div>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -128,14 +227,10 @@ function MessageCard({
           <button
             type="button"
             onClick={onReply}
-            className={`rounded-lg border px-2 py-1 text-2xs font-semibold transition-colors ${
-              isAnchor
-                ? "border-transparent bg-primary text-primary-fg"
-                : "border-border text-fg/70 hover:border-accent hover:text-accent"
-            }`}
+            className="rounded-lg border border-border px-2 py-1 text-2xs font-semibold text-fg/70 transition-colors hover:border-accent hover:text-accent"
             title="Reply to this message (recipients follow this message)"
           >
-            {isAnchor ? "Replying" : "Reply"}
+            Reply
           </button>
         </div>
       </div>

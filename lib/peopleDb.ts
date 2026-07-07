@@ -180,3 +180,50 @@ export async function resolveReviewPerson(
     })
     .where(eq(peopleT.id, id));
 }
+
+// Contact-card data for a set of email addresses (thread views). Best-effort:
+// unknown addresses simply return no card.
+export interface PersonCard {
+  email: string;
+  fullName: string | null;
+  title: string | null;
+  phone: string | null;
+  accountName: string | null;
+  classification: string | null;
+}
+
+export async function personCardsForEmails(
+  emails: string[],
+): Promise<Map<string, PersonCard>> {
+  const out = new Map<string, PersonCard>();
+  const unique = Array.from(new Set(emails.map((e) => e.toLowerCase()))).filter(Boolean);
+  if (!unique.length || !(await cutoverActive())) return out;
+  try {
+    const rows = await getDb()
+      .select({
+        email: peopleT.email,
+        fullName: peopleT.fullName,
+        title: peopleT.title,
+        phone: peopleT.phone,
+        classification: peopleT.classification,
+        accountName: accountsT.name,
+      })
+      .from(peopleT)
+      .leftJoin(accountsT, eq(peopleT.accountId, accountsT.id))
+      .where(sql`lower(${peopleT.email}) = any(${unique})`);
+    for (const r of rows) {
+      if (!r.email) continue;
+      out.set(r.email.toLowerCase(), {
+        email: r.email.toLowerCase(),
+        fullName: r.fullName,
+        title: r.title,
+        phone: r.phone,
+        accountName: r.accountName ?? null,
+        classification: r.classification,
+      });
+    }
+  } catch {
+    // people table absent pre-seed
+  }
+  return out;
+}
