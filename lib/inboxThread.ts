@@ -1,7 +1,6 @@
-// Thread view data assembly: everything the inbox thread page (and the
-// /api/inbox/thread-data route) needs to render a conversation, gathered in
-// one place and returned as a JSON-serializable payload.
-import type { ThreadMsg, PersonRef } from "@/components/ThreadMessages";
+// Thread view data assembly: everything the /api/inbox/thread-data route
+// (and the ThreadDetail panel it feeds) needs to render a conversation,
+// gathered in one place and returned as a JSON-serializable payload.
 import { getThread, accountNames, type ThreadMessage } from "@/lib/firehose/read";
 import { markRead } from "@/lib/firehose/actions";
 import { personCardsForEmails, type PersonCard } from "@/lib/peopleDb";
@@ -14,6 +13,38 @@ import { aiConfigured } from "@/lib/ai";
 import { formatEmailBody } from "@/lib/emailFormat";
 
 const JORDAN = "jordan.francis@merit.com";
+
+export interface PersonRef {
+  name: string; // display name (falls back to the address)
+  email: string;
+  title: string | null;
+  accountName: string | null;
+  internal: boolean;
+}
+
+export interface ThreadMsgAttachment {
+  id: number;
+  fileName: string | null;
+  sizeBytes: number | null;
+  isImage: boolean;
+  isPdf: boolean;
+  hasBlob: boolean;
+}
+
+export interface ThreadMsg {
+  id: number;
+  direction: "inbound" | "outbound";
+  internal: boolean;
+  from: PersonRef;
+  recipients: PersonRef[];
+  atLabel: string;
+  bodyMain: string;
+  bodyQuoted: string | null;
+  flagged: boolean;
+  attachments: ThreadMsgAttachment[];
+  replyTo: string[];
+  replyCc: string[];
+}
 
 export interface ThreadParticipant {
   email: string;

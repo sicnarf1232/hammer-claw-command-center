@@ -8,8 +8,7 @@ import { INSERT_REPLY_EVENT } from "@/components/InboxBrain";
 // Self-contained thread detail panel (FIGMA FIX 3 + FIX 5): fetches
 // /api/inbox/thread-data and renders header, participants, AI summary,
 // triage pills, unmapped-sender line, suggested attachments, the message
-// list, and a pinned reply composer. Types + PersonChip are local copies
-// (ThreadMessages.tsx is scheduled for deletion).
+// list, and a pinned reply composer.
 
 interface PersonRef {
   name: string;
@@ -580,8 +579,7 @@ function ParticipantStrip({
   );
 }
 
-// Local copy of the name-first person chip (hover contact card). Kept in this
-// file on purpose: ThreadMessages.tsx will be deleted in a later step.
+// Name-first person chip with a hover contact card.
 function PersonChip({ p, muted = false }: { p: PersonRef; muted?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
