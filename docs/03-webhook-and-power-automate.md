@@ -1,5 +1,10 @@
 # 03 — Webhook + Power Automate (the email keystone)
 
+> **Correction (2026-07-06):** any "create draft" language below is obsolete.
+> Flow B is a **direct send** as Jordan (verified live 2026-06-16); the app UI
+> says "Send reply" and means it. Everything sent has been reviewed by Jordan
+> in the app's editor first. See docs/HANDOFF-2026-07.md section 6.
+
 This is the highest-leverage integration and the one most likely to break silently if the contract is loose. Pin it down here.
 
 ## Why Power Automate, not Graph API

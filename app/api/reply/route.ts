@@ -24,9 +24,10 @@ export const dynamic = "force-dynamic";
 
 // Two modes:
 //   mode "generate" -> AI-drafts a reply body, returns it for Jordan to edit.
-//   mode "draft"    -> sends a create_draft intent to Flow B (Outlook draft).
-// Auto-send is intentionally not exposed here: the app only ever creates drafts
-// that Jordan reviews and sends from Outlook (docs/03).
+//   mode "draft"    -> SENDS the reply via Flow B (a direct send, verified live
+//                      2026-06-16; the mode name is legacy). Jordan has already
+//                      reviewed the body in the editor; nothing is auto-sent
+//                      without him pressing Send.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body || typeof body.id !== "number") {
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // mode === "draft": create an Outlook draft via Flow B.
+  // mode === "draft" (legacy name): send the reply via Flow B.
   if (!canDraftAs(workstream as Workstream)) {
     const identity = identityFor(workstream as Workstream);
     return NextResponse.json(
