@@ -974,3 +974,77 @@ export async function runInboxAgent(input: InboxAgentInput): Promise<{
     modelUsed,
   };
 }
+
+// ---- Price-import column mapping (Phase 3). The fast model PROPOSES how a
+// spreadsheet's columns map onto agreement fields, with per-field confidence;
+// Jordan confirms or fixes the mapping in the review UI before anything is
+// written, and the confirmed mapping is saved as a reusable ruleset.
+
+export interface ImportMappingProposal {
+  columns: Partial<
+    Record<
+      "part_number" | "unit_price" | "account" | "min_qty" | "effective_date" | "expires",
+      string | null
+    >
+  >;
+  confidence: Record<string, number>; // field -> 0..1
+  originGuess: "contract" | "legacy" | "negotiated" | "catalog-override";
+  modelUsed: string;
+}
+
+export async function proposeImportMapping(
+  headers: string[],
+  sampleRows: string[][],
+): Promise<ImportMappingProposal> {
+  const system = [
+    "You map spreadsheet columns for a medical OEM price-agreement import.",
+    "Target fields: part_number (SKU/item number), unit_price (per-unit price), account (customer name, only if a column carries it), min_qty (quantity break/tier), effective_date, expires.",
+    "Use the EXACT header text for matches; null when no column fits. Do not guess wildly: low confidence beats a wrong match.",
+    'Output ONLY JSON: {"columns":{"part_number":"Item #","unit_price":"Price","account":null,"min_qty":null,"effective_date":null,"expires":null},"confidence":{"part_number":0.95,"unit_price":0.9},"origin_guess":"legacy"}',
+    "origin_guess: contract (a signed pricing contract), legacy (grandfathered/old price list), negotiated (one-off negotiated), catalog-override.",
+  ].join("\n");
+  const user = [
+    `Headers: ${JSON.stringify(headers)}`,
+    "Sample rows:",
+    ...sampleRows.slice(0, 5).map((r) => JSON.stringify(r)),
+    "Return the JSON now.",
+  ].join("\n");
+
+  const res = await client().messages.create({
+    model: fastModel(),
+    max_tokens: 500,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+  const raw = parseJsonObject(text);
+  const cols = (raw.columns ?? {}) as Record<string, unknown>;
+  const norm = (v: unknown): string | null =>
+    typeof v === "string" && headers.some((h) => h.trim().toLowerCase() === v.trim().toLowerCase())
+      ? v
+      : null;
+  const originGuess =
+    raw.origin_guess === "contract" || raw.origin_guess === "negotiated" || raw.origin_guess === "catalog-override"
+      ? raw.origin_guess
+      : "legacy";
+  return {
+    columns: {
+      part_number: norm(cols.part_number),
+      unit_price: norm(cols.unit_price),
+      account: norm(cols.account),
+      min_qty: norm(cols.min_qty),
+      effective_date: norm(cols.effective_date),
+      expires: norm(cols.expires),
+    },
+    confidence:
+      raw.confidence && typeof raw.confidence === "object"
+        ? (raw.confidence as Record<string, number>)
+        : {},
+    originGuess,
+    modelUsed: res.model,
+  };
+}

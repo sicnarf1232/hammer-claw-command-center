@@ -2,6 +2,23 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 3 — price agreements + ruleset importer (2026-07-07)
+
+- **account_price_agreements**: per-account, per-part pricing with quantity
+  tiers (min_qty), effective windows, and provenance (origin contract | legacy
+  | negotiated | catalog-override; grandfathered = expires null + origin
+  legacy; confirmed_by stamped; superseded_by chains replacements).
+- **Importer as engine + rulesets**: upload CSV/XLSX, the fast model proposes
+  a column mapping with per-field confidence, Jordan confirms or fixes it in
+  the review UI, and the confirmed mapping saves as a named ruleset keyed by
+  the header signature, so the next upload from the same source auto-applies.
+  Account is a mappable column AND an upload-time picker; the picker wins.
+- **Nothing is written without confirmation**: /api/import/commit is the only
+  write path, it re-parses the stored file server-side, supersedes live
+  same-tier rows, and records an import_batches audit row.
+- /pricing page: agreements grouped by account with tier/expiry/origin and
+  superseded/expired strikethrough. Engine pure + tested (243 total).
+
 ## Phase 2 — THE FLIP, step 8 of 8 (2026-07-07)
 
 **The app database is now the source of truth.** Executed after Jordan ran

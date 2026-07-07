@@ -43,6 +43,7 @@ const SECONDARY: Item[] = [
   { href: "/tasks", label: "Tasks", Icon: TasksIcon },
   { href: "/contacts", label: "Contacts", Icon: AccountsIcon },
   { href: "/quote", label: "Quote", Icon: QuoteIcon },
+  { href: "/pricing", label: "Pricing", Icon: QuoteIcon },
   { href: "/library", label: "Library", Icon: LibraryIcon },
 ];
 const BOTTOM: Item[] = [
