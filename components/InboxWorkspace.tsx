@@ -94,6 +94,19 @@ function Workspace({
   const requested = useRef<Set<string>>(new Set());
   const [triaging, setTriaging] = useState(false);
 
+  // The thread list rail gives up room when the Ask Brain panel is open.
+  const [brainOpen, setBrainOpen] = useState(true);
+  useEffect(() => {
+    const read = () => {
+      try {
+        setBrainOpen(localStorage.getItem("brain-open") !== "false");
+      } catch {}
+    };
+    read();
+    window.addEventListener("hc-brain-sync", read);
+    return () => window.removeEventListener("hc-brain-sync", read);
+  }, []);
+
   useEffect(() => {
     const pending = threads
       .filter((t) => !t.summary && !requested.current.has(t.key))
@@ -138,11 +151,15 @@ function Workspace({
     <div className="flex gap-4">
       <FolderSidebar folders={folders} folder={folder} collapsed={hasSelection} />
 
-      {/* Thread list: full width panel normally, 340px rail beside the open
-          thread. On mobile the open thread takes over and the list hides. */}
+      {/* Thread list: full width panel normally, a fixed rail beside the open
+          thread (340px, or 280px when the Ask Brain panel is open). On mobile
+          the open thread takes over and the list hides. */}
       <div
         className={hasSelection ? "hidden min-w-0 shrink-0 md:block" : "min-w-0 flex-1"}
-        style={{ width: hasSelection ? 340 : undefined, transition: "width .22s ease" }}
+        style={{
+          width: hasSelection ? (brainOpen ? 280 : 340) : undefined,
+          transition: "width .22s ease",
+        }}
       >
         {/* Mobile folder chips */}
         <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 md:hidden">

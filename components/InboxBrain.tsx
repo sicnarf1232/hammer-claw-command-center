@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { ChevronLeftIcon, SparkIcon } from "./icons";
 
 // The inbox brain: ONE persistent chat that lives across the whole Inbox tab
 // (list, folders, and threads). State survives navigation via the inbox layout
@@ -22,6 +23,7 @@ interface BrainState {
 }
 
 const STORE_KEY = "hc-inbox-brain";
+const OPEN_KEY = "brain-open";
 const SYNC_EVENT = "hc-brain-sync";
 export const INSERT_REPLY_EVENT = "hc-insert-reply";
 
@@ -47,26 +49,45 @@ function activeThreadKeyFromPath(pathname: string): string | null {
 
 export default function InboxBrain({
   onUseAsReply,
+  collapsible = false,
 }: {
   // Focus mode passes a direct callback; the layout panel dispatches the
   // insert event that the thread view listens for.
   onUseAsReply?: (text: string) => void;
+  // The layout panel collapses to a 36px icon strip; focus mode stays fixed.
+  collapsible?: boolean;
 }) {
   const pathname = usePathname();
   const activeKey = activeThreadKeyFromPath(pathname ?? "");
   const [state, setState] = useState<BrainState>({ history: [], context: [] });
+  const [open, setOpen] = useState(true);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Hydrate + stay in sync with the other mounted instance.
+  // Hydrate + stay in sync with the other mounted instance and the nav toggle.
   useEffect(() => {
-    setState(loadState());
-    const sync = () => setState(loadState());
+    const sync = () => {
+      setState(loadState());
+      if (collapsible) {
+        try {
+          setOpen(localStorage.getItem(OPEN_KEY) !== "false");
+        } catch {}
+      }
+    };
+    sync();
     window.addEventListener(SYNC_EVENT, sync);
     return () => window.removeEventListener(SYNC_EVENT, sync);
-  }, []);
+  }, [collapsible]);
+
+  function setOpenState(next: boolean) {
+    setOpen(next);
+    try {
+      localStorage.setItem(OPEN_KEY, next ? "true" : "false");
+    } catch {}
+    window.dispatchEvent(new CustomEvent(SYNC_EVENT));
+  }
 
   function update(next: BrainState) {
     setState(next);
@@ -138,17 +159,52 @@ export default function InboxBrain({
     }
   }
 
-  return (
-    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-border bg-surface">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className="eyebrow text-muted">Inbox brain</span>
+  if (collapsible && !open) {
+    return (
+      <div
+        className="flex h-full min-h-0 flex-col items-center rounded-2xl border border-border bg-surface py-2"
+        style={{ width: 36, transition: "width .22s ease" }}
+      >
         <button
           type="button"
-          onClick={newChat}
-          className="rounded-lg border border-border px-2 py-0.5 text-2xs text-fg/70 hover:text-fg"
+          onClick={() => setOpenState(true)}
+          title="Open Ask Brain"
+          aria-label="Open Ask Brain"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-accent hover:bg-accentSoft"
         >
-          New chat
+          <SparkIcon className="h-4 w-4" />
         </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex h-full min-h-0 flex-col rounded-2xl border border-border bg-surface"
+      style={collapsible ? { width: 300, transition: "width .22s ease" } : undefined}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <span className="eyebrow text-muted">Ask Brain</span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={newChat}
+            className="rounded-lg border border-border px-2 py-0.5 text-2xs text-fg/70 hover:text-fg"
+          >
+            New chat
+          </button>
+          {collapsible ? (
+            <button
+              type="button"
+              onClick={() => setOpenState(false)}
+              title="Collapse Ask Brain"
+              aria-label="Collapse Ask Brain"
+              className="flex h-6 w-6 items-center justify-center rounded-lg text-muted hover:bg-surface2 hover:text-fg"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {/* Context threads the brain is holding, plus the open one. */}
@@ -224,26 +280,31 @@ export default function InboxBrain({
                 ))}
               </div>
             ) : null}
-            <div
-              className={`inline-block max-w-[95%] whitespace-pre-wrap rounded-xl px-3 py-2 text-left text-xs leading-relaxed ${
-                m.role === "user"
-                  ? "bg-primary text-primary-fg"
-                  : "border border-border bg-surface2 text-fg/85"
-              }`}
-            >
-              {m.content}
-            </div>
-            {m.role === "assistant" && m.content ? (
-              <div className="mt-1">
-                <button
-                  type="button"
-                  onClick={() => insert(m.content)}
-                  className="text-2xs font-semibold text-accent hover:underline"
-                >
-                  Insert into reply →
-                </button>
+            {m.role === "user" ? (
+              <div className="inline-block max-w-[95%] whitespace-pre-wrap rounded-xl bg-hi px-3 py-2 text-left text-xs leading-relaxed text-fg">
+                {m.content}
               </div>
-            ) : null}
+            ) : (
+              <div className="flex items-start gap-1.5">
+                <SparkIcon className="mt-2 h-3.5 w-3.5 shrink-0 text-accent" />
+                <div className="min-w-0">
+                  <div className="inline-block max-w-full whitespace-pre-wrap rounded-xl bg-accentSoft px-3 py-2 text-left text-xs leading-relaxed text-fg/85">
+                    {m.content}
+                  </div>
+                  {m.content ? (
+                    <div className="mt-1">
+                      <button
+                        type="button"
+                        onClick={() => insert(m.content)}
+                        className="text-2xs font-semibold text-accent hover:underline"
+                      >
+                        Insert into reply →
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
           </div>
         ))}
         {busy ? <div className="text-xs text-muted">Thinking…</div> : null}
@@ -275,7 +336,7 @@ export default function InboxBrain({
             disabled={busy || !input.trim()}
             className="btn-primary text-xs disabled:opacity-60"
           >
-            Send
+            Ask
           </button>
         </div>
       </div>
