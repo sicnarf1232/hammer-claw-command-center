@@ -2,6 +2,45 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 2 — DB cutover, steps 1-7 of 8 (2026-07-07)
+
+The app now reads accounts, people/roster, meetings, series, and tasks from
+the DB once seeded (count-gated dual-read; vault fallback before that), and
+every app write lands in the DB with `origin='app'` provenance. **Step 8 (the
+VAULT_MODE readonly default + CLAUDE.md rule 2 flip) is staged but NOT
+executed**; until then vault writes remain possible but app edits already
+prefer the DB.
+
+- **VAULT_MODE + one write choke point** in lib/github.ts; only
+  `writeFileForExport` bypasses readonly. Provenance columns
+  (origin/confirmed_by/superseded_by) on the five cutover tables.
+- **Seed is a diff/upsert** (pure `planTable`, tested): only origin='seed'
+  rows are updated/removed; app/proposal rows always survive; unchanged rows
+  keep ids (firehose FKs stay valid). Critical fix folded in: the old seed
+  imported only meeting action items; **getAllTasks (Jordan's real task list)
+  now seeds too**, with the full vault task contract as new tasks columns.
+- **Content-in-DB**: meeting and series rows store their full markdown; the
+  existing parsers run on rows, so fidelity is identical. `source_path` is a
+  stable identity; edits/reclassify update content + columns, never the path
+  (the export computes placement).
+- **Proposals execute into the DB** (origin 'proposal'), syncing Jordan's
+  action items into tasks; series updates merge against a fresh DB read.
+- **DB-first task creation**: POST /api/tasks/create, quick-add on /tasks,
+  and a real create-task form in the thread composer (thread-linked via
+  task_emails + task_meta). Identity rule keeps existing task_meta/day-plan
+  keys with NO remap (seeded rows keep sourceFile:sourceLine; app rows use
+  db:tasks:<id>). vault_tasks snapshot + sync-vault cron retired.
+- **Who-is-who review queue** on /contacts (needsReview people; classify or
+  dismiss via /api/people/review).
+- **Deliberate export** (/api/export + Settings card): accounts render from
+  DB (round-trip tested), meetings/series write stored markdown, app tasks
+  render into one-writer Command-Center-Tasks.md, seeded task done-states
+  flip in place, index rebuilds. Unchanged files skipped.
+- **Quick wins** from the 2026-07-07 review: mark-done circle contrast;
+  notification bell with unseen count.
+- Tests 229 passing (30 files). Operator step before the flip: re-run
+  `POST /api/cutover/apply {confirm:true}` so rows carry content + all tasks.
+
 ## Phase 1 — stabilize (2026-07-06)
 
 Gating guarantee: **no AI output reaches the vault without approval, and
