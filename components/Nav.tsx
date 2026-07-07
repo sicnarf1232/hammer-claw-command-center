@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentType } from "react";
 import {
   DashboardIcon,
@@ -107,16 +107,29 @@ function Dot({ kind }: { kind: "accent" | "danger" }) {
   );
 }
 
+function CountBadge({ count }: { count: number }) {
+  return (
+    <span
+      className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none text-white"
+      style={{ background: "var(--accent)" }}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 function NavItem({
   item,
   active,
   collapsed,
   onNavigate,
+  badge,
 }: {
   item: Item;
   active: boolean;
   collapsed: boolean;
   onNavigate?: () => void;
+  badge?: number;
 }) {
   return (
     <Link
@@ -139,7 +152,11 @@ function NavItem({
     >
       <span className="relative flex items-center">
         <item.Icon className="h-[18px] w-[18px] shrink-0" />
-        {collapsed && item.dot ? (
+        {collapsed && badge ? (
+          <span className="absolute -right-2 -top-1.5">
+            <CountBadge count={badge} />
+          </span>
+        ) : collapsed && item.dot ? (
           <span className="absolute -right-1 -top-1">
             <Dot kind={item.dot} />
           </span>
@@ -148,10 +165,40 @@ function NavItem({
       {!collapsed ? (
         <>
           <span className="flex-1">{item.label}</span>
-          {item.dot ? <Dot kind={item.dot} /> : null}
+          {badge ? <CountBadge count={badge} /> : item.dot ? <Dot kind={item.dot} /> : null}
         </>
       ) : null}
     </Link>
+  );
+}
+
+// Bottom-group action: opens the inbox brain panel from anywhere. Sets the
+// shared localStorage flag, pings listeners, and routes to /inbox if needed.
+function BrainToggle({ collapsed }: { collapsed: boolean }) {
+  const router = useRouter();
+
+  function openBrain() {
+    try {
+      localStorage.setItem("brain-open", "true");
+    } catch {}
+    window.dispatchEvent(new CustomEvent("hc-brain-sync"));
+    if (!window.location.pathname.startsWith("/inbox")) router.push("/inbox");
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={openBrain}
+      title="Open the inbox brain"
+      aria-label="Open the inbox brain"
+      className={`flex w-full items-center rounded-[11px] py-2.5 text-sm font-semibold transition-colors hover:bg-surface2 ${
+        collapsed ? "justify-center px-0" : "gap-3 px-3"
+      }`}
+      style={{ color: "var(--ink-2)" }}
+    >
+      <SparkIcon className="h-[18px] w-[18px] shrink-0" />
+      {!collapsed ? <span>Ask Brain</span> : null}
+    </button>
   );
 }
 
@@ -159,6 +206,28 @@ export default function Nav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // mobile "More" drawer
   const [collapsed, setCollapsed] = useState(false);
+  const [inboxCount, setInboxCount] = useState(0);
+
+  // Poll the inbox attention count for the nav badge (same cadence as the
+  // notification bell).
+  useEffect(() => {
+    let alive = true;
+    async function poll() {
+      try {
+        const res = await fetch("/api/inbox/counts");
+        const data = await res.json().catch(() => ({}));
+        if (alive && typeof data.attention === "number") setInboxCount(data.attention);
+      } catch {
+        // leave the last known count
+      }
+    }
+    poll();
+    const id = setInterval(poll, 120_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   // Restore collapse preference.
   useEffect(() => {
@@ -224,7 +293,13 @@ export default function Nav() {
 
         <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5">
           {PRIMARY.map((it) => (
-            <NavItem key={it.href} item={it} active={isActive(pathname, it.href)} collapsed={collapsed} />
+            <NavItem
+              key={it.href}
+              item={it}
+              active={isActive(pathname, it.href)}
+              collapsed={collapsed}
+              badge={it.href === "/inbox" && inboxCount > 0 ? inboxCount : undefined}
+            />
           ))}
 
           <div className={`my-2 ${collapsed ? "mx-1" : "mx-1"}`}>
@@ -245,6 +320,7 @@ export default function Nav() {
             <NavItem key={it.href} item={it} active={isActive(pathname, it.href)} collapsed={collapsed} />
           ))}
           <ThemeToggle collapsed={collapsed} />
+          <BrainToggle collapsed={collapsed} />
         </div>
       </aside>
 
@@ -308,6 +384,7 @@ export default function Nav() {
               ))}
               <div className="mt-1 border-t border-border pt-1">
                 <ThemeToggle collapsed={false} />
+                <BrainToggle collapsed={false} />
               </div>
             </div>
           </div>
