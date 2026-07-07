@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { identityFor } from "@/lib/workstreams";
+import { isWorkstream } from "@/lib/vault/types";
 
 // Reply from a thread via Flow B (Power Automate). The body is a rich WYSIWYG
 // editor: "Draft with AI" fills it with formatted HTML in Jordan's voice, and the
@@ -24,6 +26,7 @@ export default function ReplyBox({
   toList,
   ccList,
   suggestedDocs = [],
+  workstream = "merit",
 }: {
   replyToId: number;
   to: string;
@@ -31,6 +34,10 @@ export default function ReplyBox({
   toList: string[];
   ccList: string[];
   suggestedDocs?: SuggestedDoc[];
+  // Sending identity. Only merit has a from-address today (canDraftAs guards
+  // server-side); the prop exists so a Sloan address is a page-level change,
+  // not a component rewrite.
+  workstream?: string;
 }) {
   const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
@@ -96,7 +103,7 @@ export default function ReplyBox({
         body: JSON.stringify({
           id: replyToId,
           mode: "generate",
-          workstream: "merit",
+          workstream,
           instructions: steer.trim() || undefined,
         }),
       });
@@ -129,7 +136,7 @@ export default function ReplyBox({
         body: JSON.stringify({
           id: replyToId,
           mode: "draft",
-          workstream: "merit",
+          workstream,
           bodyHtml: html,
           subject: `RE: ${subject}`,
           to: recipients.to,
@@ -260,7 +267,10 @@ export default function ReplyBox({
       {error ? <div className="mt-2 text-xs text-danger">{error}</div> : null}
       <div className="mt-3 flex items-center justify-between">
         <span className="text-2xs text-muted">
-          Sends as Jordan.Francis@merit.com · {recipCount} recipient
+          Sends as{" "}
+          {(isWorkstream(workstream) ? identityFor(workstream).email : null) ??
+            "Jordan.Francis@merit.com"}{" "}
+          · {recipCount} recipient
           {recipCount === 1 ? "" : "s"}
         </span>
         <button type="button" onClick={send} disabled={busy !== ""} className="btn-primary text-sm">
