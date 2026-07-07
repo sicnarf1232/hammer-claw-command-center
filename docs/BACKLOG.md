@@ -6,22 +6,9 @@ plan (and delete it here) when it gets scheduled.
 
 ## From the 2026-07-07 visual review (Main St. live pass)
 
-### 1. Inbox + dashboard email overhaul (medium-large)
-
-One design across the dashboard email section, `components/InboxList.tsx`,
-and the thread page. From the 2026-07-07 reviews:
-
-- **Hierarchy**: a row leads with the SENDER in big bold type; the sender is
-  rarely the point. Lead with why it matters (linked project/opportunity/
-  past-due task, triage pathway); sender secondary. Richer post-Phase-2
-  (task_meta.linked_thread_key + task_emails are DB-queryable).
-- **Thread order**: newest message on top.
-- **Internal vs external**: a clear visual distinction between Merit-internal
-  participants/messages and customer ones within a thread.
-- **Reply to a specific message**, not just the whole thread (ReplyBox
-  currently anchors to the latest inbound only; let any message be the
-  reply anchor).
-- **Formatting cleanup** of rendered email bodies.
+(Item 1, the inbox + dashboard email overhaul, shipped 2026-07-07: subject-led
+rows with linked-task context, newest-first threads, Merit/Customer message
+distinction, per-message reply anchoring, quoted-history collapse.)
 
 ### 2. Build Your Day: editable plan + timer + AI day shaping (large, own phase)
 
