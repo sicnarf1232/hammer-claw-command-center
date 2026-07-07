@@ -1,5 +1,7 @@
 import VoiceSettings from "@/components/VoiceSettings";
+import ExportCard from "@/components/ExportCard";
 import { getVoiceProfile, EMPTY_VOICE } from "@/lib/voice";
+import { cutoverActive } from "@/lib/dbSource";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,6 +19,7 @@ export default async function SettingsPage() {
         </p>
       </header>
       <VoiceSettings initial={profile} />
+      {(await cutoverActive().catch(() => false)) ? <ExportCard /> : null}
     </div>
   );
 }
