@@ -78,3 +78,13 @@ in Mountain.
 
 Keyword search misses "that email about the sterilization delay" phrasing.
 Embeddings over emails.body_text (pgvector on Neon) as a second search tool.
+
+## From the Figma fixes (2026-07-07)
+
+### 12. Create task from thread in the new detail panel (small)
+
+The old full-page thread route had ThreadActionComposer with a create-task
+button (DB task + task_emails link via emailIdsForThreadKey). The panel-based
+ThreadDetail follows the Figma spec, which does not include it, so the
+affordance is gone. Add a small "Create task" action to the detail panel
+that posts to /api/tasks/create with the thread linked.

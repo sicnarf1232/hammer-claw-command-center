@@ -2,6 +2,33 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Figma UX fixes 1-6: panel-based inbox (2026-07-07)
+
+Spec: docs/FIGMA-FIXES-2026-07.md. Six fixes, shipped as six commits.
+
+- **Panel-based inbox (FIX 1)**: selecting a thread is state, not navigation.
+  `/inbox?selected=<key>` drives a three-panel workspace: folder rail
+  collapses 186px to 28px, thread list narrows to 340px (280px with the brain
+  open), and the detail slides in. `/inbox/[key]` now redirects, so old links
+  and bookmarks still land on the right thread.
+- **Collapsible Ask Brain (FIX 2)**: 300px chat panel or 36px icon strip,
+  synced with the nav toggle via localStorage `brain-open` and the
+  `hc-brain-sync` event. User messages right on the raised surface, AI
+  messages left on sea-glass with a spark icon.
+- **Thread detail structure (FIX 3)** in `components/ThreadDetail.tsx`:
+  sticky header, internal/external participant strip, collapsible AI summary,
+  triage pills, unmapped-sender line, suggested attachments, clamped messages
+  with a signature/quoted-text toggle, pinned reply composer with an
+  external-recipient warning.
+- **Chip hierarchy (FIX 4)** and **unmapped-sender treatment (FIX 5)**
+  applied across list and detail; **nav structure (FIX 6)** with a live
+  inbox count badge.
+- Retired: `ThreadMessages.tsx` (old full-page cards and focus mode),
+  `TriageBar`, `ThreadActions`, `SenderSuggest`, `ThreadActionComposer`,
+  `crossCustomerPlaybook` (all only reachable from the deleted page). Known
+  follow-up: create-task-from-thread lived in ThreadActionComposer and is
+  not yet in the new panel; on the backlog.
+
 ## Phase 3 — price agreements + ruleset importer (2026-07-07)
 
 - **account_price_agreements**: per-account, per-part pricing with quantity
