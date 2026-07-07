@@ -151,6 +151,89 @@ export async function threadCounts(): Promise<{
   };
 }
 
+// Resolve a thread key ("t:<threadId>" | "m:<id>") to its message ids, so
+// key-addressable actions (inbox hover actions, task send-update) can act on a
+// whole thread without shipping ids to the client.
+export async function emailIdsForThreadKey(key: string): Promise<number[]> {
+  if (!dbConfigured()) return [];
+  if (key.startsWith("m:")) {
+    const id = Number(key.slice(2));
+    return Number.isInteger(id) ? [id] : [];
+  }
+  if (key.startsWith("t:")) {
+    const threadId = key.slice(2);
+    const rows = await getDb()
+      .select({ id: emails.id })
+      .from(emails)
+      .where(eq(emails.threadId, threadId));
+    return rows.map((r) => r.id);
+  }
+  return [];
+}
+
+// The slice of an email row pickReplyTarget needs (pure; also test-friendly).
+export interface ReplyTargetMessage {
+  id: number;
+  direction: string;
+  messageId: string | null;
+  fromEmail: string | null;
+  toAddrs: string[] | null;
+  cc: string[] | null;
+  subject: string | null;
+  sentAt: Date | null;
+  receivedAt: Date | null;
+}
+
+export interface ReplyTarget {
+  emailId: number;
+  messageId: string;
+  subject: string | null;
+  to: string[];
+  cc: string[];
+}
+
+// Pure: pick the newest INBOUND message with a message id as the reply anchor,
+// and derive the reply-all recipient set (sender + other recipients, minus the
+// sending identity itself). Returns null when the thread has nothing to anchor
+// a reply to.
+export function pickReplyTarget(
+  messages: ReplyTargetMessage[],
+  selfEmail: string,
+): ReplyTarget | null {
+  const timeOfMsg = (m: ReplyTargetMessage) =>
+    (m.sentAt ?? m.receivedAt)?.getTime() ?? 0;
+  const anchor = messages
+    .filter((m) => m.direction === "inbound" && m.messageId)
+    .sort((a, b) => timeOfMsg(a) - timeOfMsg(b))
+    .pop();
+  if (!anchor || !anchor.fromEmail) return null;
+
+  const self = selfEmail.toLowerCase();
+  const seen = new Set<string>([self]);
+  const add = (list: string[], addr: string | null | undefined) => {
+    const a = (addr ?? "").trim();
+    if (!a) return;
+    const key = a.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    list.push(a);
+  };
+
+  const to: string[] = [];
+  add(to, anchor.fromEmail); // sender first
+  for (const a of anchor.toAddrs ?? []) add(to, a);
+  const cc: string[] = [];
+  for (const a of anchor.cc ?? []) add(cc, a);
+
+  return {
+    emailId: anchor.id,
+    messageId: anchor.messageId!,
+    subject: anchor.subject,
+    to,
+    cc,
+  };
+}
+
 export interface ThreadMessage extends EmailRow {
   attachments: AttachmentRow[];
 }

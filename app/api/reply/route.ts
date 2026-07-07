@@ -12,7 +12,12 @@ import {
 } from "@/lib/powerAutomate";
 import { identityFor, canDraftAs } from "@/lib/workstreams";
 import { isWorkstream, type Workstream } from "@/lib/vault/types";
-import { gatherAttachments, type AttachmentRef } from "@/lib/mailOut";
+import {
+  gatherAttachments,
+  sanitizeMailHtml,
+  textToMailHtml,
+  type AttachmentRef,
+} from "@/lib/mailOut";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,8 +115,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Reply body is empty." }, { status: 400 });
   }
   const bodyHtml = rawHtml
-    ? sanitizeHtml(rawHtml)
-    : toHtml(rawText, identity.label, identity.email!);
+    ? sanitizeMailHtml(rawHtml)
+    : textToMailHtml(rawText, identity.label, identity.email!);
 
   const subject = String(body.subject ?? "").trim() ||
     `RE: ${email.subject ?? "(no subject)"}`;
@@ -156,28 +161,4 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Reply failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-// Keep the editor's HTML to a safe, mail-friendly subset. Drop script/style and
-// event handlers; the draft is created in Jordan's own Outlook, but we still send
-// clean markup. The rich reply body already carries its own greeting/sign-off.
-function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[\s\S]*?<\/\s*\1\s*>/gi, "")
-    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[^>]*>/gi, "")
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
-    .replace(/javascript:/gi, "")
-    .trim();
-}
-
-// Convert a plain-text reply into simple HTML with a signature block.
-function toHtml(text: string, name: string, email: string): string {
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  const bodyHtml = escaped.replace(/\n/g, "<br>");
-  const sig = `Jordan Francis<br>${name}<br>${email}`;
-  return `<div>${bodyHtml}</div><br><div>${sig}</div>`;
 }

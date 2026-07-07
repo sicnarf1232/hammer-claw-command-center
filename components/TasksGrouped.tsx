@@ -209,6 +209,9 @@ function TaskCard({
   const [draft, setDraft] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendNote, setSendNote] = useState<string | null>(null);
+  const linkedThreadKey = meta?.linkedThreadKey ?? null;
 
   const updatedToday = isSameDay(lastUpdate, today);
   const blockedInternally =
@@ -260,6 +263,34 @@ function TaskCard({
       body: JSON.stringify({ taskId: t.id, markCustomerUpdated: true }),
     }).catch(() => {});
     setLastUpdate(new Date().toISOString());
+  }
+  // Real send into the linked email thread (same Flow B path as the reply box).
+  async function sendUpdate() {
+    if (!draft?.trim() || sending) return;
+    setSending(true);
+    setSendNote(null);
+    try {
+      const res = await fetch("/api/tasks/send-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId: t.id,
+          bodyText: draft,
+          workstream: t.workstream ?? "merit",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSendNote(data.error ?? "Send failed.");
+      } else {
+        setLastUpdate(new Date().toISOString());
+        setSendNote(`Sent to ${(data.to ?? []).join(", ") || "the linked thread"}.`);
+      }
+    } catch {
+      setSendNote("Send failed: network error.");
+    } finally {
+      setSending(false);
+    }
   }
   async function copyDraft() {
     if (!draft) return;
@@ -399,9 +430,21 @@ function TaskCard({
                       <button type="button" onClick={copyDraft} className="btn-outline flex-1 text-xs">
                         {copied ? "Copied ✓" : "Copy"}
                       </button>
-                      <button type="button" onClick={markSent} className="btn-primary flex-1 text-xs">
-                        Mark sent
-                      </button>
+                      {linkedThreadKey ? (
+                        <button
+                          type="button"
+                          onClick={sendUpdate}
+                          disabled={sending}
+                          className="btn-primary flex-1 text-xs disabled:opacity-60"
+                          title="Send this update into the linked email thread"
+                        >
+                          {sending ? "Sending…" : "Send"}
+                        </button>
+                      ) : (
+                        <button type="button" onClick={markSent} className="btn-primary flex-1 text-xs" title="Records that you sent an update yourself (from Outlook). To send from here, link an email thread to this task first.">
+                          Mark sent
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setDraft(null)}
@@ -411,6 +454,17 @@ function TaskCard({
                         ×
                       </button>
                     </div>
+                    {sendNote ? (
+                      <p className={`mt-1.5 text-2xs ${sendNote.startsWith("Sent") ? "text-muted" : "text-danger"}`}>
+                        {sendNote}
+                      </p>
+                    ) : null}
+                    {!linkedThreadKey ? (
+                      <p className="mt-1.5 text-2xs text-muted">
+                        No linked thread: open the customer&apos;s email thread and use
+                        &quot;Link to a task&quot; to enable sending from here.
+                      </p>
+                    ) : null}
                   </>
                 )}
               </>

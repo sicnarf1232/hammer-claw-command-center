@@ -11,6 +11,31 @@ import type { OutAttachment } from "@/lib/powerAutomate";
 
 const MAX_TOTAL_BYTES = 24 * 1024 * 1024;
 
+// Keep outbound HTML to a safe, mail-friendly subset. Drop script/style and
+// event handlers; the mail is sent from Jordan's own account, but we still send
+// clean markup. Shared by /api/reply, /api/mail, and /api/tasks/send-update.
+export function sanitizeMailHtml(html: string): string {
+  return html
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[\s\S]*?<\/\s*\1\s*>/gi, "")
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[^>]*>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/javascript:/gi, "")
+    .trim();
+}
+
+// Convert a plain-text body into simple HTML with a signature block for the
+// given sending identity.
+export function textToMailHtml(text: string, name: string, email: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const bodyHtml = escaped.replace(/\n/g, "<br>");
+  const sig = `Jordan Francis<br>${name}<br>${email}`;
+  return `<div>${bodyHtml}</div><br><div>${sig}</div>`;
+}
+
 export type AttachmentRef =
   | { kind: "document"; id: number }
   | { kind: "emailAttachment"; id: number }

@@ -1,30 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
-import { dbConfigured, getDb } from "@/lib/db";
-import { emails } from "@/lib/db/schema";
+import { dbConfigured } from "@/lib/db";
+import { emailIdsForThreadKey } from "@/lib/firehose/read";
 import { setFlag, setStatus } from "@/lib/firehose/actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Resolve a thread key ("t:<threadId>" | "m:<id>") to its message ids, so the
-// inbox list's hover actions can act on a whole thread without shipping ids to
-// the client.
-async function idsForKey(key: string): Promise<number[]> {
-  if (key.startsWith("m:")) {
-    const id = Number(key.slice(2));
-    return Number.isInteger(id) ? [id] : [];
-  }
-  if (key.startsWith("t:")) {
-    const threadId = key.slice(2);
-    const rows = await getDb()
-      .select({ id: emails.id })
-      .from(emails)
-      .where(eq(emails.threadId, threadId));
-    return rows.map((r) => r.id);
-  }
-  return [];
-}
 
 // Key-addressable thread actions for the inbox list: flag/unflag and
 // archive/unarchive across every message in the thread.
@@ -43,7 +23,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const ids = await idsForKey(key);
+    const ids = await emailIdsForThreadKey(key);
     if (!ids.length) {
       return NextResponse.json({ error: "Thread not found." }, { status: 404 });
     }
