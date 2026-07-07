@@ -2,15 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { granolaConfigured, GranolaNotConfiguredError } from "@/lib/granola";
 import { aiConfigured } from "@/lib/ai";
 import { vaultConfigured } from "@/lib/vault";
-import { pullGranolaMeetings } from "@/lib/meetingsPull";
+import { dbConfigured } from "@/lib/db";
+import { stageGranolaMeetings } from "@/lib/meetingsPull";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Triage runs one AI call per meeting; give the pull room on a busy day.
 export const maxDuration = 300;
 
-// Pull recent Granola meetings into the vault (Path A: app button).
-// Behind the app password gate (middleware), so only Jordan can trigger it.
+// Stage recent Granola meetings as proposals for review (Path A: app button).
+// Nothing is written to the vault here; approving on /meetings executes the
+// writes. Behind the app password gate (middleware), so only Jordan triggers it.
 export async function POST(_req: NextRequest) {
   if (!granolaConfigured()) {
     return NextResponse.json(
@@ -30,9 +32,15 @@ export async function POST(_req: NextRequest) {
       { status: 503 },
     );
   }
+  if (!dbConfigured()) {
+    return NextResponse.json(
+      { error: "Database not configured (POSTGRES_URL). Proposals need the DB." },
+      { status: 503 },
+    );
+  }
 
   try {
-    const result = await pullGranolaMeetings();
+    const result = await stageGranolaMeetings();
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     if (err instanceof GranolaNotConfiguredError) {

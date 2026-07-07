@@ -3,24 +3,26 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-interface PullFiled {
+interface PullStaged {
   title: string;
   path: string;
   bucket: string;
   workstream: string;
+  action: "staged" | "refreshed";
 }
 interface PullResult {
   ok: true;
-  filed: PullFiled[];
+  staged: PullStaged[];
+  seriesStaged: { series: string; date: string }[];
+  alreadyPending: number;
   skipped: { title: string; reason: string }[];
   errors: { title: string; error: string }[];
-  seriesUpdated: { series: string; date: string }[];
-  contactsAdded: { account: string; names: string[] }[];
   truncated: boolean;
 }
 
 // "Pull from Granola" button for /meetings. Calls /api/meetings/pull, which
-// triages recent Granola meetings into the vault, then refreshes the list.
+// stages recent Granola meetings as proposals for review. Nothing is written
+// to the vault until each proposal is approved in the queue below.
 export default function PullFromGranola() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -38,7 +40,7 @@ export default function PullFromGranola() {
         setErr(data.error ?? "Pull failed.");
       } else {
         setResult(data as PullResult);
-        if (data.filed?.length) router.refresh();
+        if (data.staged?.length) router.refresh();
       }
     } catch {
       setErr("Network error.");
@@ -53,7 +55,7 @@ export default function PullFromGranola() {
         onClick={pull}
         disabled={busy}
         className="btn btn-primary cursor-pointer disabled:opacity-60"
-        title="Pull recent meetings from Granola into the vault"
+        title="Stage recent Granola meetings as proposals to review"
       >
         {busy ? "Pulling from Granola…" : "Pull from Granola"}
       </button>
@@ -63,47 +65,43 @@ export default function PullFromGranola() {
       {result && (
         <div className="card max-w-md p-3 text-xs">
           <div className="font-medium text-fg">
-            {result.filed.length
-              ? `Filed ${result.filed.length} meeting${result.filed.length === 1 ? "" : "s"}.`
-              : "No new meetings to file."}
+            {result.staged.length
+              ? `Staged ${result.staged.length} proposal${result.staged.length === 1 ? "" : "s"} for review. Nothing is filed until you approve.`
+              : "No new meetings to stage."}
           </div>
-          {result.filed.length > 0 && (
+          {result.staged.length > 0 && (
             <ul className="mt-1.5 space-y-0.5 text-muted">
-              {result.filed.map((f) => (
+              {result.staged.map((f) => (
                 <li key={f.path} className="truncate">
                   <span className="text-fg">{f.title}</span>{" "}
                   <span className="text-muted">
                     · {f.bucket} · {f.workstream}
+                    {f.action === "refreshed" ? " · refreshed" : ""}
                   </span>
                 </li>
               ))}
             </ul>
           )}
-          {result.seriesUpdated?.length > 0 && (
+          {result.seriesStaged?.length > 0 && (
             <div className="mt-1.5 text-muted">
-              Updated {result.seriesUpdated.length} rolling series:{" "}
+              {result.seriesStaged.length} rolling-series update
+              {result.seriesStaged.length === 1 ? "" : "s"} staged:{" "}
               <span className="text-fg">
                 {Array.from(
-                  new Set(result.seriesUpdated.map((s) => s.series)),
+                  new Set(result.seriesStaged.map((s) => s.series)),
                 ).join(", ")}
               </span>
             </div>
           )}
-          {result.contactsAdded?.length > 0 && (
+          {result.alreadyPending > 0 && (
             <div className="mt-1.5 text-muted">
-              Added{" "}
-              {result.contactsAdded.reduce((n, c) => n + c.names.length, 0)}{" "}
-              contact(s) across{" "}
-              <span className="text-fg">
-                {Array.from(
-                  new Set(result.contactsAdded.map((c) => c.account)),
-                ).join(", ")}
-              </span>
+              {result.alreadyPending} already awaiting review.
             </div>
           )}
           {result.skipped.length > 0 && (
             <div className="mt-1.5 text-muted">
-              Skipped {result.skipped.length} already in the vault.
+              Skipped {result.skipped.length} (already in the vault or
+              previously decided).
             </div>
           )}
           {result.errors.length > 0 && (

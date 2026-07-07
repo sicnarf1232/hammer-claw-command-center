@@ -3,15 +3,16 @@ import { isAuthorizedCron } from "@/lib/cron";
 import { createNotification } from "@/lib/notify";
 import { granolaConfigured } from "@/lib/granola";
 import { aiConfigured } from "@/lib/ai";
-import { pullGranolaMeetings } from "@/lib/meetingsPull";
+import { stageGranolaMeetings } from "@/lib/meetingsPull";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-// Granola pull (Phase 4): pull recent meeting notes from Granola straight into
-// the vault. Shares one implementation with the /meetings "Pull from Granola"
-// button (lib/meetingsPull). Without GRANOLA_API_KEY the job is a clean no-op.
+// Granola pull: stage recent meeting notes as PROPOSALS for Jordan to approve
+// on /meetings (the cron never writes the vault; approval does). Shares one
+// implementation with the "Pull from Granola" button (lib/meetingsPull).
+// Without GRANOLA_API_KEY the job is a clean no-op.
 export async function GET(req: NextRequest) {
   if (!isAuthorizedCron(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,12 +32,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await pullGranolaMeetings();
-    if (result.filed.length) {
+    const result = await stageGranolaMeetings();
+    if (result.staged.length) {
       await createNotification({
         kind: "info",
-        title: `Granola pull filed ${result.filed.length} meeting(s)`,
-        body: result.filed.map((f) => `${f.title} (${f.bucket})`).join("; "),
+        title: `Granola pull staged ${result.staged.length} meeting proposal(s) for review`,
+        body: result.staged.map((f) => `${f.title} (${f.bucket})`).join("; "),
         dedupeKey: `granola_pull_${new Date().toISOString().slice(0, 13)}`,
       });
     }

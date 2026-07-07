@@ -5,26 +5,19 @@ import {
   getNote,
   type GranolaNote,
 } from "@/lib/granola";
-import {
-  getFile,
-  listMarkdownFiles,
-  readFiles,
-  writeFile,
-} from "@/lib/github";
+import { getFile, listMarkdownFiles, readFiles } from "@/lib/github";
 import { vaultConfigured, parseMeetingsIndex, getRoster } from "@/lib/vault";
 import { classifyName } from "@/lib/vault/roster";
 import type { Roster } from "@/lib/vault/types";
 import {
   parseSeriesDoc,
   matchesSeries,
-  applyMeetingToSeries,
-  mmdd,
   SERIES_DIR_MARKER,
   type Series,
 } from "@/lib/vault/series";
 import { listAccounts } from "@/lib/accounts";
 import { resolveAttendees } from "@/lib/contacts";
-import { addAccountContacts } from "@/lib/writeback";
+import { dbConfigured } from "@/lib/db";
 import {
   triageMeeting,
   updateSeries,
@@ -36,29 +29,39 @@ import {
   meetingBasename,
   meetingFolder,
   renderMeetingNote,
-  rebuildMeetingsIndex,
-  indexRowFromPath,
-  type MeetingRow,
 } from "@/lib/meetingFormat";
 import { appTimezone, todayISO } from "@/lib/dates";
+import { stageProposal, latestProposalFor } from "@/lib/proposals/store";
+import {
+  meetingDedupeKey,
+  seriesDedupeKey,
+  meetingSummaryLine,
+  seriesSummaryLine,
+} from "@/lib/proposals/build";
+import type {
+  MeetingFilePayload,
+  SeriesUpdatePayload,
+} from "@/lib/proposals/types";
 
 const MEETINGS_INDEX_PATH = "100 Periodics/Meetings-Index.md";
 // Safety bound on a single pull (first pull on an empty index could be large).
 const MAX_PER_PULL = 50;
 // Re-scan this many days before the newest indexed day on every pull, so
-// intra-day and late-finalized Granola notes are not stranded. Basename dedup
-// makes re-listing already-filed days a no-op.
+// intra-day and late-finalized Granola notes are not stranded. Dedup (vault
+// basenames + proposal dedupe keys) makes re-listing already-handled days a
+// no-op.
 const OVERLAP_DAYS = 4;
 // Soft wall-clock budget per request. Serverless has a hard cap (60s on Vercel
 // Hobby), so we stop starting new meetings well before it and return partial
 // progress with `truncated: true`. The user (or cron) just runs it again.
 const SOFT_BUDGET_MS = 45_000;
 
-export interface PullFiled {
+export interface PullStaged {
   title: string;
   path: string;
   bucket: string;
   workstream: string;
+  action: "staged" | "refreshed";
 }
 export interface PullSkipped {
   title: string;
@@ -68,43 +71,43 @@ export interface PullError {
   title: string;
   error: string;
 }
-export interface PullSeriesUpdate {
+export interface PullSeriesStaged {
   series: string;
   date: string;
-}
-export interface PullContactsAdded {
-  account: string;
-  names: string[];
 }
 
 export interface PullResult {
   createdAfter: string;
   considered: number;
   truncated: boolean;
-  filed: PullFiled[];
+  staged: PullStaged[];
+  seriesStaged: PullSeriesStaged[];
+  // Pending proposals already staged from an earlier pull (AI not re-run).
+  alreadyPending: number;
   skipped: PullSkipped[];
   errors: PullError[];
-  seriesUpdated: PullSeriesUpdate[];
-  contactsAdded: PullContactsAdded[];
 }
 
-// Pull recent Granola meetings into the vault: triage each into the right
-// workstream/account, write the note as a commit, and refresh the index. Filing
-// uses AI triage; Jordan reviews the result in /meetings and can move anything.
-export async function pullGranolaMeetings(): Promise<PullResult> {
+// Stage recent Granola meetings as PROPOSALS: triage each into the right
+// workstream/account, render the note, and park everything in ai_proposals for
+// Jordan to approve on /meetings. STAGING NEVER WRITES THE VAULT; the approved
+// payload is executed by lib/proposals/executeMeeting. A meeting Jordan
+// rejected is never re-staged (the proposal latches by granola id).
+export async function stageGranolaMeetings(): Promise<PullResult> {
   if (!granolaConfigured()) throw new GranolaNotConfiguredError();
   if (!vaultConfigured()) {
     throw new Error("Vault is not configured (GITHUB_TOKEN / VAULT_REPO).");
+  }
+  if (!dbConfigured()) {
+    throw new Error(
+      "Database not configured (POSTGRES_URL). Proposals need the DB; nothing was staged.",
+    );
   }
   const startedAt = Date.now();
 
   // 1) Determine the pull window. We re-scan a rolling overlap of recent days
   // (starting OVERLAP_DAYS before the newest indexed day) rather than jumping
-  // past it. This is what makes intra-day re-pulls work: a meeting created later
-  // the same day (or a note Granola finalizes hours/days late) is re-listed and
-  // filed, instead of being stranded behind an exclusive day cursor. Re-listing
-  // is safe because filing dedupes by basename (date + title) below, so an
-  // already-filed meeting is skipped, never duplicated.
+  // past it, so intra-day re-pulls and late-finalized notes are picked up.
   const indexFile = await getFile(MEETINGS_INDEX_PATH);
   const indexRows = indexFile ? parseMeetingsIndex(indexFile.content) : [];
   const newestDate = indexRows.reduce(
@@ -115,7 +118,7 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
     ? isoStartOfDay(newestDate, OVERLAP_DAYS)
     : isoDaysAgo(30);
 
-  // 2) List candidates, oldest first so the index ends up newest-first.
+  // 2) List candidates, oldest first so approvals file in date order.
   const summaries = (await listNotesCreatedAfter(createdAfter)).sort((a, b) =>
     a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0,
   );
@@ -140,11 +143,11 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
   );
   const series = await loadSeries(allFiles);
 
-  const filed: PullFiled[] = [];
+  const staged: PullStaged[] = [];
+  const seriesStaged: PullSeriesStaged[] = [];
   const skipped: PullSkipped[] = [];
   const errors: PullError[] = [];
-  const seriesUpdated: PullSeriesUpdate[] = [];
-  const contactsAdded: PullContactsAdded[] = [];
+  let alreadyPending = 0;
 
   // 4) One note at a time (respects Granola + Anthropic rate limits). Stop
   // starting new meetings once the soft budget is spent so we return cleanly.
@@ -156,6 +159,22 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
     }
     const label = summary.title ?? summary.id;
     try {
+      // Proposal latch FIRST, before spending Granola/AI calls: a pending
+      // proposal is left as-is (no AI re-run every pull); approved and
+      // rejected ones are never resurrected.
+      const prior = await latestProposalFor(
+        "meeting-file",
+        meetingDedupeKey(summary.id),
+      );
+      if (prior?.status === "pending") {
+        alreadyPending += 1;
+        continue;
+      }
+      if (prior?.status === "approved" || prior?.status === "rejected") {
+        skipped.push({ title: label, reason: `previously ${prior.status}` });
+        continue;
+      }
+
       const note = await getNote(summary.id, false);
       const date = denverDate(meetingStartISO(note));
       const basename = meetingBasename(date, summary.title ?? "Untitled meeting");
@@ -187,8 +206,8 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
         continue;
       }
 
-      // Series membership: a clear match links the note to the series and lets
-      // us refresh the rolling doc after the note is filed.
+      // Series membership: a clear match links the note to the series and
+      // stages a second, separately-approvable proposal for the rolling doc.
       const matched = findSeries(series, triaged, attendees);
       if (matched) triaged.series = matched.name;
 
@@ -208,52 +227,62 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
         createdISO: todayISO(),
       });
 
-      await writeFile({
-        path,
-        content,
-        message: `app: file Granola meeting ${triaged.title} ${date}`,
-      });
-
-      existingBasenames.add(finalBasename.toLowerCase());
-      filed.push({
-        title: triaged.title,
-        path,
-        bucket: triaged.bucket,
-        workstream: triaged.workstream,
-      });
-
-      // Phase B: auto-create missing customer contacts on the account note.
-      // Best-effort: a failure here must not fail the meeting filing.
+      // Contacts the meeting surfaced that are missing from the account note;
+      // computed now, written only on approval.
+      let contactsToAdd: MeetingFilePayload["contactsToAdd"] = null;
       if (triaged.account) {
-        try {
-          const acct = accounts.find((a) => a.name === triaged.account);
-          if (acct) {
-            const toCreate = resolveAttendees(
-              attendees,
-              acct.contacts.map((c) => c.name),
-              roster,
-            )
-              .filter((r) => r.willCreate)
-              .map((r) => ({ name: r.name }));
-            if (toCreate.length) {
-              const res = await addAccountContacts(acct.path, toCreate);
-              if (res.added.length) {
-                // Keep the in-memory account current so a second meeting in the
-                // same pull does not re-add the same people.
-                acct.contacts.push(...res.added.map((name) => ({ name })));
-                contactsAdded.push({ account: acct.name, names: res.added });
-              }
-            }
+        const acct = accounts.find((a) => a.name === triaged.account);
+        if (acct) {
+          const names = resolveAttendees(
+            attendees,
+            acct.contacts.map((c) => c.name),
+            roster,
+          )
+            .filter((r) => r.willCreate)
+            .map((r) => r.name);
+          if (names.length) {
+            contactsToAdd = {
+              accountPath: acct.path,
+              accountName: acct.name,
+              names,
+            };
           }
-        } catch (e) {
-          errors.push({
-            title: `contacts: ${triaged.account}`,
-            error: e instanceof Error ? e.message : String(e),
-          });
         }
       }
 
-      // Update the rolling-series doc if this meeting belongs to one.
+      const payload: MeetingFilePayload = {
+        granolaId: note.id,
+        title: triaged.title,
+        date,
+        path,
+        content,
+        workstream: triaged.workstream,
+        bucket: triaged.bucket,
+        account: triaged.account,
+        attendees,
+        tldr: triaged.tldr,
+        contactsToAdd,
+        seriesName: matched?.name ?? null,
+      };
+      const res = await stageProposal({
+        kind: "meeting-file",
+        dedupeKey: meetingDedupeKey(note.id),
+        payload,
+        summary: meetingSummaryLine(payload),
+        model: triaged.modelUsed,
+      });
+      if (res.action === "staged" || res.action === "refreshed") {
+        staged.push({
+          title: triaged.title,
+          path,
+          bucket: triaged.bucket,
+          workstream: triaged.workstream,
+          action: res.action,
+        });
+      }
+
+      // Stage the rolling-series refresh alongside (frozen AI output; the
+      // deterministic merge runs at approval against a fresh doc read).
       if (matched) {
         try {
           const upd = await updateSeries({
@@ -264,25 +293,25 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
             meetingDate: date,
             meetingSummary: seriesSummary(triaged),
           });
-          const newContent = applyMeetingToSeries(
-            matched,
-            {
-              date,
-              title: triaged.title,
-              bullets: upd.logBullets,
-              meetingBasename: finalBasename,
-            },
-            upd.currentState,
-            mmdd(date),
-          );
-          await writeFile({
-            path: matched.path,
-            content: newContent,
-            message: `app: update series ${matched.name} ${date}`,
+          const seriesPayload: SeriesUpdatePayload = {
+            seriesPath: matched.path,
+            seriesName: matched.name,
+            cadence: matched.cadence,
+            date,
+            meetingTitle: triaged.title,
+            meetingBasename: finalBasename,
+            logBullets: upd.logBullets,
+            currentState: upd.currentState,
+          };
+          await stageProposal({
+            kind: "series-update",
+            dedupeKey: seriesDedupeKey(matched.path, finalBasename),
+            parentId: res.id,
+            payload: seriesPayload,
+            summary: seriesSummaryLine(seriesPayload),
+            model: upd.modelUsed,
           });
-          // Refresh in memory so a second meeting in the same pull stacks on it.
-          Object.assign(matched, parseSeriesDoc(newContent, matched.path));
-          seriesUpdated.push({ series: matched.name, date });
+          seriesStaged.push({ series: matched.name, date });
         } catch (e) {
           errors.push({
             title: `series: ${matched.name}`,
@@ -298,34 +327,15 @@ export async function pullGranolaMeetings(): Promise<PullResult> {
     }
   }
 
-  // 5) Rebuild the index from the actual meeting files on disk. This always
-  // runs (even when nothing new filed) so it self-heals a stale index left by
-  // an earlier partial/timed-out pull. Re-list to include this pull's writes.
-  if (indexFile) {
-    const freshFiles = await listMarkdownFiles().catch(() => allFiles);
-    const rows = freshFiles
-      .map((f) => indexRowFromPath(f.path))
-      .filter((r): r is MeetingRow => r !== null);
-    const stamp = `${todayISO()} (app Granola pull: ${filed.length} new, ${rows.length} meetings indexed)`;
-    const updated = rebuildMeetingsIndex(indexFile.content, rows, stamp);
-    if (updated !== indexFile.content) {
-      await writeFile({
-        path: MEETINGS_INDEX_PATH,
-        content: updated,
-        message: `app: rebuild meetings index ${todayISO()}`,
-      });
-    }
-  }
-
   return {
     createdAfter,
     considered: candidates.length,
     truncated: truncated || stoppedEarly,
-    filed,
+    staged,
+    seriesStaged,
+    alreadyPending,
     skipped,
     errors,
-    seriesUpdated,
-    contactsAdded,
   };
 }
 
