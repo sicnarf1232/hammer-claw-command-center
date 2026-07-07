@@ -13,6 +13,7 @@ import { usePathname } from "next/navigation";
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
+  steps?: string[]; // tool calls the agent made (search/read/brain)
 }
 
 interface BrainState {
@@ -111,7 +112,14 @@ export default function InboxBrain({
       } else {
         update({
           ...state,
-          history: [...history, { role: "assistant", content: data.text ?? "" }],
+          history: [
+            ...history,
+            {
+              role: "assistant",
+              content: data.text ?? "",
+              steps: Array.isArray(data.steps) && data.steps.length ? data.steps : undefined,
+            },
+          ],
         });
         setTimeout(() => scrollRef.current?.scrollTo({ top: 1e6 }), 50);
       }
@@ -187,19 +195,19 @@ export default function InboxBrain({
         {state.history.length === 0 ? (
           <div className="space-y-1.5">
             <p className="text-xs text-muted">
-              One chat across your whole inbox. Open a thread and ask, add
-              threads to context, then cross-reference:
+              One chat across your WHOLE inbox: it can search all mail, read
+              any thread, and pull facts from your knowledge base. Try:
             </p>
             {[
+              "What emails still need a reply from me this week?",
               "Summarize this thread and what they need from me",
-              "Extract every open ask, owner, and date",
               "Draft a reply to the latest message",
             ].map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => send(s)}
-                disabled={busy || !activeKey}
+                disabled={busy}
                 className="block w-full rounded-lg border border-border px-2.5 py-1.5 text-left text-xs text-fg/75 hover:border-accent hover:text-accent disabled:opacity-50"
               >
                 {s}
@@ -209,6 +217,13 @@ export default function InboxBrain({
         ) : null}
         {state.history.map((m, i) => (
           <div key={i} className={m.role === "user" ? "text-right" : ""}>
+            {m.steps?.length ? (
+              <div className="mb-1 space-y-0.5">
+                {m.steps.map((st, j) => (
+                  <div key={j} className="truncate text-2xs text-muted">🔎 {st}</div>
+                ))}
+              </div>
+            ) : null}
             <div
               className={`inline-block max-w-[95%] whitespace-pre-wrap rounded-xl px-3 py-2 text-left text-xs leading-relaxed ${
                 m.role === "user"
@@ -250,7 +265,7 @@ export default function InboxBrain({
             placeholder={
               activeKey
                 ? "Ask, or 'now draft a reply to this thread using that context'"
-                : "Open a thread, or ask about the ones kept in context"
+                : "Ask anything: it can search your whole inbox and your records"
             }
             className="input min-h-[3rem] flex-1 resize-none px-2.5 py-1.5 text-xs"
           />

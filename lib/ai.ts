@@ -863,3 +863,114 @@ export async function threadChat(input: ThreadChatInput): Promise<{
     .trim();
   return { text: noEmDash(text), modelUsed: res.model };
 }
+
+// ---- Inbox agent (2026-07-07): tool-use loop for the inbox brain. The model
+// can SEARCH the whole inbox, READ any thread, and QUERY the vault brain, then
+// answer or draft, grounded in what it found. The caller supplies the tool
+// executors; output is display-only until Jordan inserts/sends it himself.
+
+export interface InboxAgentInput {
+  system: string;
+  history: Array<{ role: "user" | "assistant"; content: string }>;
+  executeTool: (name: string, input: Record<string, unknown>) => Promise<string>;
+}
+
+const INBOX_AGENT_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "search_inbox",
+    description:
+      "Search ALL email threads in the inbox by keywords (subject, body, sender). Returns matching threads with key, subject, last date, sender, and a snippet. Use before answering anything not visible in the provided threads.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Keywords to search for" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "read_thread",
+    description:
+      "Read the full text of one email thread by its key (from search_inbox results or the context list).",
+    input_schema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Thread key, e.g. t:ABC or m:123" },
+      },
+      required: ["key"],
+    },
+  },
+  {
+    name: "search_brain",
+    description:
+      "Query Jordan's knowledge base (accounts, open tasks, meetings, price catalog, documents) for facts like part numbers, pricing, task status, or account details.",
+    input_schema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The factual question to look up" },
+      },
+      required: ["question"],
+    },
+  },
+];
+
+export async function runInboxAgent(input: InboxAgentInput): Promise<{
+  text: string;
+  steps: string[];
+  modelUsed: string;
+}> {
+  const steps: string[] = [];
+  const messages: Anthropic.MessageParam[] = input.history
+    .slice(-12)
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  let modelUsed = "";
+  for (let turn = 0; turn < 6; turn++) {
+    const res = await client().messages.create({
+      model: model(),
+      max_tokens: 2000,
+      system: input.system,
+      tools: INBOX_AGENT_TOOLS,
+      messages,
+    });
+    modelUsed = res.model;
+
+    const toolUses = res.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+    );
+    if (!toolUses.length || res.stop_reason !== "tool_use") {
+      const text = res.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+        .trim();
+      return { text: noEmDash(text), steps, modelUsed };
+    }
+
+    messages.push({ role: "assistant", content: res.content });
+    const results: Anthropic.ToolResultBlockParam[] = [];
+    for (const tu of toolUses) {
+      const args = (tu.input ?? {}) as Record<string, unknown>;
+      steps.push(
+        `${tu.name}: ${String(args.query ?? args.key ?? args.question ?? "")}`.slice(0, 80),
+      );
+      let out: string;
+      try {
+        out = await input.executeTool(tu.name, args);
+      } catch (e) {
+        out = `Tool failed: ${e instanceof Error ? e.message : String(e)}`;
+      }
+      results.push({
+        type: "tool_result",
+        tool_use_id: tu.id,
+        content: out.slice(0, 12000),
+      });
+    }
+    messages.push({ role: "user", content: results });
+  }
+  return {
+    text: "I ran out of search steps before finishing. Try narrowing the question.",
+    steps,
+    modelUsed,
+  };
+}
