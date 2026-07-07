@@ -452,6 +452,33 @@ export const brandKits = pgTable(
   (t) => ({ wsUx: uniqueIndex("brand_kits_workstream_ux").on(t.workstreamKey) }),
 );
 
+// AI proposals (Phase 1): model output staged for Jordan's approval before any
+// canonical write. Kinds: meeting-file, series-update (Granola pull). The
+// payload carries everything execution needs; approval never re-runs the AI.
+// Self-provisioned by lib/proposals/schema.ts.
+export const aiProposals = pgTable(
+  "ai_proposals",
+  {
+    id: serial("id").primaryKey(),
+    kind: text("kind").notNull(), // meeting-file | series-update
+    dedupeKey: text("dedupe_key"), // granola:<id> | series:<path>:<basename>
+    parentId: integer("parent_id"), // series-update -> its meeting-file proposal
+    payload: jsonb("payload").notNull(),
+    summary: text("summary"), // one-liner for the queue card
+    // pending | approved | rejected | error | expired | superseded
+    status: text("status").notNull().default("pending"),
+    model: text("model"), // true model that produced the AI content
+    error: text("error"), // execution failure / warnings
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    executedAt: timestamp("executed_at", { withTimezone: true }),
+  },
+  (t) => ({
+    statusIdx: index("ai_proposals_status_idx").on(t.status),
+    dedupeIdx: index("ai_proposals_dedupe_idx").on(t.kind, t.dedupeKey),
+  }),
+);
+
 // Key-value for sync bookkeeping (last sync time, etc.).
 export const appMeta = pgTable("app_meta", {
   key: text("key").primaryKey(),
