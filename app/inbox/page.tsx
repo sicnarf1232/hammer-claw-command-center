@@ -3,7 +3,7 @@ import { dbConfigured } from "@/lib/db";
 import { listThreads, accountNames, type ThreadSummary } from "@/lib/firehose/read";
 import { getTriageMap, type TriageRow } from "@/lib/firehose/triage";
 import { linkedTaskContextForThreads } from "@/lib/inboxContext";
-import InboxList, { type InboxThread, type Folder } from "@/components/InboxList";
+import InboxWorkspace, { type InboxThread, type Folder } from "@/components/InboxWorkspace";
 import SetupNotice from "@/components/SetupNotice";
 
 export const dynamic = "force-dynamic";
@@ -100,7 +100,7 @@ export default async function InboxPage({
 
   return (
     <Shell>
-      <InboxList threads={threads} folder={folderKey} folders={folders} />
+      <InboxWorkspace threads={threads} folder={folderKey} folders={folders} />
     </Shell>
   );
 }

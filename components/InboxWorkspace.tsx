@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { customerHue, initials } from "@/lib/customerHues";
+import ThreadDetail from "@/components/ThreadDetail";
 
 export interface InboxThread {
   key: string;
@@ -51,7 +52,19 @@ function href(key: string): string {
   return key === "attention" ? "/inbox" : `/inbox?folder=${key}`;
 }
 
-export default function InboxList({
+export default function InboxWorkspace(props: {
+  threads: InboxThread[];
+  folder: string;
+  folders: Folder[];
+}) {
+  return (
+    <Suspense fallback={null}>
+      <Workspace {...props} />
+    </Suspense>
+  );
+}
+
+function Workspace({
   threads,
   folder,
   folders,
@@ -60,6 +73,22 @@ export default function InboxList({
   folder: string;
   folders: Folder[];
 }) {
+  const searchParams = useSearchParams();
+  const [selectedKey, setSelectedKey] = useState<string | null>(
+    () => searchParams.get("selected"),
+  );
+
+  // Selection is panel state, not navigation: mirror it into the URL so a
+  // reload or shared link reopens the same thread, but never router.push.
+  const select = useCallback((key: string | null) => {
+    setSelectedKey(key);
+    window.history.replaceState(
+      null,
+      "",
+      key ? `/inbox?selected=${encodeURIComponent(key)}` : "/inbox",
+    );
+  }, []);
+
   const [q, setQ] = useState("");
   const router = useRouter();
   const requested = useRef<Set<string>>(new Set());
@@ -103,29 +132,18 @@ export default function InboxList({
   }, [q, threads]);
 
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
-  const top = folders.filter((f) => f.group === "top");
-  const pathways = folders.filter((f) => f.group === "pathway");
+  const hasSelection = selectedKey != null;
 
   return (
-    <div className="flex gap-5">
-      {/* Desktop folder rail */}
-      <aside className="hidden w-44 shrink-0 md:block">
-        <nav className="space-y-0.5">
-          {top.map((f) => (
-            <FolderLink key={f.key} f={f} active={f.key === folder} />
-          ))}
-        </nav>
-        <div className="mb-1.5 mt-4 px-2 text-2xs font-extrabold uppercase tracking-[0.14em] text-muted">
-          Pathways
-        </div>
-        <nav className="space-y-0.5">
-          {pathways.map((f) => (
-            <FolderLink key={f.key} f={f} active={f.key === folder} dot />
-          ))}
-        </nav>
-      </aside>
+    <div className="flex gap-4">
+      <FolderSidebar folders={folders} folder={folder} collapsed={hasSelection} />
 
-      <div className="min-w-0 flex-1">
+      {/* Thread list: full width panel normally, 340px rail beside the open
+          thread. On mobile the open thread takes over and the list hides. */}
+      <div
+        className={hasSelection ? "hidden min-w-0 shrink-0 md:block" : "min-w-0 flex-1"}
+        style={{ width: hasSelection ? 340 : undefined, transition: "width .22s ease" }}
+      >
         {/* Mobile folder chips */}
         <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 md:hidden">
           {folders.map((f) => (
@@ -144,7 +162,7 @@ export default function InboxList({
           ))}
         </div>
 
-        <div className="relative mb-4 sm:max-w-sm">
+        <div className={`relative mb-4 ${hasSelection ? "" : "sm:max-w-sm"}`}>
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
             value={q}
@@ -173,7 +191,14 @@ export default function InboxList({
                 </div>
                 <div className="overflow-hidden rounded-2xl border border-border bg-surface">
                   {g.items.map((t, i) => (
-                    <Row key={t.key} t={t} first={i === 0} />
+                    <Row
+                      key={t.key}
+                      t={t}
+                      first={i === 0}
+                      compact={hasSelection}
+                      selected={t.key === selectedKey}
+                      onSelect={select}
+                    />
                   ))}
                 </div>
               </section>
@@ -181,7 +206,107 @@ export default function InboxList({
           </div>
         )}
       </div>
+
+      {selectedKey ? (
+        <DetailPanel key={selectedKey} threadKey={selectedKey} onClose={() => select(null)} />
+      ) : null}
     </div>
+  );
+}
+
+// The open thread slides in from the right on mount and whenever the
+// selected key changes (the key prop remounts this panel per thread).
+function DetailPanel({ threadKey, onClose }: { threadKey: string; onClose: () => void }) {
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => setEntered(true));
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, []);
+  return (
+    <div
+      className="min-w-[320px] flex-1"
+      style={{
+        transform: entered ? "translateX(0)" : "translateX(20px)",
+        opacity: entered ? 1 : 0,
+        transition: "transform .25s cubic-bezier(0.22,1,0.36,1), opacity .2s",
+      }}
+    >
+      <ThreadDetail threadKey={threadKey} onClose={onClose} />
+    </div>
+  );
+}
+
+function FolderSidebar({
+  folders,
+  folder,
+  collapsed,
+}: {
+  folders: Folder[];
+  folder: string;
+  collapsed: boolean;
+}) {
+  const top = folders.filter((f) => f.group === "top");
+  const pathways = folders.filter((f) => f.group === "pathway");
+  return (
+    <aside
+      className="hidden shrink-0 overflow-hidden md:block"
+      style={{ width: collapsed ? 28 : 186, transition: "width .22s ease" }}
+    >
+      {collapsed ? (
+        <nav className="flex flex-col items-center gap-1 pt-1">
+          {top.map((f) => (
+            <Link
+              key={f.key}
+              href={href(f.key)}
+              title={f.label}
+              className={`flex h-6 w-6 items-center justify-center rounded-md text-[9px] font-bold ${
+                f.key === folder ? "bg-accentSoft text-accent" : "text-muted hover:bg-surface2"
+              }`}
+            >
+              {f.label.charAt(0)}
+            </Link>
+          ))}
+          <span className="my-1.5 h-px w-4 bg-border" />
+          {pathways.map((f) => (
+            <Link
+              key={f.key}
+              href={href(f.key)}
+              title={f.label}
+              className={`flex h-6 w-6 items-center justify-center rounded-md hover:bg-surface2 ${
+                f.key === folder ? "bg-accentSoft" : ""
+              }`}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: PATHWAY[f.key]?.color ?? "var(--ink-3)" }}
+              />
+            </Link>
+          ))}
+        </nav>
+      ) : (
+        <>
+          <nav className="space-y-0.5">
+            {top.map((f) => (
+              <FolderLink key={f.key} f={f} active={f.key === folder} />
+            ))}
+          </nav>
+          <div className="mb-1.5 mt-4 px-2 text-2xs font-extrabold uppercase tracking-[0.14em] text-muted">
+            Pathways
+          </div>
+          <nav className="space-y-0.5">
+            {pathways.map((f) => (
+              <FolderLink key={f.key} f={f} active={f.key === folder} dot />
+            ))}
+          </nav>
+        </>
+      )}
+    </aside>
   );
 }
 
@@ -209,11 +334,22 @@ function FolderLink({ f, active, dot }: { f: Folder; active: boolean; dot?: bool
   );
 }
 
-function Row({ t, first }: { t: InboxThread; first: boolean }) {
+function Row({
+  t,
+  first,
+  compact,
+  selected,
+  onSelect,
+}: {
+  t: InboxThread;
+  first: boolean;
+  compact: boolean;
+  selected: boolean;
+  onSelect: (key: string) => void;
+}) {
   const router = useRouter();
   const hue = customerHue(t.accountName || t.who);
   const outbound = t.lastDirection === "outbound";
-  const path = t.pathway ? PATHWAY[t.pathway] : null;
   const high = t.priority === "high";
   const unmapped = !t.accountName && t.needsReview;
   // Second state dot: amber "needs action" — AI-flagged for a reply and not yet
@@ -291,9 +427,50 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
   if (archived) return null;
   const curPath = pathway ? PATHWAY[pathway] : null;
 
+  // Panel-open mode: rows compress to subject + time + state dots so the
+  // 340px rail stays scannable. The open thread is highlighted.
+  if (compact) {
+    return (
+      <Link
+        href={`/inbox/${encodeURIComponent(t.key)}`}
+        onClick={(e) => {
+          e.preventDefault();
+          onSelect(t.key);
+        }}
+        className={`relative flex items-center gap-2 px-3 py-2.5 transition-colors ${
+          first ? "" : "border-t border-border"
+        } ${selected ? "bg-accentSoft" : "hover:bg-surface2"}`}
+      >
+        {selected ? (
+          <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: "var(--accent)" }} />
+        ) : flagged || high ? (
+          <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: "var(--due)" }} />
+        ) : null}
+        {t.unread ? (
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--accent)" }} title="Unread" />
+        ) : null}
+        {needsAction ? (
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--warm)" }} title="Needs action" />
+        ) : null}
+        <span
+          className={`min-w-0 flex-1 truncate text-sm ${
+            selected ? "font-semibold text-accent" : t.unread ? "font-bold text-fg" : "font-medium text-fg/85"
+          }`}
+        >
+          {t.subject}
+        </span>
+        <span className="shrink-0 text-2xs tabular-nums text-muted">{rel(t.lastAtISO)}</span>
+      </Link>
+    );
+  }
+
   return (
     <Link
       href={`/inbox/${encodeURIComponent(t.key)}`}
+      onClick={(e) => {
+        e.preventDefault();
+        onSelect(t.key);
+      }}
       className={`group relative flex gap-3 px-3 py-3 transition-colors hover:bg-surface2 sm:px-4 ${
         first ? "" : "border-t border-border"
       }`}
@@ -361,11 +538,14 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
           />
         </div>
 
-        {/* WHY it matters: linked past-due task, pathway, priority, account. */}
+        {/* WHY it matters, strict chip hierarchy: linked task leads, then
+            High, pathway, account, status (smaller), attachment (smallest). */}
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {t.linkedTask ? (
             <span
-              className="inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-2xs font-bold"
+              className={`inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[10px] ${
+                t.linkedTask.overdue ? "font-bold" : "font-medium"
+              }`}
               style={
                 t.linkedTask.overdue
                   ? { background: "var(--due-soft)", color: "var(--due)" }
@@ -386,13 +566,16 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
             </span>
           ) : null}
           {high ? (
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold text-dueInk" style={{ background: "var(--due-soft)" }}>
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
+              style={{ background: "var(--due-soft)", color: "var(--due)" }}
+            >
               High
             </span>
           ) : null}
           {curPath ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
               style={{ background: withAlpha(curPath.color), color: curPath.color }}
             >
               {curPath.label}
@@ -400,20 +583,28 @@ function Row({ t, first }: { t: InboxThread; first: boolean }) {
           ) : null}
           {t.accountName ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
               style={{ background: hue.soft, color: hue.hue }}
             >
               {t.accountName}
             </span>
           ) : unmapped ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line2 px-2 py-0.5 text-2xs font-semibold text-muted">
+            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line2 px-2 py-0.5 text-[10px] font-medium text-muted">
               <LinkGlyph /> Link account
             </span>
           ) : null}
-          {t.reviewed ? <span className="chip border-ok/40 text-ok">✓ Reviewed</span> : null}
-          {t.replied ? <span className="chip border-ok/40 text-ok">Replied</span> : null}
+          {t.reviewed ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface2 px-2 py-0.5 text-[9px] font-medium text-ok">
+              ✓ Reviewed
+            </span>
+          ) : null}
+          {t.replied ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface2 px-2 py-0.5 text-[9px] font-medium text-ok">
+              Replied
+            </span>
+          ) : null}
           {t.hasAttachments ? (
-            <span className="chip border-border text-fg/55">
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface2 px-2 py-0.5 text-[9px] font-medium text-muted">
               <ClipIcon /> Attachment
             </span>
           ) : null}
