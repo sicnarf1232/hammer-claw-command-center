@@ -5,8 +5,9 @@ import {
   getNote,
   type GranolaNote,
 } from "@/lib/granola";
-import { getFile, listMarkdownFiles, readFiles } from "@/lib/github";
-import { vaultConfigured, parseMeetingsIndex, getRoster } from "@/lib/vault";
+import { listMarkdownFiles } from "@/lib/github";
+import { vaultConfigured, getMeetingsIndex, getRoster, getSeriesList } from "@/lib/vault";
+import { existingMeetingBasenamesFromDb } from "@/lib/meetingsDb";
 import { classifyName } from "@/lib/vault/roster";
 import type { Roster } from "@/lib/vault/types";
 import {
@@ -43,7 +44,6 @@ import type {
   SeriesUpdatePayload,
 } from "@/lib/proposals/types";
 
-const MEETINGS_INDEX_PATH = "100 Periodics/Meetings-Index.md";
 // Safety bound on a single pull (first pull on an empty index could be large).
 const MAX_PER_PULL = 50;
 // Re-scan this many days before the newest indexed day on every pull, so
@@ -108,8 +108,8 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
   // 1) Determine the pull window. We re-scan a rolling overlap of recent days
   // (starting OVERLAP_DAYS before the newest indexed day) rather than jumping
   // past it, so intra-day re-pulls and late-finalized notes are picked up.
-  const indexFile = await getFile(MEETINGS_INDEX_PATH);
-  const indexRows = indexFile ? parseMeetingsIndex(indexFile.content) : [];
+  // getMeetingsIndex is DB-first post-cutover.
+  const indexRows = await getMeetingsIndex().catch(() => []);
   const newestDate = indexRows.reduce(
     (max, r) => (r.date > max ? r.date : max),
     "",
@@ -125,23 +125,32 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
   const truncated = summaries.length > MAX_PER_PULL;
   const candidates = summaries.slice(0, MAX_PER_PULL);
 
-  // 3) Context for triage + dedup, loaded once (vault reads are SHA-cached).
-  const [roster, accounts, allFiles] = await Promise.all([
+  // 3) Context for triage + dedup, loaded once. Roster/accounts/series are
+  // DB-first accessors post-cutover; basename dedup asks the DB when seeded,
+  // else scans the vault file list.
+  const [roster, accounts, dbBasenames, seriesFromAccessor] = await Promise.all([
     getRoster().catch(() => new Map() as Roster),
     listAccounts().catch(() => []),
-    listMarkdownFiles().catch(() => []),
+    existingMeetingBasenamesFromDb().catch(() => null),
+    getSeriesList().catch(() => [] as Series[]),
   ]);
   const knownAccounts = accounts.map((a) => a.name);
-  const existingBasenames = new Set(
-    allFiles
-      .filter(
-        (f) =>
-          f.path.includes("/Meetings/") &&
-          !f.path.includes(SERIES_DIR_MARKER),
-      )
-      .map((f) => basenameOfPath(f.path).toLowerCase()),
-  );
-  const series = await loadSeries(allFiles);
+  let existingBasenames: Set<string>;
+  if (dbBasenames) {
+    existingBasenames = dbBasenames;
+  } else {
+    const allFiles = await listMarkdownFiles().catch(() => []);
+    existingBasenames = new Set(
+      allFiles
+        .filter(
+          (f) =>
+            f.path.includes("/Meetings/") &&
+            !f.path.includes(SERIES_DIR_MARKER),
+        )
+        .map((f) => basenameOfPath(f.path).toLowerCase()),
+    );
+  }
+  const series = seriesFromAccessor;
 
   const staged: PullStaged[] = [];
   const seriesStaged: PullSeriesStaged[] = [];
@@ -340,19 +349,6 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
 }
 
 // ---- helpers ----
-
-async function loadSeries(
-  allFiles: { path: string; sha: string; size?: number }[],
-): Promise<Series[]> {
-  const seriesFiles = allFiles.filter((f) =>
-    f.path.includes(SERIES_DIR_MARKER),
-  );
-  if (!seriesFiles.length) return [];
-  const contents = await readFiles(seriesFiles);
-  return contents
-    .filter(Boolean)
-    .map((f) => parseSeriesDoc(f.content, f.path));
-}
 
 function findSeries(
   all: Series[],

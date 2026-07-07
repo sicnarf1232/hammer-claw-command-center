@@ -22,6 +22,10 @@ ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "origin" text NOT NULL DEFAULT 'see
 ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "confirmed_by" text;
 ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "superseded_by" integer;
 
+ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "situations" jsonb;
+ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "links" jsonb;
+ALTER TABLE "series" ADD COLUMN IF NOT EXISTS "body_markdown" text;
+
 ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "workstream" text;
 ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "customer" text;
 ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "created_field" text;

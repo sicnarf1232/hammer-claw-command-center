@@ -68,8 +68,8 @@ export const EXPECTED_SCHEMA: Record<string, string[]> = {
   person_aliases: ["id", "person_id", "alias"],
   series: [
     "id", "name", "cadence", "account_id", "status", "current_state",
-    "source_path", "origin", "confirmed_by", "superseded_by", "created_at",
-    "updated_at",
+    "body_markdown", "source_path", "origin", "confirmed_by", "superseded_by",
+    "created_at", "updated_at",
   ],
   meetings: [
     "id", "date", "title", "account_id", "is_internal", "topic", "granola_id",

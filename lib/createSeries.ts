@@ -1,5 +1,7 @@
 import { getFile, writeFile } from "@/lib/github";
-import { getMeetingNoteByPath } from "@/lib/vault";
+import { getMeetingNoteByPath, getSeriesByPath } from "@/lib/vault";
+import { cutoverActive } from "@/lib/dbSource";
+import { dbSaveSeriesContent } from "@/lib/meetingsDb";
 import type { MeetingNote } from "@/lib/vault/types";
 import {
   parseSeriesDoc,
@@ -48,8 +50,12 @@ export async function createSeries(
     throw new Error("At least one meeting is required to seed the series.");
 
   const path = seriesDocPath(input.bucket, input.name, input.isOneOnOne);
-  // Never clobber an existing doc.
-  if (await getFile(path)) {
+  // Never clobber an existing doc (DB-first check post-cutover).
+  const dbActive = await cutoverActive();
+  const exists = dbActive
+    ? (await getSeriesByPath(path)) !== null
+    : (await getFile(path)) !== null;
+  if (exists) {
     throw new Error(`A series doc already exists at ${path}.`);
   }
 
@@ -97,11 +103,17 @@ export async function createSeries(
     );
   }
 
-  await writeFile({
-    path,
-    content: doc,
-    message: `app: create series ${input.name} (${ordered.length} meetings)`,
-  });
+  if (dbActive) {
+    // User-initiated creation: the row is the canonical doc (origin 'app');
+    // the vault copy lands on the next export.
+    await dbSaveSeriesContent(path, doc, "app");
+  } else {
+    await writeFile({
+      path,
+      content: doc,
+      message: `app: create series ${input.name} (${ordered.length} meetings)`,
+    });
+  }
 
   return { path, sessions: ordered.length };
 }

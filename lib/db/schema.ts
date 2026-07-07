@@ -234,6 +234,7 @@ export const series = pgTable("series", {
   accountId: integer("account_id").references(() => accounts.id),
   status: text("status").notNull().default("active"),
   currentState: text("current_state"),
+  bodyMarkdown: text("body_markdown"), // full doc content; parseSeriesDoc runs on it
   sourcePath: text("source_path"),
   origin: text("origin").notNull().default("seed"), // seed | app | proposal
   confirmedBy: text("confirmed_by"),

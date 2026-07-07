@@ -55,6 +55,7 @@ export interface InSeries {
   cadence?: string;
   status?: string;
   currentState?: string;
+  bodyMarkdown?: string;
   sourcePath?: string;
   account?: string;
 }
@@ -148,6 +149,7 @@ export interface SeriesRec {
   cadence?: string;
   status: string;
   currentState?: string;
+  bodyMarkdown?: string;
   sourcePath?: string;
   accountSlug?: string;
 }
@@ -433,6 +435,7 @@ export function reconcile(input: {
     cadence: s.cadence,
     status: s.status ?? "active",
     currentState: s.currentState,
+    bodyMarkdown: s.bodyMarkdown,
     sourcePath: s.sourcePath,
     accountSlug: slugFor(s.account),
   }));

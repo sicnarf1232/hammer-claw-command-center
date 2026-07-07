@@ -167,7 +167,8 @@ export async function applySeed(): Promise<ApplyResult> {
       origin: s.origin,
       fields: {
         name: s.name, cadence: s.cadence, accountId: s.accountId,
-        status: s.status, currentState: s.currentState, sourcePath: s.sourcePath,
+        status: s.status, currentState: s.currentState,
+        bodyMarkdown: s.bodyMarkdown, sourcePath: s.sourcePath,
       },
     })),
     r.series.map((s) => ({
@@ -176,7 +177,7 @@ export async function applySeed(): Promise<ApplyResult> {
         name: s.name, cadence: s.cadence ?? null,
         accountId: s.accountSlug ? accountIdBySlug.get(s.accountSlug) ?? null : null,
         status: s.status, currentState: s.currentState ?? null,
-        sourcePath: s.sourcePath ?? null,
+        bodyMarkdown: s.bodyMarkdown ?? null, sourcePath: s.sourcePath ?? null,
       },
     })),
   );

@@ -32,6 +32,9 @@ import {
   dbAddAccountContacts,
 } from "@/lib/accountsDb";
 import { dbSetPersonClassification } from "@/lib/peopleDb";
+import { dbSaveMeetingContent, dbReclassifyMeeting } from "@/lib/meetingsDb";
+import { getDb, meetings as meetingsT } from "@/lib/db";
+import { eq } from "drizzle-orm";
 
 // Mutations that write back into the vault as small, atomic git commits.
 // Each reads the latest file first (writeFile re-reads the SHA), never
@@ -134,6 +137,13 @@ export async function editMeetingNote(
   path: string,
   edit: MeetingEdit,
 ): Promise<{ commitSha: string; path: string }> {
+  if (await cutoverActive()) {
+    const content = await dbMeetingContent(path);
+    if (content != null) {
+      const next = applyMeetingEdit(content, edit);
+      return dbSaveMeetingContent(path, next, "app");
+    }
+  }
   const file = await getFile(path);
   if (!file) throw new WriteBackError(`Meeting note not found: ${path}`);
 
@@ -231,6 +241,16 @@ export async function reclassifyMeeting(
   path: string,
   account: string | null,
 ): Promise<{ commitSha: string; path: string; moved: boolean }> {
+  if (await cutoverActive()) {
+    const current = await dbMeetingContent(path);
+    if (current != null) {
+      let next = setMeetingCustomer(current, account);
+      next = setMeetingTitleAccount(next, account);
+      // source_path is the row's stable identity: no file move, no index
+      // rebuild. The export computes canonical placement from the account.
+      return dbReclassifyMeeting(path, next, account);
+    }
+  }
   const file = await getFile(path);
   if (!file) throw new WriteBackError(`Meeting note not found: ${path}`);
 
@@ -321,6 +341,20 @@ export async function addAccountContacts(
     message: `app: add ${added.length} contact${added.length === 1 ? "" : "s"} to ${name} ${todayISO()}`,
   });
   return { ...res, added };
+}
+
+// Raw meeting content from the DB row (null when the row/content is absent).
+async function dbMeetingContent(path: string): Promise<string | null> {
+  try {
+    const [row] = await getDb()
+      .select({ body: meetingsT.bodyMarkdown })
+      .from(meetingsT)
+      .where(eq(meetingsT.sourcePath, path))
+      .limit(1);
+    return row?.body ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function commitNote(path: string, content: string, value: string) {

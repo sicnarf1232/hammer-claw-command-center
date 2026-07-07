@@ -1,10 +1,11 @@
 import {
-  getAllMeetings,
-  getAllTasks,
+  getAllTasksFromVault,
+  getMeetingFilesFromVault,
   getRosterFromVault,
-  getSeriesList,
-  type Series,
+  getSeriesFilesFromVault,
 } from "@/lib/vault";
+import { parseMeetingNote } from "@/lib/vault/meetings";
+import { parseSeriesDoc } from "@/lib/vault/series";
 import { listAccountsFromVault } from "@/lib/accounts";
 import {
   reconcile,
@@ -20,14 +21,24 @@ import {
 
 export async function gatherAndReconcile(): Promise<ReconcileResult> {
   // Vault readers ONLY: the seed's whole point is vault -> DB, so it must
-  // never read through the flipped (DB-first) accessors.
-  const [meetings, accounts, roster, seriesList, vaultTasks] = await Promise.all([
-    getAllMeetings(),
-    listAccountsFromVault(),
-    getRosterFromVault(),
-    getSeriesList(),
-    getAllTasks(),
-  ]);
+  // never read through the flipped (DB-first) accessors. Raw file content is
+  // kept alongside the parse; the DB stores it so rows re-parse identically.
+  const [meetingFiles, accounts, roster, seriesFiles, vaultTasks] =
+    await Promise.all([
+      getMeetingFilesFromVault(),
+      listAccountsFromVault(),
+      getRosterFromVault(),
+      getSeriesFilesFromVault(),
+      getAllTasksFromVault(),
+    ]);
+  const meetings = meetingFiles.map((f) => ({
+    note: parseMeetingNote(f.content, f.path),
+    content: f.content,
+  }));
+  const seriesList = seriesFiles.map((f) => ({
+    doc: parseSeriesDoc(f.content, f.path),
+    content: f.content,
+  }));
 
   // Jordan's standalone vault tasks (the Tasks page content). Meeting action
   // items arrive separately below; reconcile dedupes dual-captured ones by
@@ -52,7 +63,7 @@ export async function gatherAndReconcile(): Promise<ReconcileResult> {
     fields: Object.keys(t.fields ?? {}).length ? t.fields : undefined,
   }));
 
-  const inMeetings: InMeeting[] = meetings.map((m) => ({
+  const inMeetings: InMeeting[] = meetings.map(({ note: m, content }) => ({
     sourcePath: m.path,
     date: m.date,
     title: m.title,
@@ -62,6 +73,7 @@ export async function gatherAndReconcile(): Promise<ReconcileResult> {
     topic: m.topic,
     granolaId: m.granolaId,
     sections: m.sections,
+    bodyMarkdown: content,
     actionItems: m.actionItems.map((ai) => ({
       text: ai.text,
       done: ai.done,
@@ -102,11 +114,12 @@ export async function gatherAndReconcile(): Promise<ReconcileResult> {
       account: e.account,
     })),
     meetings: inMeetings,
-    series: (seriesList as Series[]).map((s) => ({
+    series: seriesList.map(({ doc: s, content }) => ({
       name: s.name,
       cadence: s.cadence,
       status: s.status,
       currentState: s.currentState,
+      bodyMarkdown: content,
       sourcePath: s.path,
       account: undefined,
     })),

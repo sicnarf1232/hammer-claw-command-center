@@ -21,6 +21,14 @@ import {
 } from "./seriesDetect";
 import { indexRowFromPath } from "@/lib/meetingFormat";
 import { rosterFromDb } from "@/lib/peopleDb";
+import {
+  meetingNotesFromDb,
+  meetingNoteByPathFromDb,
+  meetingPathsFromDb,
+  meetingsIndexFromDb,
+  seriesListFromDb,
+  seriesByPathFromDb,
+} from "@/lib/meetingsDb";
 import { splitFrontmatter } from "./frontmatter";
 import { todayISO, isISODate, isOnOrBefore } from "@/lib/dates";
 import type {
@@ -61,8 +69,10 @@ function isExcluded(path: string): boolean {
   return TASK_SCAN_EXCLUDES.some((p) => path.startsWith(p));
 }
 
-// Read and parse every task in the vault (minus excluded folders).
-export async function getAllTasks(): Promise<Task[]> {
+// Read and parse every task from the VAULT (minus excluded folders). Used by
+// the cutover seed and the export; app code reads getAllTasks() below, which
+// prefers the DB once the tasks flip lands.
+export async function getAllTasksFromVault(): Promise<Task[]> {
   if (!isVaultConfigured()) throw new VaultNotConfiguredError();
   const files = (await listMarkdownFiles()).filter((f) => !isExcluded(f.path));
   const contents = await readFiles(files);
@@ -82,6 +92,10 @@ export async function getAllTasks(): Promise<Task[]> {
     }
   }
   return tasks;
+}
+
+export async function getAllTasks(): Promise<Task[]> {
+  return getAllTasksFromVault();
 }
 
 const PRIORITY_ORDER: Record<Priority, number> = { high: 0, med: 1, low: 2 };
@@ -140,9 +154,12 @@ export interface ResolvedMeeting extends MeetingsIndexRow {
   notePath: string | null; // resolved vault-relative path, or null if missing
 }
 
-// Read the meetings index and resolve each [[basename]] to a file path by
-// searching the Meetings folders (docs/02: index is the source of truth).
+// Read the meetings index and resolve each [[basename]] to a file path. Once
+// the cutover is seeded, the DB IS the index (rows derive from source paths);
+// before that, the curated vault index file is parsed as always.
 export async function getMeetingsIndex(): Promise<ResolvedMeeting[]> {
+  const fromDb = await meetingsIndexFromDb().catch(() => null);
+  if (fromDb) return fromDb;
   if (!isVaultConfigured()) throw new VaultNotConfiguredError();
   const indexFile = await getFile(MEETINGS_INDEX_PATH);
   if (!indexFile) return [];
@@ -163,28 +180,53 @@ export async function getMeetingsIndex(): Promise<ResolvedMeeting[]> {
   }));
 }
 
-// Every meeting note in the vault (under */Meetings/, excluding rolling-series
-// docs), parsed. The Meetings-Index is a curated 30-row table; this retains
-// EVERY meeting ever pulled. Used by the cutover seed and the full meetings list.
+// Every meeting note (under */Meetings/, excluding rolling-series docs),
+// parsed. DB-first once the cutover is seeded (rows carry the full note
+// content; parseMeetingNote runs on it), else the live vault scan.
 export async function getAllMeetings(): Promise<MeetingNote[]> {
-  if (!isVaultConfigured()) return [];
-  const files = (await listMarkdownFiles()).filter(
-    (f) => f.path.includes("/Meetings/") && !f.path.includes(SERIES_DIR_MARKER),
-  );
-  const contents = await readFiles(files);
-  return contents
-    .filter(Boolean)
+  const fromDb = await meetingNotesFromDb().catch(() => null);
+  if (fromDb) return fromDb;
+  const files = await getMeetingFilesFromVault();
+  return files
     .map((f) => parseMeetingNote(f.content, f.path))
-    .sort((a, b) => (a.date ?? "") < (b.date ?? "") ? 1 : -1);
+    .sort((a, b) => ((a.date ?? "") < (b.date ?? "") ? 1 : -1));
 }
 
 export async function getMeetingNoteByPath(
   path: string,
 ): Promise<MeetingNote | null> {
+  const fromDb = await meetingNoteByPathFromDb(path).catch(() => null);
+  if (fromDb) return fromDb;
   if (!isVaultConfigured()) throw new VaultNotConfiguredError();
   const file = await getFile(path);
   if (!file) return null;
   return parseMeetingNote(file.content, file.path);
+}
+
+// Raw meeting note files (path + content), VAULT only. Feeds the cutover seed,
+// which stores the content in the DB so the same parsers run against rows.
+export async function getMeetingFilesFromVault(): Promise<
+  { path: string; content: string }[]
+> {
+  if (!isVaultConfigured()) return [];
+  const files = (await listMarkdownFiles()).filter(
+    (f) => f.path.includes("/Meetings/") && !f.path.includes(SERIES_DIR_MARKER),
+  );
+  const contents = await readFiles(files);
+  return contents.filter(Boolean).map((f) => ({ path: f.path, content: f.content }));
+}
+
+// Raw rolling-series docs (path + content), VAULT only. Seed input.
+export async function getSeriesFilesFromVault(): Promise<
+  { path: string; content: string }[]
+> {
+  if (!isVaultConfigured()) return [];
+  const files = (await listMarkdownFiles()).filter((f) =>
+    f.path.includes(SERIES_DIR_MARKER),
+  );
+  if (!files.length) return [];
+  const contents = await readFiles(files);
+  return contents.filter(Boolean).map((f) => ({ path: f.path, content: f.content }));
 }
 
 // Frontmatter-only read for classification/filing decisions.
@@ -198,21 +240,19 @@ export async function getFrontmatter(path: string) {
 
 export type { Series } from "./series";
 
-// All rolling-series docs (under */Meetings/_Series/), newest activity first.
+// All rolling-series docs, newest activity first. DB-first once seeded.
 export async function getSeriesList(): Promise<Series[]> {
-  if (!isVaultConfigured()) return [];
-  const files = (await listMarkdownFiles()).filter((f) =>
-    f.path.includes(SERIES_DIR_MARKER),
-  );
-  if (!files.length) return [];
-  const contents = await readFiles(files);
-  return contents
-    .filter(Boolean)
+  const fromDb = await seriesListFromDb().catch(() => null);
+  if (fromDb) return fromDb;
+  const files = await getSeriesFilesFromVault();
+  return files
     .map((f) => parseSeriesDoc(f.content, f.path))
     .sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""));
 }
 
 export async function getSeriesByPath(path: string): Promise<Series | null> {
+  const fromDb = await seriesByPathFromDb(path).catch(() => null);
+  if (fromDb) return fromDb;
   if (!isVaultConfigured()) return null;
   const file = await getFile(path);
   if (!file) return null;
@@ -240,15 +280,16 @@ export interface SeriesView {
 }
 
 // Resolve a series' log into clickable sessions and pull its outstanding
-// (incomplete Jordan) action items forward. Lists files once for basename->path,
-// then reads only the series' own source notes.
+// (incomplete Jordan) action items forward. Sources meeting notes through the
+// DB-first accessors, so it works identically before and after the cutover.
 export async function getSeriesView(series: Series): Promise<SeriesView> {
-  const files = await listMarkdownFiles();
+  const allNotes = await getAllMeetings();
   const byBase = new Map<string, string>();
-  for (const f of files) {
-    if (!f.path.includes("/Meetings/")) continue;
-    const base = f.path.split("/").pop()!.replace(/\.md$/, "");
-    if (!byBase.has(base)) byBase.set(base, f.path);
+  const noteByPath = new Map<string, MeetingNote>();
+  for (const n of allNotes) {
+    const base = n.path.split("/").pop()!.replace(/\.md$/, "");
+    if (!byBase.has(base)) byBase.set(base, n.path);
+    noteByPath.set(n.path, n);
   }
 
   const firstSource = (text: string): string | undefined => {
@@ -283,9 +324,8 @@ export async function getSeriesView(series: Series): Promise<SeriesView> {
   for (const base of basenames) {
     const path = byBase.get(base);
     if (!path) continue;
-    const file = await getFile(path);
-    if (!file) continue;
-    const note = parseMeetingNote(file.content, path);
+    const note = noteByPath.get(path);
+    if (!note) continue;
     sessionCount++;
     if (note.date && (!latestDate || note.date > latestDate)) latestDate = note.date;
 
@@ -371,16 +411,11 @@ export async function getPersonProfile(name: string): Promise<PersonProfile> {
     }
   }
 
-  const files = (await listMarkdownFiles()).filter(
-    (f) => f.path.includes("/Meetings/") && !f.path.includes(SERIES_DIR_MARKER),
-  );
-  const contents = await readFiles(files);
+  const allNotes = await getAllMeetings();
 
   const meetings: PersonMeeting[] = [];
   const items: PersonItem[] = [];
-  for (const f of contents) {
-    if (!f) continue;
-    const note = parseMeetingNote(f.content, f.path);
+  for (const note of allNotes) {
     let owns = false;
     for (const ai of note.actionItems) {
       const owner = ai.owner ?? (ai.isJordans ? "Jordan Francis" : undefined);
@@ -404,8 +439,8 @@ export async function getPersonProfile(name: string): Promise<PersonProfile> {
       meetings.push({
         title: note.title,
         date: note.date,
-        path: f.path,
-        bucket: indexRowFromPath(f.path)?.bucket ?? "",
+        path: note.path,
+        bucket: indexRowFromPath(note.path)?.bucket ?? "",
       });
     }
   }
@@ -424,20 +459,27 @@ export async function getPersonProfile(name: string): Promise<PersonProfile> {
 // each filename, and clusters them, excluding anything an existing series
 // already covers. Cheap: file listing only, no note reads.
 export async function getSeriesCandidates(): Promise<SeriesCandidate[]> {
-  if (!isVaultConfigured()) return [];
-  const files = await listMarkdownFiles();
+  // DB-first: meeting paths come from the meetings table once seeded.
+  const dbPaths = await meetingPathsFromDb().catch(() => null);
+  let paths: string[];
+  if (dbPaths) {
+    paths = dbPaths;
+  } else {
+    if (!isVaultConfigured()) return [];
+    paths = (await listMarkdownFiles())
+      .map((f) => f.path)
+      .filter((p) => p.includes("/Meetings/") && !p.includes(SERIES_DIR_MARKER));
+  }
   const meetings: DetectMeetingInput[] = [];
-  for (const f of files) {
-    if (!f.path.includes("/Meetings/")) continue;
-    if (f.path.includes(SERIES_DIR_MARKER)) continue; // skip the series docs
-    const row = indexRowFromPath(f.path);
+  for (const path of paths) {
+    const row = indexRowFromPath(path);
     if (!row) continue;
     meetings.push({
       date: row.date,
       bucket: row.bucket,
       title: row.title,
       noteBasename: row.basename,
-      notePath: f.path,
+      notePath: path,
     });
   }
   const existing = await getSeriesList().catch(() => []);

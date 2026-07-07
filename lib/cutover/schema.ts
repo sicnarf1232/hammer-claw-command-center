@@ -113,6 +113,11 @@ const STATEMENTS: string[] = [
     `alter table ${t} add column if not exists superseded_by integer`,
   ]),
 
+  // Content-in-DB (Phase 2): the series doc's full markdown lives in the row
+  // (meetings already had body_markdown); the existing parsers run against it,
+  // so read fidelity is identical to the vault parse.
+  `alter table series add column if not exists body_markdown text`,
+
   // Account note body lists (Phase 2): situations + links ride along so the
   // DB-backed Account matches the vault parse and can round-trip on export.
   `alter table accounts add column if not exists situations jsonb`,
