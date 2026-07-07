@@ -2,6 +2,33 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 1 — stabilize (2026-07-06)
+
+Gating guarantee: **no AI output reaches the vault without approval, and
+auto-stored triage is labeled with its true model.**
+
+- **Triage provenance fixed**: `email_triage.model` now records the model the
+  API actually served (was hardcoded to a Haiku string while Sonnet ran); old
+  bugged rows backfilled to `unknown (pre-fix)`. New `ai_generated` +
+  `ai_snapshot` columns: first manual correction freezes the AI's original
+  values; TriageBar shows an AI chip until confirmed or corrected.
+- **Propose-then-confirm for Granola** (new `lib/proposals/`): the pull stages
+  `meeting-file` and `series-update` proposals (zero vault writes, cron-safe);
+  a review queue on /meetings previews the exact note and executes approved
+  payloads (contacts best-effort, series merged against a fresh doc read,
+  index rebuilt once per batch). Rejected meetings never re-stage.
+- **"Send update" really sends**: `/api/tasks/send-update` replies into the
+  task's linked thread via Flow B (reply-all set derived server-side, pure +
+  tested). Unlinked tasks keep an honest "Mark sent" stamp; recipients are
+  never guessed (decision: require linking).
+- **Build Your Day rollover** reads the server day plan (localStorage is only
+  a fallback). ReplyBox workstream is a prop (merit default). Stale
+  "Outlook draft" comments and dead `ReplyIntent` removed: Flow B is a direct
+  send. `documents.spec` + `brand_kits` (with `paper`) now self-provision, so
+  those two manual ALTERs left the punchlist.
+- Tests 218 passing (27 files); first Anthropic mock pattern via typed
+  factories (`lib/testing/aiMock.ts`) + `vi.mock("@/lib/ai")`.
+
 ## Phase 0 — verify (2026-07-06)
 
 - Live-schema verification: `lib/schemaCheck.ts` (expected DDL assembled from every provisioning source, pure diff, FK summary, 9 tests) + read-only `GET /api/debug/schema` + operator script `scripts/check-live-schema.mts`. Local introspection is impossible by design (Sensitive Vercel vars pull blank), so the deployed endpoint is the verdict; Jordan runs it via `docs/VERIFY-LIVE.md` (new 5-minute checklist).
