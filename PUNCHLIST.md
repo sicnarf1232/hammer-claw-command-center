@@ -1,93 +1,60 @@
 # PUNCHLIST — things that still need Jordan
 
-Only genuinely-open items, grouped by what they unblock. Reconciled 2026-07-06
-against `vercel env ls` and the code. History of completed items lives in
-`docs/CHANGELOG.md` and `docs/HANDOFF-2026-07.md`. Nothing here is invented.
+Reconciled 2026-07-06 during Phase 1 (stabilize). Only genuinely-open items.
+History lives in `docs/CHANGELOG.md` and `docs/HANDOFF-2026-07.md`.
 
-Env vars CONFIRMED set in Vercel production: `GITHUB_TOKEN`, `VAULT_REPO`,
-`VAULT_BRANCH`, `APP_TIMEZONE`, `APP_PASSWORD`, `POSTGRES_URL` (+Neon set),
-`BLOB_READ_WRITE_TOKEN`, `HC_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`,
-`GRANOLA_API_KEY`, `POWER_AUTOMATE_REPLY_URL`.
+## Needs Jordan, in priority order
 
----
-
-## 0. FYI — build location (not a blocker)
-
-Working copy is `~/dev/hammer-claw-command-center`, not `~/Documents` (macOS TCC
-blocks spawned node/npm/next inside `~/Documents`). Code is identical anywhere.
-
----
-
-## Blocks: Build Your Day calendar timeline
-
-- [ ] **Build "HC Calendar Push" Power Automate flow.** The app never calls
-      Microsoft Graph directly (CLAUDE.md). Trigger = recurrence (e.g. every
-      30 min) or Outlook event trigger. Action = Graph `GET /me/calendarView`
-      for today's range → Select into `[{id,title,startISO,endISO,location}]` →
-      HTTP POST to
-      `https://hammer-claw-command-center.vercel.app/api/webhooks/calendar`
-      with header `x-hc-signature: <HC_WEBHOOK_SECRET>` and body
-      `{"date":"YYYY-MM-DD","events":[…]}`. The webhook + `GET /api/calendar/today`
-      are built and cache under settings `calendar:<date>`. Until the flow runs,
-      the timeline shows tasks only (no meetings).
-
-## Blocks: creating tasks from the app (Tasks quick-add + thread "Create task")
-
-- [ ] **Add a vault task-append writeback.** No `createTask`/`appendTask` exists
-      in `lib/writeback.ts`. Needed for (a) the grouped-Tasks quick-add row and
-      (b) `ThreadActionComposer`'s "Create task" (its "Link to existing" already
-      works via `task_meta.linked_thread_key`). Decision needed: which vault file
-      a new task appends to (daily `100 Periodics/Daily/TASKS.md`, or the
-      customer note?). "Markdown is truth" still holds, so this must commit to
-      the vault, not just the DB.
-
-## Blocks: notifications reaching your phone/email
-
-- [ ] **Pick a notification push channel.** `NOTIFY_WEBHOOK_URL` is unset, so
-      notifications are logged in-app only (`/notifications`). Provide a Power
-      Automate "push"/email-to-self flow URL to also push them out.
-
-## Blocks: sub-daily crons + sending as Sloan
-
-- [ ] **Vercel plan for cron.** Hobby = once/day. `vercel.json` runs 2 daily
-      crons (morning-brief, notify). Full schedule (10-min vault sync, EOD recap,
-      weekly review, Granola pull every 4h) is in `vercel.cron-pro.json` — copy
-      its `crons` array into `vercel.json` after upgrading to Pro. Optional:
-      DST-aware guard (crons fire in UTC; brief *content* is always correct).
-- [ ] **Sloan sending address.** Unknown → the app refuses to send as `sloan`.
-      Provide the from-address to enable it. (Merit sending is live.)
+1. **Set `CRON_SECRET` in Vercel** (any random string; Vercel sends it as the
+   Bearer token on cron calls). Verified 2026-07-06: it is NOT set, and
+   `isAuthorizedCron` fails closed, so the two scheduled crons (morning-brief,
+   notify) have never run. One env var turns them on.
+2. **Build the "HC Calendar Push" Power Automate flow** (blocks the Build Your
+   Day calendar timeline). Trigger = recurrence (e.g. every 30 min) or Outlook
+   event trigger. Action = Graph `GET /me/calendarView` for today's range,
+   Select into `[{id,title,startISO,endISO,location}]`, HTTP POST to
+   `https://hammer-claw-command-center.vercel.app/api/webhooks/calendar` with
+   header `x-hc-signature: <HC_WEBHOOK_SECRET>` and body
+   `{"date":"YYYY-MM-DD","events":[...]}`. The webhook + `GET
+   /api/calendar/today` are built and cache under settings `calendar:<date>`.
+3. **Pick a notification push channel.** `NOTIFY_WEBHOOK_URL` is unset, so
+   notifications are in-app only (`/notifications`). Provide a Power Automate
+   "push"/email-to-self flow URL to also push them out.
+4. **Vercel plan decision for sub-daily crons.** Hobby = once daily.
+   `vercel.cron-pro.json` holds the full schedule (10-min vault sync, EOD
+   recap, weekly review, Granola pull every 4h; the Granola pull is now
+   staging-only, so running it on cron is safe). Copy its `crons` array into
+   `vercel.json` after upgrading to Pro. Note: Phase 2 retires the vault sync.
+5. **Sloan sending address.** Unknown, so the app refuses to send as `sloan`
+   (`canDraftAs`). Provide the from-address to enable it. Merit sending is
+   live.
+6. **Retire the Cowork granola-triage step.** The app now stages Granola
+   meetings as proposals you approve on /meetings; once you confirm that flow
+   works end to end, turn off Cowork's granola triage so two systems do not
+   both write meeting notes / index / rolling docs (one-writer rule).
+7. **Run the Phase 0 verification** (`docs/VERIFY-LIVE.md`): open
+   `/api/debug/schema`, paste the JSON back, and do the 5-minute visual pass.
+   Needed before Phase 2 (DB cutover) starts.
 
 ## Verify-live (should work; not yet confirmed on production)
 
-- [ ] **Main St. redesign on the live URL** — open the site, confirm Sea Glass +
-      dark theme + the new nav mark render, click through Dashboard / Today (both
-      tabs) / Tasks (both views) / Contacts / an inbox thread.
-- [ ] **Flagged-email Flow A** — `/api/webhooks/email` exists; confirm the
-      Outlook flagged-trigger flow is built and pointed at it (firehose capture
-      flows appear live; the flagged path is separate and unverified).
-- [ ] **Granola pull** — press "Pull from Granola" on `/meetings`, confirm
-      meetings file into the right account folders and a matching rolling doc
-      updates. Then **retire the Cowork granola-triage** step so two systems do
-      not both write meeting notes / index / rolling docs (one-writer rule).
-- [ ] **Meeting PDF export** — click Download PDF on a meeting; confirm headless
-      Chromium renders on Hobby (auto-falls back to print view if the function is
-      too big — tell me and I'll switch to chromium-min).
+- **Main St. redesign visuals** and the rest of `docs/VERIFY-LIVE.md`.
+- **Flagged-email Flow A**: `/api/webhooks/email` exists; whether the Outlook
+  flagged-trigger flow is built and pointed at it is unverified (firehose
+  capture flows are live; the flagged path is separate).
+- **Meeting PDF export** on the live Hobby plan (falls back to print view if
+  the function is too big; report which you get).
 
-## Optional Neon SQL (features degrade gracefully without them)
+## Resolved / superseded (for the record)
 
-- [ ] **Quote re-edit:** `ALTER TABLE documents ADD COLUMN IF NOT EXISTS spec jsonb;`
-      then Save a quote once. Until then Recent-quotes is view-only (PDF link).
-- [ ] **Branding paper color:** re-run `drizzle/brand-kits.sql` (idempotent
-      `ADD COLUMN IF NOT EXISTS "paper"`). Until then `/branding` shows a notice.
-- [ ] **Firehose clean record (optional):** run `drizzle/0005_email_firehose.sql`.
-      Not required — the schema self-provisions.
-
-## Not-yet-built follow-ons (say the word)
-
-- [ ] **Account Emails tab + Contact Emails tab** (firehose sequence F). Brain
-      retrieval over email/attachment text and post-hoc triage ARE built.
-- [ ] **In-thread send of a task's customer update.** "Send update" currently
-      drafts + copies + stamps `last_customer_update`; it does not send even when
-      the task has a `linked_thread_key`.
-- [ ] **Auto quote-tag** (`quote_short` from line-item category mix) — needs a
-      category field on price-list items; manual until then.
+- ~~`documents.spec` manual ALTER~~ — self-provisioned by `lib/documents.ts`
+  as of Phase 1 (plus `/api/debug/schema` reports it).
+- ~~`brand_kits.paper` manual ALTER / brand-kits.sql~~ — `lib/branding.ts`
+  self-provisions the table + column as of Phase 1.
+- ~~Vault task-append writeback decision~~ — superseded: task creation lands
+  DB-first in Phase 2 (tasks quick-add + thread "Create task"), per the
+  approved cutover plan. No vault append will be built.
+- ~~In-thread send of a task's customer update~~ — shipped in Phase 1
+  (`/api/tasks/send-update`); requires the task to be linked to a thread.
+- ~~Granola pull writes without review~~ — replaced by the proposal queue on
+  /meetings (Phase 1). Nothing AI-staged reaches the vault without approval.

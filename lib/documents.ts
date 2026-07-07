@@ -1,6 +1,25 @@
 import { put, del, get } from "@vercel/blob";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { getDb, dbConfigured, documents } from "@/lib/db";
+
+// Self-provision the `spec` column (saved-quote re-edit). It was declared in
+// the schema but had no migration anywhere, so live DBs could lack it; the
+// retry-without-spec fallbacks below stay as a belt for the first request that
+// races this. Latched per warm lambda, retried on failure.
+let specEnsured: Promise<void> | null = null;
+
+function ensureDocumentsColumns(): Promise<void> {
+  if (specEnsured) return specEnsured;
+  specEnsured = (async () => {
+    await getDb().execute(
+      sql.raw(`ALTER TABLE "documents" ADD COLUMN IF NOT EXISTS "spec" jsonb`),
+    );
+  })().catch((err) => {
+    specEnsured = null;
+    throw err;
+  });
+  return specEnsured;
+}
 
 // Document library (Milestone 3 #1): reference material (ISO docs, biocomp,
 // drawings, certs, PCNs, specs) is stored in Vercel Blob; Postgres holds the
@@ -110,6 +129,7 @@ export async function uploadDocument(input: UploadInput): Promise<DocumentRecord
     spec: input.spec ?? null,
   };
   try {
+    await ensureDocumentsColumns().catch(() => {});
     const [row] = await getDb().insert(documents).values(values).returning();
     return row as DocumentRecord;
   } catch (err) {
@@ -147,6 +167,7 @@ async function queryDocuments(
   where?: ReturnType<typeof eq>,
 ): Promise<DocumentRecord[]> {
   const db = getDb();
+  await ensureDocumentsColumns().catch(() => {});
   try {
     const q = db.select().from(documents);
     const rows = where

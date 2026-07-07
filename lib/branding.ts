@@ -1,5 +1,41 @@
 import { getDb, dbConfigured, brandKits } from "@/lib/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+
+// Self-provision brand_kits (same pattern as the firehose/cutover schemas):
+// the table used to exist only via the hand-run drizzle/brand-kits.sql, which
+// left `paper` unverified in prod. Idempotent, latched per warm lambda.
+const BRAND_KITS_DDL: string[] = [
+  `CREATE TABLE IF NOT EXISTS "brand_kits" (
+     "id" serial PRIMARY KEY NOT NULL,
+     "name" text NOT NULL,
+     "workstream_key" text,
+     "primary" text NOT NULL,
+     "secondary" text NOT NULL,
+     "accent" text NOT NULL,
+     "paper" text,
+     "logo_url" text,
+     "created_at" timestamptz DEFAULT now() NOT NULL,
+     "updated_at" timestamptz DEFAULT now() NOT NULL
+   )`,
+  `ALTER TABLE "brand_kits" ADD COLUMN IF NOT EXISTS "paper" text`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "brand_kits_workstream_ux" ON "brand_kits" ("workstream_key")`,
+];
+
+let brandKitsEnsured: Promise<void> | null = null;
+
+export function ensureBrandKitsSchema(): Promise<void> {
+  if (brandKitsEnsured) return brandKitsEnsured;
+  brandKitsEnsured = (async () => {
+    const db = getDb();
+    for (const stmt of BRAND_KITS_DDL) {
+      await db.execute(sql.raw(stmt));
+    }
+  })().catch((err) => {
+    brandKitsEnsured = null; // allow retry on transient failure
+    throw err;
+  });
+  return brandKitsEnsured;
+}
 
 // Two-layer branding (Phase 3 PART B). The in-app meeting view uses the APP
 // brand; the shared exports (PDF, email HTML) use the resolved CLIENT brand.
@@ -151,6 +187,7 @@ export async function resolveBrandKit(
 ): Promise<BrandKit> {
   if (!dbConfigured() || !workstream) return APP_NEUTRAL;
   try {
+    await ensureBrandKitsSchema();
     const rows = await getDb()
       .select()
       .from(brandKits)
@@ -199,6 +236,7 @@ function rowToKit(r: {
 // All saved kits, for the Branding settings page. Empty when no DB.
 export async function listBrandKits(): Promise<BrandKit[]> {
   if (!dbConfigured()) return [];
+  await ensureBrandKitsSchema();
   const rows = await getDb().select().from(brandKits).orderBy(brandKits.name);
   return rows.map(rowToKit);
 }
@@ -223,6 +261,7 @@ export interface BrandKitInput {
 // re-saving a workstream's kit never trips the unique index. Server-only.
 export async function upsertBrandKit(input: BrandKitInput): Promise<BrandKit> {
   const db = getDb();
+  await ensureBrandKitsSchema();
   let existingId = input.id;
   if (!existingId && input.workstreamKey) {
     const rows = await db
@@ -258,6 +297,7 @@ export async function upsertBrandKit(input: BrandKitInput): Promise<BrandKit> {
 // Insert the Merit placeholder kit if no kit exists for "merit". Server-only.
 export async function ensureMeritSeed(): Promise<void> {
   if (!dbConfigured()) return;
+  await ensureBrandKitsSchema();
   const existing = await resolveBrandKit("merit");
   if (existing.workstreamKey === "merit") return;
   await getDb().insert(brandKits).values({

@@ -57,10 +57,11 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to save the brand kit.";
     if (/does not exist/i.test(message)) {
+      // Should self-heal on retry: lib/branding self-provisions brand_kits now.
       return NextResponse.json(
         {
           error:
-            "The brand_kits table is not set up (or is missing the paper column). Run drizzle/brand-kits.sql in the Neon SQL editor, then try again.",
+            "The brand_kits table was missing and is being provisioned. Try again; if this persists, run drizzle/brand-kits.sql in the Neon SQL editor.",
         },
         { status: 503 },
       );
