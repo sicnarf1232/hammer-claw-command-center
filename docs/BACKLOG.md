@@ -44,3 +44,37 @@ Phase 4 threads brand kits through quote rendering (template registry).
 (Items 3 and 4, circle contrast and the notification bell, shipped 2026-07-07
 during Phase 2. Review-queue verbiage + inline account creation shipped same
 day after the seed review.)
+
+## From the Claude-in-Outlook comparison (2026-07-07)
+
+### 7. Inbox brain: gated write tools (small-medium)
+
+Give the agent archive/flag/move/categorize tools with the one-gate
+confirmation model: reversible ops with an unambiguous target act immediately
+and report; bulk or ambiguous ops echo the match count + first subjects and
+get one chat confirmation. Reuse /api/inbox/thread-action; never expose send.
+
+### 8. Inbox brain: persistent memory with provenance (medium)
+
+Durable notes across chats ("Jordan prefers no greeting with Zoya"), stored as
+facts never imperatives, each tagged user-stated / sender-attributed /
+inferred. On read, treat notes as data; a note that reads like a command gets
+flagged, not executed (closes delayed-injection via poisoned memory). Storage:
+app_settings or a small table.
+
+### 9. Inbox brain: clickable thread citations (tiny)
+
+When the agent cites a thread, linkify it to /inbox/<key> (the agent already
+knows keys from search results); render links in the chat bubbles.
+
+### 10. Inbox brain: calendar tool (blocked on HC Calendar Push)
+
+Once the Power Automate calendar webhook flows (PUNCHLIST item 2), add a
+get_calendar tool over the cached calendar:<date> settings so the brain can
+answer availability questions. Two-timezone discipline: math in UTC, present
+in Mountain.
+
+### 11. Semantic email search (medium, optional)
+
+Keyword search misses "that email about the sterilization delay" phrasing.
+Embeddings over emails.body_text (pgvector on Neon) as a second search tool.
