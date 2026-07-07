@@ -1,6 +1,6 @@
 # CLAUDE.md — Command Center repo guardrails
 
-You are building the Hammer Claw Command Center: a personal command center app that sits on top of Jordan's Obsidian vault. The vault is the source of truth. This app is a fast, always-on layer that reads and writes the same data, plus a small database for fast-changing state.
+You are building the Hammer Claw Command Center: a personal command center app that grew out of Jordan's Obsidian vault. Since the 2026-07-07 cutover the app's Postgres database is the source of truth; the vault is the seed it was imported from and the export target Jordan syncs on demand (rule 2). Obsidian stays a fine place to READ; edits belong in the app.
 
 Read `/docs` before writing code. Build in phases. Do not skip ahead.
 
@@ -26,9 +26,7 @@ Read `/docs` before writing code. Build in phases. Do not skip ahead.
 ## Hard rules
 
 1. **Match the vault contract exactly.** Task schema, frontmatter, roster, meeting action items, and the meetings index are all specified in `docs/02-vault-contract.md`. Parse to that spec. If a field is ambiguous, ask Jordan, do not guess.
-2. **Markdown is truth.** When the app changes vault content, it writes back as a git commit through the GitHub API. Small, atomic commits. Never bulk-rewrite files.
-   - Scheduled to be superseded by `docs/DB-CUTOVER.md` stage 4 (`VAULT_MODE`). Do not flip this rule until that lands.
-   - App-managed fast-changing task state (checklists, linked threads, last-customer-update) lives in the DB `task_meta` table keyed by the vault task id (`sourceFile:sourceLine`). That is deliberate app-state per this rule's "does not belong in version control" carve-out, not a violation (decision 2026-07-06).
+2. **The app database is the source of truth** (cutover flipped 2026-07-07, per `docs/DB-CUTOVER.md`). The vault is seed-in / export-out only; the app must run with no live vault dependency once seeded. Writes go to the DB with provenance (`origin` seed|app|proposal; app/proposal rows survive re-seeds). The vault is written ONLY by the explicit export (`POST /api/export`, Settings card), gated by `VAULT_MODE` (default readonly) through the single choke point in `lib/github.ts`. Never add a vault writer outside `writeFileForExport`. Exports render canonical markdown per `docs/02-vault-contract.md`, small atomic commits, never force-push.
 3. **One writer at a time per file.** Obsidian, Cowork schedulers, and this app can all touch the same file. Read latest before writing, commit with a clear message, never force-push.
 4. **No secrets in git.** All tokens and the webhook secret live in Vercel env vars. Provide a `.env.example`, never a real `.env`.
 5. **Workstream identity is sacred.** The vault is split into workstreams (merit, sloan, personal, shared; nextech was removed 2026-06-16 and task views filter it out). Output that goes anywhere with an identity (an email draft, a filed note) must use the right workstream's folder, email, and brand. See docs/02 section "Workstreams." When in doubt, ask.

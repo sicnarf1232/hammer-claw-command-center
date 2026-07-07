@@ -4,6 +4,8 @@ import { getTodayTasks } from "@/lib/today";
 import { generateBrief, aiConfigured } from "@/lib/ai";
 import { createNotification } from "@/lib/notify";
 import { todayISO } from "@/lib/dates";
+import { cutoverActive } from "@/lib/dbSource";
+import { setSetting } from "@/lib/settings";
 import type { Task } from "@/lib/vault/types";
 
 export type BriefKind = "morning" | "eod" | "weekly";
@@ -105,19 +107,28 @@ export async function writeBrief(
       "",
     ].join("\n") + body + "\n";
 
-  const result = await writeFile({
-    path,
-    content,
-    message: `app: ${m.slug} ${today}`,
-  });
+  // Post-cutover (Jordan's decision 2026-07-07): briefs are app-state. The
+  // full text lives in the DB and is delivered via the notification; the
+  // vault gets a copy only through the deliberate export, not here.
+  let commitSha = "";
+  if (await cutoverActive()) {
+    await setSetting(`brief:${today}:${kind}`, { path, content, usedAi });
+  } else {
+    const result = await writeFile({
+      path,
+      content,
+      message: `app: ${m.slug} ${today}`,
+    });
+    commitSha = result.commitSha;
+  }
 
   await createNotification({
     kind: "brief",
-    title: `${m.label} written`,
-    body: `Filed to ${result.path}`,
-    meta: { path: result.path, kind },
+    title: `${m.label} for ${today}`,
+    body,
+    meta: { path, kind },
     dedupeKey: `brief:${kind}:${today}`,
   });
 
-  return { path: result.path, commit: result.commitSha, usedAi };
+  return { path, commit: commitSha, usedAi };
 }

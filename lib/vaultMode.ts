@@ -1,16 +1,18 @@
 // VAULT_MODE gate for GitHub writes (DB-CUTOVER stage 4). One choke point in
 // lib/github.ts consults this; individual writers never check it themselves.
 //
-//   readwrite  - writes commit to the vault (pre-cutover behavior)
 //   readonly   - only the deliberate export may write; everything else throws
+//   readwrite  - writes commit to the vault (pre-cutover behavior; set
+//                VAULT_MODE=readwrite explicitly to restore it)
 //
-// Default is readwrite until the cutover flip (Phase 2 step 8) changes the
-// default to readonly in the same commit that flips CLAUDE.md rule 2.
+// DEFAULT IS READONLY as of the cutover flip (2026-07-07): the app database
+// is the source of truth and the vault is written only by the export. This
+// commit also flipped CLAUDE.md rule 2.
 
 export type VaultMode = "readonly" | "readwrite";
 
 export function vaultMode(): VaultMode {
-  return process.env.VAULT_MODE === "readonly" ? "readonly" : "readwrite";
+  return process.env.VAULT_MODE === "readwrite" ? "readwrite" : "readonly";
 }
 
 export class VaultReadOnlyError extends Error {

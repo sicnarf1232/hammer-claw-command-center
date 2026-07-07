@@ -2,6 +2,24 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 2 — THE FLIP, step 8 of 8 (2026-07-07)
+
+**The app database is now the source of truth.** Executed after Jordan ran
+the diff/upsert seed, verified the flipped reads, resolved the review queue,
+and confirmed the export round-trips ("vault export is solid").
+
+- `VAULT_MODE` defaults to **readonly**: the only vault writer is the
+  deliberate export (`writeFileForExport`); everything else throws
+  `VaultReadOnlyError` at the single choke point. Set `VAULT_MODE=readwrite`
+  to restore pre-cutover behavior in an emergency.
+- Briefs are app-state now: full text in `app_settings` (`brief:<date>:<kind>`)
+  and delivered in the notification body; no cron vault writes.
+- Inbox "file" is a DB status change (the email row already holds the full
+  message); the vault note copy is gone.
+- CLAUDE.md rule 2 flipped in this same commit, per docs/DB-CUTOVER.md.
+- Rollback story: the vault still holds everything as of the last export, and
+  `git revert` of this commit + `VAULT_MODE=readwrite` restores the old world.
+
 ## Phase 2 — DB cutover, steps 1-7 of 8 (2026-07-07)
 
 The app now reads accounts, people/roster, meetings, series, and tasks from

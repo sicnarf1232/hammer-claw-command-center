@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { isVaultConfigured, writeFile } from "@/lib/github";
+import { cutoverActive } from "@/lib/dbSource";
 import { getEmail, markFiled } from "@/lib/inbox";
 import { buildInboxNote, FilingNotAllowedError } from "@/lib/filing";
 import { isWorkstream } from "@/lib/vault/types";
@@ -59,6 +60,14 @@ export async function POST(req: NextRequest) {
       workstream,
       account,
     );
+
+    // Post-cutover: filing is a DB status change (the email row already holds
+    // the full message; the vault note was a duplicate copy). Pre-cutover it
+    // commits the note as before.
+    if (await cutoverActive()) {
+      await markFiled(email.id, note.path, "", workstream, account ?? null);
+      return NextResponse.json({ ok: true, path: note.path, commit: "" });
+    }
 
     const result = await writeFile({
       path: note.path,
