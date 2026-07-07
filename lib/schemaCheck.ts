@@ -53,32 +53,34 @@ export const EXPECTED_SCHEMA: Record<string, string[]> = {
   ],
   app_meta: ["key", "value", "updated_at"],
 
-  // lib/cutover/schema.ts
+  // lib/cutover/schema.ts (origin/confirmed_by/superseded_by = Phase 2 provenance)
   accounts: [
     "id", "name", "slug", "type", "region", "stage", "status",
-    "account_number", "workstream", "overview", "source_path", "created_at",
-    "updated_at",
+    "account_number", "workstream", "overview", "source_path", "origin",
+    "confirmed_by", "superseded_by", "created_at", "updated_at",
   ],
   people: [
     "id", "full_name", "classification", "account_id", "title", "email",
-    "phone", "is_self", "needs_review", "source_paths", "created_at",
-    "updated_at",
+    "phone", "is_self", "needs_review", "source_paths", "origin",
+    "confirmed_by", "superseded_by", "created_at", "updated_at",
   ],
   person_aliases: ["id", "person_id", "alias"],
   series: [
     "id", "name", "cadence", "account_id", "status", "current_state",
-    "source_path", "created_at", "updated_at",
+    "source_path", "origin", "confirmed_by", "superseded_by", "created_at",
+    "updated_at",
   ],
   meetings: [
     "id", "date", "title", "account_id", "is_internal", "topic", "granola_id",
-    "body_markdown", "sections", "series_id", "source_path", "created_at",
-    "updated_at",
+    "body_markdown", "sections", "series_id", "source_path", "origin",
+    "confirmed_by", "superseded_by", "created_at", "updated_at",
   ],
   meeting_attendees: ["meeting_id", "person_id"],
   tasks: [
     "id", "meeting_id", "owner_person_id", "account_id", "text", "done",
     "due", "priority", "status", "is_jordans", "description", "notes",
-    "source_path", "source_line", "created_at", "updated_at",
+    "source_path", "source_line", "origin", "confirmed_by", "superseded_by",
+    "created_at", "updated_at",
   ],
 
   // lib/firehose/schema.ts

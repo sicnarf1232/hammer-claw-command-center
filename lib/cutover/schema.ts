@@ -102,6 +102,25 @@ const STATEMENTS: string[] = [
    )`,
   `create index if not exists tasks_done_idx on tasks (done)`,
   `create index if not exists tasks_owner_idx on tasks (owner_person_id)`,
+
+  // Provenance (Phase 2): origin says who created the row (seed = imported
+  // from the vault; app = created/edited in the app; proposal = an approved AI
+  // proposal). The diff/upsert seed may update or remove ONLY origin='seed'
+  // rows; app and proposal rows are never touched by a re-seed.
+  ...["accounts", "people", "series", "meetings", "tasks"].flatMap((t) => [
+    `alter table ${t} add column if not exists origin text not null default 'seed'`,
+    `alter table ${t} add column if not exists confirmed_by text`,
+    `alter table ${t} add column if not exists superseded_by integer`,
+  ]),
+
+  // task_emails previously existed only in never-run migration 0003; the
+  // quick-add thread linking (Phase 2) needs it for real.
+  `create table if not exists task_emails (
+     task_id integer not null,
+     email_id integer not null,
+     created_at timestamptz not null default now()
+   )`,
+  `create unique index if not exists task_emails_pk on task_emails (task_id, email_id)`,
 ];
 
 let ensured: Promise<void> | null = null;

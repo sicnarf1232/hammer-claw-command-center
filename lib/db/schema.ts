@@ -178,6 +178,10 @@ export const accounts = pgTable(
     workstream: text("workstream").notNull().default("merit"),
     overview: text("overview"),
     sourcePath: text("source_path"), // original vault path, for export
+    // Provenance (Phase 2): seed | app | proposal. Re-seed touches only 'seed'.
+    origin: text("origin").notNull().default("seed"),
+    confirmedBy: text("confirmed_by"),
+    supersededBy: integer("superseded_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -199,6 +203,9 @@ export const people = pgTable(
     isSelf: boolean("is_self").notNull().default(false), // Jordan
     needsReview: boolean("needs_review").notNull().default(false),
     sourcePaths: jsonb("source_paths").$type<string[]>().default([]),
+    origin: text("origin").notNull().default("seed"), // seed | app | proposal
+    confirmedBy: text("confirmed_by"),
+    supersededBy: integer("superseded_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -226,6 +233,9 @@ export const series = pgTable("series", {
   status: text("status").notNull().default("active"),
   currentState: text("current_state"),
   sourcePath: text("source_path"),
+  origin: text("origin").notNull().default("seed"), // seed | app | proposal
+  confirmedBy: text("confirmed_by"),
+  supersededBy: integer("superseded_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -244,6 +254,9 @@ export const meetings = pgTable(
     sections: jsonb("sections").$type<Record<string, string>>(),
     seriesId: integer("series_id").references(() => series.id),
     sourcePath: text("source_path"), // original vault path, for export
+    origin: text("origin").notNull().default("seed"), // seed | app | proposal
+    confirmedBy: text("confirmed_by"),
+    supersededBy: integer("superseded_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -281,6 +294,9 @@ export const tasks = pgTable(
     notes: text("notes"),
     sourcePath: text("source_path"),
     sourceLine: integer("source_line"),
+    origin: text("origin").notNull().default("seed"), // seed | app | proposal
+    confirmedBy: text("confirmed_by"),
+    supersededBy: integer("superseded_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

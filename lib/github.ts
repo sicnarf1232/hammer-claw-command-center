@@ -1,5 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { unstable_cache, revalidateTag } from "next/cache";
+import { vaultMode, VaultReadOnlyError } from "@/lib/vaultMode";
 
 // Single GitHub client for all vault access (CLAUDE.md convention).
 // Reads via the Git Trees + Contents API, writes via commits. No filesystem.
@@ -193,11 +194,18 @@ export async function readFiles(
 
 // Create or update a file as a commit. Always reads the latest SHA first to
 // avoid clobbering a concurrent write (Obsidian/Cowork). Never force-pushes.
+// Gated by VAULT_MODE: in readonly mode only the export path (forExport) may
+// write. This is the single choke point for all vault writes; writers must not
+// re-check the mode themselves.
 export async function writeFile(args: {
   path: string; // repo-relative (root is applied automatically)
   content: string;
   message: string;
+  forExport?: boolean; // set ONLY by writeFileForExport
 }): Promise<{ commitSha: string; path: string }> {
+  if (vaultMode() === "readonly" && !args.forExport) {
+    throw new VaultReadOnlyError(args.path);
+  }
   const ref = getRepoRef();
   const octokit = getOctokit();
   const fullPath = joinPath(ref.root, args.path);
@@ -233,12 +241,28 @@ export async function writeFile(args: {
   };
 }
 
+// The deliberate-export write path: identical to writeFile but allowed in
+// readonly mode. Used ONLY by lib/export (grep for writeFileForExport to audit
+// everything that can touch the vault after the cutover).
+export async function writeFileForExport(args: {
+  path: string;
+  content: string;
+  message: string;
+}): Promise<{ commitSha: string; path: string }> {
+  return writeFile({ ...args, forExport: true });
+}
+
 // Delete a file via a commit. No-op (returns "") when the file is absent, so a
-// move (writeFile new + deleteFile old) is safe to retry.
+// move (writeFile new + deleteFile old) is safe to retry. Same VAULT_MODE gate
+// as writeFile.
 export async function deleteFile(args: {
   path: string;
   message: string;
+  forExport?: boolean;
 }): Promise<{ commitSha: string }> {
+  if (vaultMode() === "readonly" && !args.forExport) {
+    throw new VaultReadOnlyError(args.path);
+  }
   const ref = getRepoRef();
   const octokit = getOctokit();
   const fullPath = joinPath(ref.root, args.path);
