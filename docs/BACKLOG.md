@@ -35,14 +35,5 @@ After "Plan my day" the blocks are take-it-or-leave-it. Wanted:
   to an existing task where one matches, otherwise suggests creating a task
   (depends on Phase 2 DB-first task creation).
 
-### 3. Tasks page: mark-done circle contrast (tiny)
-
-The light-colored circle used on task rows is hard to see against the dark
-surface. Bump border contrast / fill so the tap target is obvious.
-
-### 4. In-app notification bell (small)
-
-A bell in the nav with an unread count, opening /notifications (or a
-dropdown of recent ones). The `notifications` table and read helpers
-(`recentNotifications`, `unsentCount` in lib/notify.ts) already exist; this is
-surfacing, not plumbing.
+(Items 3 and 4, circle contrast and the notification bell, shipped 2026-07-07
+during Phase 2.)
