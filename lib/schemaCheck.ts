@@ -99,7 +99,15 @@ export const EXPECTED_SCHEMA: Record<string, string[]> = {
   ],
   email_triage: [
     "id", "thread_key", "summary", "pathway", "priority", "needs_reply",
-    "signature", "model", "reviewed", "manual", "reviewed_at", "updated_at",
+    "signature", "model", "ai_generated", "ai_snapshot", "reviewed", "manual",
+    "reviewed_at", "updated_at",
+  ],
+  // lib/firehose/domains.ts
+  account_domains: ["domain", "account_id", "created_at"],
+  // lib/proposals/schema.ts (Phase 1)
+  ai_proposals: [
+    "id", "kind", "dedupe_key", "parent_id", "payload", "summary", "status",
+    "model", "error", "created_at", "decided_at", "executed_at",
   ],
 
   // drizzle/0003
