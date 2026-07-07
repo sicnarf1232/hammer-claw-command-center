@@ -2,6 +2,12 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Phase 0 — verify (2026-07-06)
+
+- Live-schema verification: `lib/schemaCheck.ts` (expected DDL assembled from every provisioning source, pure diff, FK summary, 9 tests) + read-only `GET /api/debug/schema` + operator script `scripts/check-live-schema.mts`. Local introspection is impossible by design (Sensitive Vercel vars pull blank), so the deployed endpoint is the verdict; Jordan runs it via `docs/VERIFY-LIVE.md` (new 5-minute checklist).
+- Settled from `vercel env ls production`: `CRON_SECRET` is NOT set, so the two scheduled Hobby crons (morning-brief, notify) have never run (`isAuthorizedCron` fails closed). Needs Jordan: set `CRON_SECRET`. Also confirmed absent: `NOTIFY_WEBHOOK_URL`, `VAULT_MODE`, model overrides.
+- CLAUDE.md synced to the HANDOFF-2026-07 decisions log: direct-send (not drafts), `/dashboard` default route, dark default, `task_meta` app-state pattern, nextech removal, middleware exemptions. Rule 2 ("markdown is truth") unchanged, now annotated with its scheduled DB-CUTOVER supersession.
+
 ## Main St. redesign — full 4-phase visual + feature rebuild (2026-07-06)
 
 Executed `DESIGN_HANDOFF.md` straight through. See `docs/HANDOFF-2026-07.md` for
