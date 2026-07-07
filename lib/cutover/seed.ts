@@ -5,7 +5,7 @@ import {
   getSeriesList,
   type Series,
 } from "@/lib/vault";
-import { listAccounts } from "@/lib/accounts";
+import { listAccountsFromVault } from "@/lib/accounts";
 import {
   reconcile,
   type ReconcileResult,
@@ -19,9 +19,11 @@ import {
 // would create. Applying is gated on POSTGRES_URL and an explicit confirm.
 
 export async function gatherAndReconcile(): Promise<ReconcileResult> {
+  // Vault readers ONLY: the seed's whole point is vault -> DB, so it must
+  // never read through the flipped (DB-first) accessors.
   const [meetings, accounts, roster, seriesList, vaultTasks] = await Promise.all([
     getAllMeetings(),
-    listAccounts(),
+    listAccountsFromVault(),
     getRoster(),
     getSeriesList(),
     getAllTasks(),
@@ -84,6 +86,8 @@ export async function gatherAndReconcile(): Promise<ReconcileResult> {
       status: a.status,
       accountNumber: a.accountNumber,
       overview: a.overview,
+      situations: a.situations.length ? a.situations : undefined,
+      links: a.links.length ? a.links : undefined,
       sourcePath: a.path,
       contacts: a.contacts.map((c) => ({
         name: c.name,

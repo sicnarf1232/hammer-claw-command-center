@@ -2,6 +2,7 @@ import { listMarkdownFiles, readFiles } from "@/lib/github";
 import { parseAccount, slugify } from "@/lib/vault/accounts";
 import { getAllTasks, getMeetingsIndex, getRoster } from "@/lib/vault";
 import { classifyName } from "@/lib/vault/roster";
+import { listAccountsFromDb } from "@/lib/accountsDb";
 import type { Account, AccountContact, Roster, Task } from "@/lib/vault/types";
 
 const CUSTOMERS_DIR = "300 Merit/Customers";
@@ -17,8 +18,10 @@ export interface AccountDetail extends AccountWithStats {
   recentDone: Task[];
 }
 
-// Read and parse every customer account note.
-export async function listAccounts(): Promise<Account[]> {
+// Read and parse every customer account note from the VAULT. Used by the
+// cutover seed and the export; the app reads listAccounts() below, which
+// prefers the DB once seeded.
+export async function listAccountsFromVault(): Promise<Account[]> {
   const files = (await listMarkdownFiles(CUSTOMERS_DIR)).filter((f) =>
     f.path.endsWith(".md"),
   );
@@ -33,6 +36,13 @@ export async function listAccounts(): Promise<Account[]> {
     }
   }
   return accounts.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// All accounts: the DB once the cutover is seeded, else the live vault parse.
+export async function listAccounts(): Promise<Account[]> {
+  const fromDb = await listAccountsFromDb().catch(() => null);
+  if (fromDb) return fromDb;
+  return listAccountsFromVault();
 }
 
 // Match keys let us link a task's customer wikilink to an account, tolerant of

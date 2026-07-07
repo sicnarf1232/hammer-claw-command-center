@@ -47,7 +47,8 @@ export async function applySeed(): Promise<ApplyResult> {
       fields: {
         name: a.name, slug: a.slug, type: a.type, region: a.region,
         stage: a.stage, status: a.status, accountNumber: a.accountNumber,
-        overview: a.overview, sourcePath: a.sourcePath, workstream: a.workstream,
+        overview: a.overview, situations: a.situations, links: a.links,
+        sourcePath: a.sourcePath, workstream: a.workstream,
       },
     })),
     r.accounts.map((a) => ({
@@ -56,6 +57,7 @@ export async function applySeed(): Promise<ApplyResult> {
         name: a.name, slug: a.slug, type: a.type ?? null, region: a.region ?? null,
         stage: a.stage ?? null, status: a.status ?? null,
         accountNumber: a.accountNumber ?? null, overview: a.overview ?? null,
+        situations: a.situations ?? null, links: a.links ?? null,
         sourcePath: a.sourcePath ?? null, workstream: "merit",
       },
     })),

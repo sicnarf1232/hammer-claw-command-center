@@ -56,8 +56,9 @@ export const EXPECTED_SCHEMA: Record<string, string[]> = {
   // lib/cutover/schema.ts (origin/confirmed_by/superseded_by = Phase 2 provenance)
   accounts: [
     "id", "name", "slug", "type", "region", "stage", "status",
-    "account_number", "workstream", "overview", "source_path", "origin",
-    "confirmed_by", "superseded_by", "created_at", "updated_at",
+    "account_number", "workstream", "overview", "situations", "links",
+    "source_path", "origin", "confirmed_by", "superseded_by", "created_at",
+    "updated_at",
   ],
   people: [
     "id", "full_name", "classification", "account_id", "title", "email",

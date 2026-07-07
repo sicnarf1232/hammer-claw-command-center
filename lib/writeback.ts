@@ -24,6 +24,13 @@ import { setPersonOverride } from "@/lib/vault/roster";
 const ROSTER_PATH = "memory/context/merit.md";
 import { addContactsToNote, type NewContact } from "@/lib/contactsWrite";
 import { applyAccountEdit, type AccountEdit } from "@/lib/accountEdit";
+import { cutoverActive } from "@/lib/dbSource";
+import {
+  dbSetAccountNumber,
+  dbCreateAccount,
+  dbEditAccountNote,
+  dbAddAccountContacts,
+} from "@/lib/accountsDb";
 
 // Mutations that write back into the vault as small, atomic git commits.
 // Each reads the latest file first (writeFile re-reads the SHA), never
@@ -76,11 +83,13 @@ export async function completeTask(
   });
 }
 
-// Set (or clear) the account_number frontmatter field on a customer note.
+// Set (or clear) the account number. DB once the cutover is seeded (the vault
+// copy follows on the next export); vault commit before that.
 export async function setAccountNumber(
   path: string,
   accountNumber: string,
 ): Promise<{ commitSha: string; path: string }> {
+  if (await cutoverActive()) return dbSetAccountNumber(path, accountNumber);
   const file = await getFile(path);
   if (!file) throw new WriteBackError(`Account note not found: ${path}`);
 
@@ -180,6 +189,7 @@ export async function createAccount(
 ): Promise<{ path: string; slug: string; created: boolean }> {
   const clean = name.trim();
   if (!clean) throw new WriteBackError("An account name is required.");
+  if (await cutoverActive()) return dbCreateAccount(clean);
   const fileBase = sanitizeForFilename(clean) || clean;
   const path = `300 Merit/Customers/${fileBase}.md`;
   const slug = slugify(fileBase);
@@ -269,6 +279,7 @@ export async function editAccountNote(
   accountPath: string,
   edit: AccountEdit,
 ): Promise<{ commitSha: string; path: string }> {
+  if (await cutoverActive()) return dbEditAccountNote(accountPath, edit);
   const file = await getFile(accountPath);
   if (!file) throw new WriteBackError(`Account note not found: ${accountPath}`);
 
@@ -292,6 +303,7 @@ export async function addAccountContacts(
   accountPath: string,
   contacts: NewContact[],
 ): Promise<{ commitSha: string; path: string; added: string[] }> {
+  if (await cutoverActive()) return dbAddAccountContacts(accountPath, contacts);
   const file = await getFile(accountPath);
   if (!file) throw new WriteBackError(`Account note not found: ${accountPath}`);
 

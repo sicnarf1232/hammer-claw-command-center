@@ -113,6 +113,11 @@ const STATEMENTS: string[] = [
     `alter table ${t} add column if not exists superseded_by integer`,
   ]),
 
+  // Account note body lists (Phase 2): situations + links ride along so the
+  // DB-backed Account matches the vault parse and can round-trip on export.
+  `alter table accounts add column if not exists situations jsonb`,
+  `alter table accounts add column if not exists links jsonb`,
+
   // Full vault-task contract on the tasks table (Phase 2): standalone vault
   // tasks join meeting action items in the seed, and app-created tasks need
   // these fields directly (no source file to derive them from).

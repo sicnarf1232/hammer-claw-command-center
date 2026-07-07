@@ -177,6 +177,8 @@ export const accounts = pgTable(
     accountNumber: text("account_number"),
     workstream: text("workstream").notNull().default("merit"),
     overview: text("overview"),
+    situations: jsonb("situations").$type<string[]>(),
+    links: jsonb("links").$type<string[]>(),
     sourcePath: text("source_path"), // original vault path, for export
     // Provenance (Phase 2): seed | app | proposal. Re-seed touches only 'seed'.
     origin: text("origin").notNull().default("seed"),

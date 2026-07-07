@@ -15,6 +15,8 @@ export interface InAccount {
   status?: string;
   accountNumber?: string;
   overview?: string;
+  situations?: string[];
+  links?: string[];
   sourcePath?: string;
   contacts: Array<{ name: string; title?: string; email?: string; phone?: string }>;
 }
@@ -102,6 +104,8 @@ export interface AccountRec {
   status?: string;
   accountNumber?: string;
   overview?: string;
+  situations?: string[];
+  links?: string[];
   sourcePath?: string;
 }
 export interface MeetingRec {
@@ -187,6 +191,8 @@ export function reconcile(input: {
     status: a.status,
     accountNumber: a.accountNumber,
     overview: a.overview,
+    situations: a.situations,
+    links: a.links,
     sourcePath: a.sourcePath,
   }));
   const accountSlugByName = new Map<string, string>();
