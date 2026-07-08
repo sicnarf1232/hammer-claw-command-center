@@ -12,6 +12,7 @@ import {
   MeetingsIcon,
   QuoteIcon,
   ActivityIcon,
+  AgentsIcon,
   SparkIcon,
   LibraryIcon,
   BrandIcon,
@@ -39,6 +40,7 @@ const PRIMARY: Item[] = [
 ];
 const SECONDARY: Item[] = [
   { href: "/today", label: "Today", Icon: TodayIcon },
+  { href: "/agents", label: "Agents", Icon: AgentsIcon },
   { href: "/ask", label: "Ask", Icon: SparkIcon },
   { href: "/tasks", label: "Tasks", Icon: TasksIcon },
   { href: "/contacts", label: "Contacts", Icon: AccountsIcon },

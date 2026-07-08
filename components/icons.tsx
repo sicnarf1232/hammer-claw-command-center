@@ -172,3 +172,11 @@ export const LinkIcon = (p: IconProps) => (
     <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
   </Svg>
 );
+
+export const AgentsIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4" y="9" width="16" height="11" rx="3" />
+    <path d="M12 9V6M12 6a1.5 1.5 0 1 0-.01-3.01A1.5 1.5 0 0 0 12 6z" />
+    <path d="M9 14h.01M15 14h.01" />
+  </Svg>
+);
