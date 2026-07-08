@@ -54,6 +54,19 @@ export default async function InboxPage({
   const all = await listThreads({ view: "all", limit: 500 });
   const triage = await getTriageMap(all.map((t) => t.key));
 
+  // A review only counts until the next inbound message: when new mail
+  // arrives on a reviewed thread, it comes back as unreviewed.
+  for (const t of all) {
+    const tr = triage.get(t.key);
+    if (
+      tr?.reviewed &&
+      t.lastInboundAt &&
+      (!tr.reviewedAt || tr.reviewedAt < t.lastInboundAt)
+    ) {
+      triage.set(t.key, { ...tr, reviewed: false });
+    }
+  }
+
   const folders: Folder[] = FOLDERS.map((f) => ({
     key: f.key,
     label: f.label,

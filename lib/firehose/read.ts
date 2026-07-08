@@ -254,6 +254,9 @@ export function pickReplyTarget(
 
 export interface ThreadMessage extends EmailRow {
   attachments: AttachmentRow[];
+  // Inline (cid-referenced) images, kept separate so the UI can resolve them
+  // inside HTML bodies without listing them as downloadable attachments.
+  inlineAttachments: AttachmentRow[];
 }
 
 export async function getThread(key: string): Promise<{
@@ -290,17 +293,21 @@ export async function getThread(key: string): Promise<{
     atts = [];
   }
   const attByEmail = new Map<number, AttachmentRow[]>();
+  const inlineByEmail = new Map<number, AttachmentRow[]>();
   for (const a of atts) {
-    // Hide inline images (signatures) even for rows stored before the fix.
-    if (a.isInline || isInlineAttachment(a.fileName, a.contentType, a.sizeBytes)) continue;
-    const list = attByEmail.get(a.emailId) ?? [];
+    // Inline images (signatures, embedded pictures) stay out of the visible
+    // attachment chips but are kept for resolving cid: references in HTML.
+    const inline = a.isInline || isInlineAttachment(a.fileName, a.contentType, a.sizeBytes);
+    const map = inline ? inlineByEmail : attByEmail;
+    const list = map.get(a.emailId) ?? [];
     list.push(a);
-    attByEmail.set(a.emailId, list);
+    map.set(a.emailId, list);
   }
 
   const messages: ThreadMessage[] = rows.map((r) => ({
     ...r,
     attachments: attByEmail.get(r.id) ?? [],
+    inlineAttachments: inlineByEmail.get(r.id) ?? [],
   }));
   const subject = cleanSubject(messages[messages.length - 1].subject) || "(no subject)";
   return { subject, messages };

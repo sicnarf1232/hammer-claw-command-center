@@ -149,6 +149,15 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
     await ensureTriageForKeys([key], 1).catch(() => {});
     triage = (await getTriageMap([key])).get(key) ?? null;
   }
+  // A review only counts until the next inbound message: new mail from the
+  // other side reopens the thread as unreviewed.
+  if (triage?.reviewed && latestInbound) {
+    const lastInboundAt =
+      latestInbound.sentAt ?? latestInbound.receivedAt ?? latestInbound.createdAt;
+    if (lastInboundAt && (!triage.reviewedAt || triage.reviewedAt < lastInboundAt)) {
+      triage = { ...triage, reviewed: false };
+    }
+  }
 
   // Smart Action panel: suggested related open tasks. Only when the thread is
   // mapped to a customer account and is not noise/FYI, so we never suggest
@@ -252,6 +261,29 @@ function personRef(
   };
 }
 
+// Outlook embeds images as attachments referenced by src="cid:image001.png@...".
+// We don't store the content id, but the cid's local part is the file name in
+// practice, so match on that and point the src at our attachment endpoint.
+// Unmatched cids are left alone (they render as a broken image either way).
+function rewriteCidImages(
+  html: string | null,
+  atts: Array<{ id: number; fileName: string | null; blobUrl: string | null }>,
+): string | null {
+  if (!html || !html.toLowerCase().includes("cid:")) return html;
+  return html.replace(
+    /(src\s*=\s*["'])cid:([^"']+)(["'])/gi,
+    (full, pre: string, cid: string, post: string) => {
+      const c = decodeURIComponent(cid).toLowerCase();
+      const hit = atts.find((a) => {
+        if (!a.blobUrl || !a.fileName) return false;
+        const fn = a.fileName.toLowerCase();
+        return c === fn || c.startsWith(`${fn}@`) || c.includes(fn);
+      });
+      return hit ? `${pre}/api/email-attachments/file?id=${hit.id}${post}` : full;
+    },
+  );
+}
+
 // Last-resort display name from the address local part: "jordan.francis" ->
 // "Jordan Francis"; a separator-free local part just gets capitalized.
 export function prettyLocalPart(email: string): string {
@@ -293,7 +325,10 @@ function toThreadMsg(
     atLabel: fmt(m.sentAt ?? m.receivedAt ?? m.createdAt),
     bodyMain: main,
     bodyQuoted: quoted,
-    bodyHtml: m.bodyHtml?.trim() || null,
+    bodyHtml: rewriteCidImages(
+      m.bodyHtml?.trim() || null,
+      [...(m.inlineAttachments ?? []), ...m.attachments],
+    ),
     flagged: m.flagged,
     attachments: m.attachments.map((a) => ({
       id: a.id,

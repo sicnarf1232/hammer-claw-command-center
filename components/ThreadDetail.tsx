@@ -136,7 +136,18 @@ export default function ThreadDetail({
   const [pickedDocIds, setPickedDocIds] = useState<Set<number>>(new Set());
 
   const [replyTargetId, setReplyTargetId] = useState<number | null>(null);
-  const [composerOpen, setComposerOpen] = useState(true);
+  // Closed until Jordan hits Reply; opening scrolls the composer into view.
+  const [composerOpen, setComposerOpen] = useState(false);
+  const composerRef = useRef<HTMLDivElement>(null);
+
+  function openComposer(targetId: number) {
+    setReplyTargetId(targetId);
+    setComposerOpen(true);
+    setTimeout(
+      () => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      60,
+    );
+  }
   const [preset, setPreset] = useState<{ html: string; nonce: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -319,6 +330,18 @@ export default function ThreadDetail({
     data.externalParticipants.map((p) => p.name).slice(0, 3).join(", ") ??
     "";
 
+  // Jump between emails in the thread without scrolling through each full
+  // body. Finds the topmost visible card and scrolls to its neighbor.
+  function jumpMsg(dir: 1 | -1) {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>("[data-msgcard]"));
+    if (!cards.length) return;
+    const threshold = 100;
+    let current = cards.findIndex((el) => el.getBoundingClientRect().top >= threshold - 8);
+    if (current === -1) current = cards.length - 1;
+    const idx = Math.min(Math.max(current + dir, 0), cards.length - 1);
+    cards[idx]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <div className="relative">
       {/* 1. Sticky header */}
@@ -336,6 +359,26 @@ export default function ThreadDetail({
             {data.subject}
           </h2>
           <div className="flex shrink-0 items-center gap-1.5">
+            {data.threadMsgs.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => jumpMsg(-1)}
+                  className="rounded-lg border border-border px-2 py-1 text-xs text-fg/70 hover:text-fg"
+                  title="Previous email in thread"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => jumpMsg(1)}
+                  className="rounded-lg border border-border px-2 py-1 text-xs text-fg/70 hover:text-fg"
+                  title="Next email in thread"
+                >
+                  ↓
+                </button>
+              </>
+            ) : null}
             <Link
               href={`/compose?forwardId=${data.latestMessageId}`}
               className="rounded-lg border border-border px-2 py-1 text-xs text-fg/70 hover:text-fg"
@@ -511,21 +554,19 @@ export default function ThreadDetail({
       {/* 7. Messages, newest first */}
       <div className="mt-4 grid gap-3">
         {data.threadMsgs.map((m) => (
-          <DetailMessageCard
-            key={m.id}
-            m={m}
-            isReplyTarget={replyTarget?.id === m.id}
-            onReply={() => {
-              setReplyTargetId(m.id);
-              setComposerOpen(true);
-            }}
-          />
+          <div key={m.id} data-msgcard style={{ scrollMarginTop: 96 }}>
+            <DetailMessageCard
+              m={m}
+              isReplyTarget={replyTarget?.id === m.id}
+              onReply={() => openComposer(m.id)}
+            />
+          </div>
         ))}
       </div>
 
       {/* 8. Reply composer pinned at bottom */}
       {replyTarget ? (
-        <div className="mt-4 rounded-2xl border border-border bg-surface p-3">
+        <div ref={composerRef} className="mt-4 rounded-2xl border border-border bg-surface p-3">
           <button
             type="button"
             onClick={() => setComposerOpen((o) => !o)}
@@ -538,6 +579,17 @@ export default function ThreadDetail({
           </button>
           {composerOpen ? (
             <div className="mt-2">
+              {/* What this reply is anchored to, so the context rides along. */}
+              <div className="mb-2 rounded-lg border-l-2 border-accent bg-surface2 px-2.5 py-1.5">
+                <div className="text-2xs font-semibold text-muted">
+                  Replying to {replyTarget.from.name} · {replyTarget.atLabel}
+                </div>
+                {replyTarget.bodyMain ? (
+                  <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap text-xs text-fg/70">
+                    {replyTarget.bodyMain}
+                  </div>
+                ) : null}
+              </div>
               {externalRecipientCount > 0 ? (
                 <p className="mb-2 text-xs font-medium text-warm">
                   {externalRecipientCount} external{" "}
@@ -768,6 +820,13 @@ function DetailMessageCard({
           >
             Reply
           </button>
+          <Link
+            href={`/compose?forwardId=${m.id}`}
+            className="rounded-lg border border-border px-2 py-1 text-2xs font-semibold text-fg/70 transition-colors hover:border-accent hover:text-accent"
+            title="Forward this message (the original rides along below your note)"
+          >
+            Forward
+          </Link>
         </div>
       </div>
 
