@@ -41,6 +41,9 @@ export interface ThreadMsg {
   bodyMain: string;
   bodyQuoted: string | null;
   bodyHtml: string | null;
+  // Where the quoted history starts inside bodyHtml (Outlook/Gmail reply
+  // separators), so the UI can show just THIS message's content by default.
+  bodyHtmlCut: number | null;
   flagged: boolean;
   attachments: ThreadMsgAttachment[];
   replyTo: string[];
@@ -284,6 +287,45 @@ function rewriteCidImages(
   );
 }
 
+// Find where quoted history starts in an HTML email body so the thread view
+// can show ONLY this message's own content (the chain is already separated
+// into cards). Recognizes the Outlook and Gmail reply separators; returns a
+// slice index into the html, or null when no boundary is found. Exported for
+// tests: this is pure string work.
+export function htmlQuoteCut(html: string): number | null {
+  const lower = html.toLowerCase();
+  const candidates: number[] = [];
+  const consider = (idx: number) => {
+    // A boundary in the first bytes would leave nothing; treat as no cut.
+    if (idx > 200) candidates.push(idx);
+  };
+  for (const marker of [
+    'id="divrplyfwdmsg"',
+    "id='divrplyfwdmsg'",
+    'class="gmail_quote',
+    "class='gmail_quote",
+  ]) {
+    const i = lower.indexOf(marker);
+    if (i !== -1) consider(backtrackToTagStart(lower, i));
+  }
+  const bq = lower.indexOf("<blockquote");
+  if (bq !== -1) consider(bq);
+  // Desktop Outlook: a thin top border followed by the From:/Sent: header.
+  const border = lower.indexOf("border-top:solid #e1e1e1");
+  if (border !== -1) consider(backtrackToTagStart(lower, border));
+  const fromHdr = lower.search(/<b>\s*from:\s*<\/b>/);
+  if (fromHdr !== -1) consider(backtrackToTagStart(lower, fromHdr));
+  return candidates.length ? Math.min(...candidates) : null;
+}
+
+function backtrackToTagStart(lower: string, idx: number): number {
+  const div = lower.lastIndexOf("<div", idx);
+  const p = lower.lastIndexOf("<p", idx);
+  const hr = lower.lastIndexOf("<hr", idx);
+  const best = Math.max(div, p, hr);
+  return best > 0 ? best : idx;
+}
+
 // Last-resort display name from the address local part: "jordan.francis" ->
 // "Jordan Francis"; a separator-free local part just gets capitalized.
 export function prettyLocalPart(email: string): string {
@@ -299,6 +341,10 @@ function toThreadMsg(
   cards: Map<string, PersonCard>,
 ): ThreadMsg {
   const { main, quoted } = formatEmailBody(m);
+  const html = rewriteCidImages(
+    m.bodyHtml?.trim() || null,
+    [...(m.inlineAttachments ?? []), ...m.attachments],
+  );
   const recips = (m.recipients ?? [])
     .filter((r) => r?.email && r.role !== "from")
     .map((r) => ({ email: r.email.toLowerCase(), name: r.name ?? r.email, cc: r.role === "cc" }));
@@ -325,10 +371,8 @@ function toThreadMsg(
     atLabel: fmt(m.sentAt ?? m.receivedAt ?? m.createdAt),
     bodyMain: main,
     bodyQuoted: quoted,
-    bodyHtml: rewriteCidImages(
-      m.bodyHtml?.trim() || null,
-      [...(m.inlineAttachments ?? []), ...m.attachments],
-    ),
+    bodyHtml: html,
+    bodyHtmlCut: html ? htmlQuoteCut(html) : null,
     flagged: m.flagged,
     attachments: m.attachments.map((a) => ({
       id: a.id,

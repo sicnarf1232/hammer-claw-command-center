@@ -228,11 +228,19 @@ export async function storeFirehoseEmail(
             : null;
       const size = bytes?.byteLength ?? rawSize;
 
-      // Skip inline images (signature logos, embedded images): they are not real
-      // attachments and made almost every email look like it had one.
+      // Inline images (signature logos, embedded pictures) are stored but
+      // FLAGGED: they stay out of the attachment chips, and their bytes are
+      // what resolves cid: references so embedded images render in the
+      // thread view. Oversized inline images are skipped outright.
       const inlineFlag =
         (a as Record<string, unknown>).isInline ?? (a as Record<string, unknown>).IsInline;
-      if (isInlineAttachment(name, contentType, size, inlineFlag as boolean | undefined)) {
+      const isInline = isInlineAttachment(
+        name,
+        contentType,
+        size,
+        inlineFlag as boolean | undefined,
+      );
+      if (isInline && (!bytes || bytes.byteLength > MAX_ATTACHMENT_BYTES)) {
         continue;
       }
       if (bytes && bytes.byteLength > MAX_ATTACHMENT_BYTES) {
@@ -278,15 +286,16 @@ export async function storeFirehoseEmail(
         fileName: name,
         contentType,
         isImage,
+        isInline,
         blobUrl,
         sizeBytes: size,
         extractedText,
       });
-      attCount++;
+      if (!isInline) attCount++;
 
       // Promote meaningful docs into the shared Document Library (reusable brain
       // knowledge). Best-effort; skips images, tiny files, and duplicates.
-      if (blobUrl) {
+      if (blobUrl && !isInline) {
         await promoteAttachmentToLibrary({
           fileName: name,
           contentType,

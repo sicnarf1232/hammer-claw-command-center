@@ -37,6 +37,7 @@ interface ThreadMsg {
   bodyMain: string;
   bodyQuoted: string | null;
   bodyHtml: string | null;
+  bodyHtmlCut: number | null;
   flagged: boolean;
   attachments: ThreadMsgAttachment[];
   replyTo: string[];
@@ -560,12 +561,13 @@ export default function ThreadDetail({
 
       {/* 7. Messages, newest first */}
       <div className="mt-4 grid gap-3">
-        {data.threadMsgs.map((m) => (
+        {data.threadMsgs.map((m, i) => (
           <div key={m.id} data-msgcard style={{ scrollMarginTop: 96 }}>
             <DetailMessageCard
               m={m}
               isReplyTarget={replyTarget?.id === m.id}
               onReply={() => openComposer(m.id)}
+              defaultExpanded={i === 0}
             />
           </div>
         ))}
@@ -902,12 +904,14 @@ function DetailMessageCard({
   m,
   isReplyTarget,
   onReply,
+  defaultExpanded = false,
 }: {
   m: ThreadMsg;
   isReplyTarget: boolean;
   onReply: () => void;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [showQuoted, setShowQuoted] = useState(false);
   const hasRich = Boolean(m.bodyHtml);
   const clampable = m.bodyMain.length > CLAMP_THRESHOLD;
@@ -982,10 +986,17 @@ function DetailMessageCard({
       {m.bodyMain || hasRich ? (
         <div className="mt-3">
           {/* Expanded + HTML available: the real email, tables and images
-              included, in an isolated no-script frame. Otherwise the cleaned
-              plain text, clamped until opened. */}
+              included, in an isolated no-script frame. Only THIS message's
+              content by default; the quoted-history toggle reveals the rest
+              of the original. Otherwise the cleaned plain text, clamped. */}
           {hasRich && expanded ? (
-            <EmailHtmlFrame html={m.bodyHtml!} />
+            <EmailHtmlFrame
+              html={
+                showQuoted || m.bodyHtmlCut == null
+                  ? m.bodyHtml!
+                  : m.bodyHtml!.slice(0, m.bodyHtmlCut)
+              }
+            />
           ) : (
             <div
               className={`whitespace-pre-wrap break-words text-sm leading-relaxed text-fg/85 ${
@@ -1008,6 +1019,18 @@ function DetailMessageCard({
       ) : (
         <div className="mt-3 text-sm italic text-muted">(no text body)</div>
       )}
+
+      {hasRich && expanded && m.bodyHtmlCut != null ? (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setShowQuoted((s) => !s)}
+            className="text-2xs font-medium text-muted hover:text-fg"
+          >
+            {showQuoted ? "Hide signature & quoted text" : "··· Signature & quoted text"}
+          </button>
+        </div>
+      ) : null}
 
       {m.bodyQuoted && !(hasRich && expanded) ? (
         <div className="mt-2">
