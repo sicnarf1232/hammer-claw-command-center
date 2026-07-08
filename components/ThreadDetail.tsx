@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ReplyBox, { type SuggestedDoc } from "@/components/ReplyBox";
 import { INSERT_REPLY_EVENT } from "@/components/InboxBrain";
@@ -36,6 +36,7 @@ interface ThreadMsg {
   atLabel: string;
   bodyMain: string;
   bodyQuoted: string | null;
+  bodyHtml: string | null;
   flagged: boolean;
   attachments: ThreadMsgAttachment[];
   replyTo: string[];
@@ -652,6 +653,50 @@ function PersonChip({ p, muted = false }: { p: PersonRef; muted?: boolean }) {
 const CLAMP_THRESHOLD = 200;
 const MAX_RECIPIENT_CHIPS = 3;
 
+// Render the original HTML email in a sandboxed iframe: no scripts can run
+// (sandbox omits allow-scripts), links open in a new tab, and the frame sizes
+// itself to the content. This is what preserves tables and inline images.
+function EmailHtmlFrame({ html }: { html: string }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(200);
+  const doc = useMemo(() => buildEmailDoc(html), [html]);
+  return (
+    <iframe
+      ref={ref}
+      sandbox="allow-same-origin"
+      srcDoc={doc}
+      title="Email content"
+      className="w-full rounded-xl border border-border bg-white"
+      style={{ height }}
+      onLoad={() => {
+        try {
+          const body = ref.current?.contentDocument?.body;
+          if (body) setHeight(Math.min(Math.max(body.scrollHeight + 24, 120), 2400));
+        } catch {}
+      }}
+    />
+  );
+}
+
+function buildEmailDoc(html: string): string {
+  const styles = Array.from(html.matchAll(/<style[\s\S]*?<\/style>/gi))
+    .map((m) => m[0])
+    .join("\n");
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  const inner = bodyMatch ? bodyMatch[1] : html;
+  return [
+    '<!doctype html><html><head><meta charset="utf-8"><base target="_blank">',
+    styles,
+    "<style>",
+    'body { margin: 14px; font: 14px/1.55 -apple-system, "Segoe UI", Arial, sans-serif; color: #111; background: #fff; word-break: break-word; }',
+    "img { max-width: 100%; height: auto; }",
+    "table { max-width: 100%; }",
+    "</style></head><body>",
+    inner,
+    "</body></html>",
+  ].join("");
+}
+
 function DetailMessageCard({
   m,
   isReplyTarget,
@@ -663,6 +708,7 @@ function DetailMessageCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showQuoted, setShowQuoted] = useState(false);
+  const hasRich = Boolean(m.bodyHtml);
   const clampable = m.bodyMain.length > CLAMP_THRESHOLD;
   const shownRecipients = m.recipients.slice(0, MAX_RECIPIENT_CHIPS);
   const extraRecipients = m.recipients.length - shownRecipients.length;
@@ -725,22 +771,29 @@ function DetailMessageCard({
         </div>
       </div>
 
-      {m.bodyMain ? (
+      {m.bodyMain || hasRich ? (
         <div className="mt-3">
-          <div
-            className={`whitespace-pre-wrap break-words text-sm leading-relaxed text-fg/85 ${
-              clampable && !expanded ? "line-clamp-3" : ""
-            }`}
-          >
-            {m.bodyMain}
-          </div>
-          {clampable ? (
+          {/* Expanded + HTML available: the real email, tables and images
+              included, in an isolated no-script frame. Otherwise the cleaned
+              plain text, clamped until opened. */}
+          {hasRich && expanded ? (
+            <EmailHtmlFrame html={m.bodyHtml!} />
+          ) : (
+            <div
+              className={`whitespace-pre-wrap break-words text-sm leading-relaxed text-fg/85 ${
+                (clampable || hasRich) && !expanded ? "line-clamp-3" : ""
+              }`}
+            >
+              {m.bodyMain || "(no text body)"}
+            </div>
+          )}
+          {clampable || hasRich ? (
             <button
               type="button"
               onClick={() => setExpanded((e) => !e)}
               className="mt-1 text-2xs font-medium text-accent hover:underline"
             >
-              {expanded ? "Show less" : "Show more"}
+              {expanded ? "Show less" : hasRich ? "Show full email" : "Show more"}
             </button>
           ) : null}
         </div>
@@ -748,7 +801,7 @@ function DetailMessageCard({
         <div className="mt-3 text-sm italic text-muted">(no text body)</div>
       )}
 
-      {m.bodyQuoted ? (
+      {m.bodyQuoted && !(hasRich && expanded) ? (
         <div className="mt-2">
           <button
             type="button"

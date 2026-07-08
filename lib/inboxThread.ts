@@ -40,6 +40,7 @@ export interface ThreadMsg {
   atLabel: string;
   bodyMain: string;
   bodyQuoted: string | null;
+  bodyHtml: string | null;
   flagged: boolean;
   attachments: ThreadMsgAttachment[];
   replyTo: string[];
@@ -253,7 +254,7 @@ function personRef(
 
 // Last-resort display name from the address local part: "jordan.francis" ->
 // "Jordan Francis"; a separator-free local part just gets capitalized.
-function prettyLocalPart(email: string): string {
+export function prettyLocalPart(email: string): string {
   const local = email.split("@")[0] ?? email;
   const parts = local.split(/[._-]+/).filter(Boolean);
   if (!parts.length) return email;
@@ -292,6 +293,7 @@ function toThreadMsg(
     atLabel: fmt(m.sentAt ?? m.receivedAt ?? m.createdAt),
     bodyMain: main,
     bodyQuoted: quoted,
+    bodyHtml: m.bodyHtml?.trim() || null,
     flagged: m.flagged,
     attachments: m.attachments.map((a) => ({
       id: a.id,

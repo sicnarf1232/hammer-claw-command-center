@@ -11,6 +11,7 @@ export interface ThreadSummary {
   key: string; // URL-safe thread key
   subject: string;
   lastAt: Date | null;
+  lastInboundAt: Date | null; // newest message someone ELSE sent
   count: number;
   inbound: number;
   outbound: number;
@@ -71,6 +72,7 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
     _parties: Set<string>;
     _latestStatus: string;
     _newestRead: boolean;
+    _inboundPreview: string | null;
   };
   const byKey = new Map<string, Acc>();
   for (const e of rows) {
@@ -82,6 +84,8 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
         key,
         subject: cleanSubject(e.subject) || "(no subject)",
         lastAt: at,
+        lastInboundAt: null,
+        _inboundPreview: null,
         count: 0,
         inbound: 0,
         outbound: 0,
@@ -109,7 +113,15 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
     if (e.flagged) t.flagged = true;
     if (e.status === "replied") t.replied = true;
     if (e.accountId != null && t.accountId == null) t.accountId = e.accountId;
-    if (e.direction !== "outbound") t._parties.add(partyLabel(e));
+    if (e.direction !== "outbound") {
+      t._parties.add(partyLabel(e));
+      // The newest INBOUND message anchors the list: Jordan's own replies
+      // stay in the thread but don't resurface it as new activity.
+      if (at && (!t.lastInboundAt || at > t.lastInboundAt)) {
+        t.lastInboundAt = at;
+        t._inboundPreview = (e.bodyPreview ?? e.bodyText ?? "")?.slice(0, 160) || null;
+      }
+    }
     // Newest message in the group sets subject, time, status, preview, direction.
     if (at && (!t.lastAt || at > t.lastAt)) {
       t.lastAt = at;
@@ -126,6 +138,8 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
     t.archived = t._latestStatus === "archived";
     // Unread = the newest message is one Jordan received and has not opened.
     t.unread = t.lastDirection === "inbound" && !t._newestRead;
+    // Preview leads with what THEY said last, not Jordan's own reply.
+    if (t._inboundPreview) t.preview = t._inboundPreview;
     return t as ThreadSummary;
   });
 
@@ -133,7 +147,11 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
   if (view === "attention") out = out.filter((t) => (t.flagged || t.needsReview) && !t.archived);
   else if (view === "flagged") out = out.filter((t) => t.flagged && !t.archived);
 
-  out.sort((a, b) => (b.lastAt?.getTime() ?? 0) - (a.lastAt?.getTime() ?? 0));
+  out.sort(
+    (a, b) =>
+      ((b.lastInboundAt ?? b.lastAt)?.getTime() ?? 0) -
+      ((a.lastInboundAt ?? a.lastAt)?.getTime() ?? 0),
+  );
   return out.slice(0, limit);
 }
 

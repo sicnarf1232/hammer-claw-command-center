@@ -49,7 +49,7 @@ const PATHWAY: Record<string, { label: string; color: string }> = {
 };
 
 function href(key: string): string {
-  return key === "attention" ? "/inbox" : `/inbox?folder=${key}`;
+  return key === "all" ? "/inbox" : `/inbox?folder=${key}`;
 }
 
 export default function InboxWorkspace(props: {
