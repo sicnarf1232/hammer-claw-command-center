@@ -55,7 +55,7 @@ export default function RootLayout({
         <BrandColorsProvider>
           <Nav />
           <main className="min-w-0 transition-[padding] duration-200 md:pl-[var(--nav-w,236px)]">
-            <div className="mx-auto max-w-[1360px] animate-fade-in px-4 py-6 pb-24 sm:px-9 sm:py-8">
+            <div className="page-shell mx-auto max-w-[1360px] animate-fade-in px-4 py-6 pb-24 sm:px-9 sm:py-8">
               {children}
             </div>
           </main>

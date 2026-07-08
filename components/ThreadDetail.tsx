@@ -146,6 +146,12 @@ export default function ThreadDetail({
       const j = (await r.json()) as ThreadData;
       if (!r.ok || !j.ok) throw new Error("Could not load the thread.");
       setData(j);
+      // Tell the Ask Brain panel whose context this thread carries.
+      window.dispatchEvent(
+        new CustomEvent("hc-thread-scope", {
+          detail: { key: threadKey, account: j.acct?.name ?? null },
+        }),
+      );
       setFlagged(j.flagged);
       setArchived(j.archived);
       setPathway(j.triage?.pathway ?? null);

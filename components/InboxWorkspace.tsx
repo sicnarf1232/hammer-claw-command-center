@@ -80,6 +80,8 @@ function Workspace({
 
   // Selection is panel state, not navigation: mirror it into the URL so a
   // reload or shared link reopens the same thread, but never router.push.
+  // The Ask Brain panel can't see replaceState, so it learns the open thread
+  // from this event instead.
   const select = useCallback((key: string | null) => {
     setSelectedKey(key);
     window.history.replaceState(
@@ -87,25 +89,13 @@ function Workspace({
       "",
       key ? `/inbox?selected=${encodeURIComponent(key)}` : "/inbox",
     );
+    window.dispatchEvent(new CustomEvent("hc-thread-open", { detail: key }));
   }, []);
 
   const [q, setQ] = useState("");
   const router = useRouter();
   const requested = useRef<Set<string>>(new Set());
   const [triaging, setTriaging] = useState(false);
-
-  // The thread list rail gives up room when the Ask Brain panel is open.
-  const [brainOpen, setBrainOpen] = useState(true);
-  useEffect(() => {
-    const read = () => {
-      try {
-        setBrainOpen(localStorage.getItem("brain-open") !== "false");
-      } catch {}
-    };
-    read();
-    window.addEventListener("hc-brain-sync", read);
-    return () => window.removeEventListener("hc-brain-sync", read);
-  }, []);
 
   useEffect(() => {
     const pending = threads
@@ -148,16 +138,20 @@ function Workspace({
   const hasSelection = selectedKey != null;
 
   return (
-    <div className="flex gap-4">
+    <div className="flex h-full min-h-0 gap-4">
       <FolderSidebar folders={folders} folder={folder} collapsed={hasSelection} />
 
-      {/* Thread list: full width panel normally, a fixed rail beside the open
-          thread (340px, or 280px when the Ask Brain panel is open). On mobile
-          the open thread takes over and the list hides. */}
+      {/* Thread list: full width panel normally, a fixed 300px rail beside
+          the open thread (the detail keeps at least 320px). On mobile the
+          open thread takes over and the list hides. Scrolls on its own. */}
       <div
-        className={hasSelection ? "hidden min-w-0 shrink-0 md:block" : "min-w-0 flex-1"}
+        className={
+          hasSelection
+            ? "hidden min-h-0 min-w-0 shrink-0 md:flex md:flex-col"
+            : "flex min-h-0 min-w-0 flex-1 flex-col"
+        }
         style={{
-          width: hasSelection ? (brainOpen ? 280 : 340) : undefined,
+          width: hasSelection ? 300 : undefined,
           transition: "width .22s ease",
         }}
       >
@@ -179,7 +173,7 @@ function Workspace({
           ))}
         </div>
 
-        <div className={`relative mb-4 ${hasSelection ? "" : "sm:max-w-sm"}`}>
+        <div className={`relative mb-3 shrink-0 ${hasSelection ? "" : "sm:max-w-sm"}`}>
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
             value={q}
@@ -191,37 +185,39 @@ function Workspace({
         </div>
 
         {triaging ? (
-          <div className="mb-3 flex items-center gap-2 px-1 text-2xs font-medium text-accent">
+          <div className="mb-2 flex shrink-0 items-center gap-2 px-1 text-2xs font-medium text-accent">
             <SparkGlyph className="h-3.5 w-3.5 animate-pulse" />
             AI is reading your mail…
           </div>
         ) : null}
 
-        {filtered.length === 0 ? (
-          <EmptyState folder={folder} searching={q.trim().length > 0} />
-        ) : (
-          <div className="space-y-6">
-            {groups.map((g) => (
-              <section key={g.label}>
-                <div className="mb-2 px-1 text-2xs font-extrabold uppercase tracking-[0.14em] text-muted">
-                  {g.label}
-                </div>
-                <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-                  {g.items.map((t, i) => (
-                    <Row
-                      key={t.key}
-                      t={t}
-                      first={i === 0}
-                      compact={hasSelection}
-                      selected={t.key === selectedKey}
-                      onSelect={select}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
+        <div className="min-h-0 flex-1 overflow-y-auto pb-4 lg:pr-0.5">
+          {filtered.length === 0 ? (
+            <EmptyState folder={folder} searching={q.trim().length > 0} />
+          ) : (
+            <div className="space-y-5">
+              {groups.map((g) => (
+                <section key={g.label}>
+                  <div className="mb-2 px-1 text-2xs font-extrabold uppercase tracking-[0.14em] text-muted">
+                    {g.label}
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+                    {g.items.map((t, i) => (
+                      <Row
+                        key={t.key}
+                        t={t}
+                        first={i === 0}
+                        compact={hasSelection}
+                        selected={t.key === selectedKey}
+                        onSelect={select}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {selectedKey ? (
@@ -247,7 +243,7 @@ function DetailPanel({ threadKey, onClose }: { threadKey: string; onClose: () =>
   }, []);
   return (
     <div
-      className="min-w-[320px] flex-1"
+      className="min-h-0 min-w-[320px] flex-1 overflow-y-auto"
       style={{
         transform: entered ? "translateX(0)" : "translateX(20px)",
         opacity: entered ? 1 : 0,
@@ -281,12 +277,15 @@ function FolderSidebar({
             <Link
               key={f.key}
               href={href(f.key)}
-              title={f.label}
-              className={`flex h-6 w-6 items-center justify-center rounded-md text-[9px] font-bold ${
-                f.key === folder ? "bg-accentSoft text-accent" : "text-muted hover:bg-surface2"
+              title={`${f.label}${f.count ? ` (${f.count})` : ""}`}
+              className={`relative flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+                f.key === folder ? "bg-accentSoft text-accent" : "text-muted hover:bg-surface2 hover:text-fg"
               }`}
             >
-              {f.label.charAt(0)}
+              {f.key === folder ? (
+                <span className="absolute inset-y-1 left-0 w-[2.5px] rounded-full" style={{ background: "var(--accent)" }} />
+              ) : null}
+              <FolderGlyph folderKey={f.key} />
             </Link>
           ))}
           <span className="my-1.5 h-px w-4 bg-border" />
@@ -294,13 +293,16 @@ function FolderSidebar({
             <Link
               key={f.key}
               href={href(f.key)}
-              title={f.label}
-              className={`flex h-6 w-6 items-center justify-center rounded-md hover:bg-surface2 ${
+              title={`${f.label}${f.count ? ` (${f.count})` : ""}`}
+              className={`relative flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-surface2 ${
                 f.key === folder ? "bg-accentSoft" : ""
               }`}
             >
+              {f.key === folder ? (
+                <span className="absolute inset-y-1 left-0 w-[2.5px] rounded-full" style={{ background: "var(--accent)" }} />
+              ) : null}
               <span
-                className="h-1.5 w-1.5 rounded-full"
+                className="h-2 w-2 rounded-full"
                 style={{ background: PATHWAY[f.key]?.color ?? "var(--ink-3)" }}
               />
             </Link>
@@ -444,8 +446,8 @@ function Row({
   if (archived) return null;
   const curPath = pathway ? PATHWAY[pathway] : null;
 
-  // Panel-open mode: rows compress to subject + time + state dots so the
-  // 340px rail stays scannable. The open thread is highlighted.
+  // Panel-open mode: rows condense to the Figma card anatomy (sender, subject,
+  // AI gist, key chips) so the 300px rail stays a real inbox, not a bare list.
   if (compact) {
     return (
       <Link
@@ -454,7 +456,7 @@ function Row({
           e.preventDefault();
           onSelect(t.key);
         }}
-        className={`relative flex items-center gap-2 px-3 py-2.5 transition-colors ${
+        className={`relative flex gap-2.5 px-3 py-2.5 transition-colors ${
           first ? "" : "border-t border-border"
         } ${selected ? "bg-accentSoft" : "hover:bg-surface2"}`}
       >
@@ -463,20 +465,78 @@ function Row({
         ) : flagged || high ? (
           <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: "var(--due)" }} />
         ) : null}
-        {t.unread ? (
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--accent)" }} title="Unread" />
-        ) : null}
-        {needsAction ? (
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--warm)" }} title="Needs action" />
-        ) : null}
-        <span
-          className={`min-w-0 flex-1 truncate text-sm ${
-            selected ? "font-semibold text-accent" : t.unread ? "font-bold text-fg" : "font-medium text-fg/85"
-          }`}
-        >
-          {t.subject}
-        </span>
-        <span className="shrink-0 text-2xs tabular-nums text-muted">{rel(t.lastAtISO)}</span>
+
+        {unmapped ? (
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-dashed border-line2 text-xs font-bold text-muted">
+            ?
+          </div>
+        ) : (
+          <div
+            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-2xs font-bold text-white"
+            style={{ background: hue.hue }}
+          >
+            {initials(t.accountName || t.who)}
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            {t.unread ? (
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--accent)" }} title="Unread" />
+            ) : null}
+            {needsAction ? (
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--warm)" }} title="Needs action" />
+            ) : null}
+            <span
+              className={`min-w-0 truncate text-xs ${
+                selected ? "font-bold text-accent" : t.unread ? "font-bold text-fg" : "font-semibold text-fg/85"
+              }`}
+            >
+              {t.accountName || t.who}
+            </span>
+            {t.count > 1 ? (
+              <span className="shrink-0 rounded-full bg-surface2 px-1 text-2xs font-semibold tabular-nums text-fg/60">
+                {t.count}
+              </span>
+            ) : null}
+            <span className="ml-auto shrink-0 text-2xs tabular-nums text-muted">{rel(t.lastAtISO)}</span>
+          </div>
+          <div
+            className={`mt-0.5 truncate text-[12.5px] ${
+              t.unread ? "font-semibold text-fg" : "font-medium text-fg/80"
+            }`}
+          >
+            {outbound ? <SentGlyph /> : null} {t.subject}
+          </div>
+          {t.summary ? (
+            <div className="mt-0.5 line-clamp-2 text-2xs leading-snug text-fg/60">
+              <SparkGlyph className="mr-1 inline h-2.5 w-2.5 text-accent" />
+              {t.summary}
+            </div>
+          ) : t.preview ? (
+            <div className="mt-0.5 truncate text-2xs text-muted">{t.preview}</div>
+          ) : null}
+          {high || curPath ? (
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              {high ? (
+                <span
+                  className="inline-flex items-center rounded-full px-1.5 py-px text-[9px] font-bold"
+                  style={{ background: "var(--due-soft)", color: "var(--due)" }}
+                >
+                  High
+                </span>
+              ) : null}
+              {curPath ? (
+                <span
+                  className="inline-flex items-center rounded-full px-1.5 py-px text-[9px] font-medium"
+                  style={{ background: withAlpha(curPath.color), color: curPath.color }}
+                >
+                  {curPath.label}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </Link>
     );
   }
@@ -647,6 +707,53 @@ function Row({
 function shortDate(iso: string): string {
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// Icon per top folder for the collapsed 28px rail (letters read terribly).
+function FolderGlyph({ folderKey }: { folderKey: string }) {
+  const cls = "h-3.5 w-3.5";
+  const stroke = { fill: "none" as const, stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (folderKey) {
+    case "attention":
+      return (
+        <svg className={cls} viewBox="0 0 24 24" {...stroke}>
+          <path d="M13 2L3 14h7l-1 8 10-12h-7z" />
+        </svg>
+      );
+    case "sent":
+      return (
+        <svg className={cls} viewBox="0 0 24 24" {...stroke}>
+          <path d="M7 17L17 7M17 7H8M17 7v9" />
+        </svg>
+      );
+    case "flagged":
+      return (
+        <svg className={cls} viewBox="0 0 24 24" {...stroke}>
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+          <path d="M4 22v-7" />
+        </svg>
+      );
+    case "reviewed":
+      return (
+        <svg className={cls} viewBox="0 0 24 24" {...stroke}>
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      );
+    case "archived":
+      return (
+        <svg className={cls} viewBox="0 0 24 24" {...stroke}>
+          <rect x="3" y="4" width="18" height="4" rx="1" />
+          <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" />
+        </svg>
+      );
+    default:
+      return (
+        <svg className={cls} viewBox="0 0 24 24" {...stroke}>
+          <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+          <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+        </svg>
+      );
+  }
 }
 
 function TaskGlyph() {

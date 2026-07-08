@@ -319,3 +319,11 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Full-bleed workspaces (inbox): a page that renders the .full-bleed marker
+   lifts the shell's max-width cap and reclaims the deep bottom padding so the
+   panels can use the whole viewport. */
+.page-shell:has(.full-bleed) {
+  max-width: none;
+  padding-bottom: 1.25rem;
+}

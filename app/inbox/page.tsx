@@ -107,9 +107,10 @@ export default async function InboxPage({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      <header className="mb-5 flex items-start justify-between gap-4">
-        <div>
+    <div className="full-bleed flex h-full min-h-0 flex-col">
+      <header className="mb-3 flex shrink-0 items-center justify-between gap-4">
+        <div className="flex items-baseline gap-3">
+          <h1 className="display-title text-[20px] leading-none text-fg">Inbox</h1>
           <div className="eyebrow flex items-center gap-1.5 text-accent">
             <span
               className="inline-block h-1.5 w-1.5 rounded-full"
@@ -117,17 +118,12 @@ function Shell({ children }: { children: React.ReactNode }) {
             />
             Merit OEM · live firehose
           </div>
-          <h1 className="mt-1 display-title text-[28px] text-fg">Inbox</h1>
-          <p className="mt-1 max-w-xl text-sm text-muted">
-            Every inbound and outbound message, threaded, mapped to accounts, and
-            triaged by AI. Open a thread to read the full chain and reply.
-          </p>
         </div>
         <Link href="/compose" className="btn-primary shrink-0 whitespace-nowrap text-sm">
           New email
         </Link>
       </header>
-      {children}
+      <div className="min-h-0 flex-1">{children}</div>
     </div>
   );
 }
