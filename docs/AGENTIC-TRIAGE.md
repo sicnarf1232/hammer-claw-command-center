@@ -69,9 +69,43 @@ measured agreement, not vibes.
 5. New inbound mail always reopens a thread, including ones the agent
    closed.
 
+## The /agents oversight view (Jordan, 2026-07-08: a permanent feature)
+
+Where Jordan reviews, scores, and corrects agent work; the trust ladder
+made visible. Four zones:
+
+1. **Roster.** One card per agent: Triage, Drafter, Task Extractor,
+   Brief Writer, Import Mapper. Stage, agreement score, volume this
+   week, last active, per-agent kill switch. The Brain is interactive,
+   not autonomous; it gets usage stats, not supervision.
+2. **Review queue (the core loop).** Unified queue of agent work
+   awaiting judgment: triage calls, drafted replies, task proposals.
+   Verdicts: approve as-is (full credit), edit then approve (partial;
+   the diff is training signal), reject with a reason code (wrong
+   pathway, wrong tone, missed context, wrong recipient, too
+   committal). Keyboard-driven.
+3. **Scorecard (the gamification).** Rolling agreement, streaks, and a
+   progress bar to the next gate. Gate met = the app proposes a
+   PROMOTION Jordan flips deliberately. Levels: Observer, Proposer,
+   Trusted (scoped autonomy), Delegate (autonomous replies).
+4. **Ledger.** Every agent action with provenance (model, confidence,
+   evidence link) and undo; daily digest rollup; weekly report with
+   time-saved estimate.
+
+Non-negotiables: demotion is first-class (agreement below gate pauses
+autonomy automatically); never grade blind (evidence one click away);
+blast-radius labels on every action class (only reversible classes are
+autonomy-eligible); shadow mode before Proposer (the agent records what
+it WOULD have done, scored against what Jordan did); cost and health per
+agent (token spend, error rates, stale-queue alerts).
+
 ## Build order
 
 1. Stage 0.5 metrics (small: one read over email_triage manual rows).
-2. Stage 1 reply proposals in the thread detail + queue.
-3. Whitelist settings + Stage 2 noise/FYI autonomy behind the gate.
-4. Digest card on the dashboard, then Stage 3 candidates by evidence.
+2. /agents page: roster + Triage scorecard from existing data (this is
+   shadow mode for triage, live immediately).
+3. Stage 1 reply proposals in the thread detail + the unified review
+   queue on /agents.
+4. Whitelist settings + Stage 2 noise/FYI autonomy behind the gate,
+   promotions and demotions on /agents.
+5. Digest card on the dashboard, then Stage 3 candidates by evidence.
