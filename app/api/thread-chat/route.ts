@@ -7,12 +7,35 @@ import { isInternal } from "@/lib/firehose/map";
 import { formatEmailBody } from "@/lib/emailFormat";
 import { getVoiceProfile, voiceInstructions } from "@/lib/voice";
 import { assembleBrainContext } from "@/lib/brain";
+import { todayISO, appTimezone } from "@/lib/dates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const MAX_CONTEXT_THREADS = 4;
+
+// All timestamps shown to the model are Mountain Time. Server clocks run in
+// UTC, where Jordan's evening is already tomorrow; raw ISO dates made the
+// brain think "today" was a day ahead. Built lazily: at build time
+// APP_TIMEZONE can be an empty string, which Intl rejects.
+let mtFmt: Intl.DateTimeFormat | null = null;
+
+function fmtMT(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return "";
+  mtFmt ??= new Intl.DateTimeFormat("en-CA", {
+    timeZone: appTimezone() || "America/Denver",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `${mtFmt.format(date).replace(", ", " ")} MT`;
+}
 
 function rowsOf(res: unknown): Record<string, unknown>[] {
   return Array.isArray(res)
@@ -29,7 +52,7 @@ async function formatThread(key: string, label: string): Promise<string | null> 
   const text = [...messages]
     .reverse()
     .map((m) => {
-      const at = (m.sentAt ?? m.receivedAt)?.toISOString().slice(0, 16) ?? "";
+      const at = fmtMT(m.sentAt ?? m.receivedAt);
       const who = m.fromName?.trim() || m.fromEmail || "unknown";
       return `[${m.direction === "outbound" ? "JORDAN" : who} ${at}]\n${formatEmailBody(m).main}`;
     })
@@ -59,7 +82,7 @@ async function searchInbox(query: string): Promise<string> {
     const body = String(r.body_text ?? "");
     const idx = body.toLowerCase().indexOf(query.trim().split(/\s+/)[0]?.toLowerCase() ?? "");
     const snippet = body.slice(Math.max(0, idx - 60), idx + 140).replace(/\s+/g, " ").trim();
-    const at = r.at ? String(r.at).slice(0, 10) : "";
+    const at = r.at ? fmtMT(String(r.at)).slice(0, 10) : "";
     hits.push(
       `key: ${key} | ${at} | from ${r.from_name ?? r.from_email ?? "?"} | "${r.subject ?? "(no subject)"}"${snippet ? ` | …${snippet}…` : ""}`,
     );
@@ -111,6 +134,7 @@ export async function POST(req: NextRequest) {
   const contextKeys: string[] = Array.isArray(body?.contextKeys)
     ? body.contextKeys.filter((k: unknown): k is string => typeof k === "string" && !!k)
     : [];
+  const modelChoice: "smart" | "fast" = body?.model === "fast" ? "fast" : "smart";
   const keys = Array.from(
     new Set([activeKey, ...contextKeys].filter((k): k is string => !!k)),
   ).slice(0, MAX_CONTEXT_THREADS);
@@ -139,10 +163,10 @@ export async function POST(req: NextRequest) {
       .join("\n");
     const voice = voiceInstructions(await getVoiceProfile().catch(() => null));
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     const system = [
       "You are Jordan Francis's inbox assistant inside his command center (like Claude in Outlook).",
-      `Jordan is jordan.francis@merit.com; his timezone is Mountain Time; today is ${today}.`,
+      `Jordan is jordan.francis@merit.com; his timezone is Mountain Time; today is ${today} Mountain Time. All email timestamps you see are already Mountain Time.`,
       "You can: answer questions about ANY email (search_inbox then read_thread), pull facts from his knowledge base (search_brain: accounts, tasks, meetings, pricing, documents), summarize, extract asks, and DRAFT replies or new messages on request.",
       "Search before saying you cannot find something. Ground every claim in what you read; cite which thread or source a fact came from. Never invent facts, prices, dates, or commitments.",
       "",
@@ -167,6 +191,7 @@ export async function POST(req: NextRequest) {
     const result = await runInboxAgent({
       system,
       history,
+      modelChoice,
       executeTool: async (name, input) => {
         if (name === "search_inbox") {
           return `<untrusted_content>\n${await searchInbox(String(input.query ?? ""))}\n</untrusted_content>`;

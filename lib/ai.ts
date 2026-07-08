@@ -873,6 +873,9 @@ export interface InboxAgentInput {
   system: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
   executeTool: (name: string, input: Record<string, unknown>) => Promise<string>;
+  // Jordan's per-chat pick: "smart" = model() (default), "fast" = fastModel().
+  // Only ever the two configured runtime models, never an arbitrary id.
+  modelChoice?: "smart" | "fast";
 }
 
 const INBOX_AGENT_TOOLS: Anthropic.Tool[] = [
@@ -927,7 +930,7 @@ export async function runInboxAgent(input: InboxAgentInput): Promise<{
   let modelUsed = "";
   for (let turn = 0; turn < 6; turn++) {
     const res = await client().messages.create({
-      model: model(),
+      model: input.modelChoice === "fast" ? fastModel() : model(),
       max_tokens: 2000,
       system: input.system,
       tools: INBOX_AGENT_TOOLS,

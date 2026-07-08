@@ -14,6 +14,7 @@ interface ChatMsg {
   role: "user" | "assistant";
   content: string;
   steps?: string[]; // tool calls the agent made (search/read/brain)
+  model?: string; // which model actually answered (from the API response)
 }
 
 interface BrainState {
@@ -23,6 +24,7 @@ interface BrainState {
 
 const STORE_KEY = "brain-messages";
 const OPEN_KEY = "brain-open";
+const MODEL_KEY = "brain-model";
 const SYNC_EVENT = "hc-brain-sync";
 const THREAD_EVENT = "hc-thread-open";
 const SCOPE_EVENT = "hc-thread-scope";
@@ -69,6 +71,7 @@ export default function InboxBrain({
   const [state, setState] = useState<BrainState>({ history: [], context: [] });
   const [open, setOpen] = useState(true);
   const [input, setInput] = useState("");
+  const [modelChoice, setModelChoice] = useState<"smart" | "fast">("smart");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -86,6 +89,9 @@ export default function InboxBrain({
     };
     sync();
     setActiveKey(threadKeyFromLocation());
+    try {
+      if (localStorage.getItem(MODEL_KEY) === "fast") setModelChoice("fast");
+    } catch {}
     const onThread = (e: Event) => {
       const key = (e as CustomEvent).detail as string | null;
       setActiveKey(key);
@@ -185,6 +191,7 @@ export default function InboxBrain({
           history,
           activeThreadKey: scopedKey,
           contextKeys: state.context.map((c) => c.key),
+          model: modelChoice,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -199,6 +206,7 @@ export default function InboxBrain({
               role: "assistant",
               content: data.text ?? "",
               steps: Array.isArray(data.steps) && data.steps.length ? data.steps : undefined,
+              model: typeof data.model === "string" ? data.model : undefined,
             },
           ],
         });
@@ -386,9 +394,9 @@ export default function InboxBrain({
                 </div>
                 <BrainText text={m.content} />
               </div>
-              {m.steps?.length ? (
+              {m.steps?.length || m.model ? (
                 <div className="mt-1 flex max-w-[88%] flex-wrap gap-1">
-                  {m.steps.map((st, j) => (
+                  {(m.steps ?? []).map((st, j) => (
                     <span
                       key={j}
                       className="max-w-full truncate rounded-md bg-surface2 px-1.5 py-px text-[9.5px] text-muted"
@@ -397,6 +405,11 @@ export default function InboxBrain({
                       {st}
                     </span>
                   ))}
+                  {m.model ? (
+                    <span className="rounded-md bg-surface2 px-1.5 py-px text-[9.5px] text-muted" title={m.model}>
+                      {shortModel(m.model)}
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
               {m.content ? (
@@ -460,12 +473,36 @@ export default function InboxBrain({
             Ask
           </button>
         </div>
-        <div className="mt-1 px-1 text-[9.5px] text-muted">
-          Shift+Enter for a new line · searches your whole inbox and records
+        <div className="mt-1 flex items-center justify-between gap-2 px-1">
+          <span className="text-[9.5px] text-muted">
+            Shift+Enter for a new line · searches your inbox and records
+          </span>
+          <select
+            value={modelChoice}
+            onChange={(e) => {
+              const next = e.target.value === "fast" ? "fast" : "smart";
+              setModelChoice(next);
+              try {
+                localStorage.setItem(MODEL_KEY, next);
+              } catch {}
+            }}
+            title="Which model answers"
+            className="shrink-0 cursor-pointer rounded-md border border-border bg-surface px-1 py-px text-[9.5px] text-muted hover:text-fg"
+          >
+            <option value="smart">Opus · smart</option>
+            <option value="fast">Sonnet · fast</option>
+          </select>
         </div>
       </div>
     </div>
   );
+}
+
+function shortModel(id: string): string {
+  if (id.startsWith("claude-opus")) return "Opus";
+  if (id.startsWith("claude-sonnet")) return "Sonnet";
+  if (id.startsWith("claude-haiku")) return "Haiku";
+  return id;
 }
 
 // Long answers collapse to a teaser; markdown-ish lists and bold render as
