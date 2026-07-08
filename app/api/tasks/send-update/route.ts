@@ -16,7 +16,7 @@ import {
 } from "@/lib/powerAutomate";
 import { identityFor, canDraftAs } from "@/lib/workstreams";
 import { isWorkstream, type Workstream } from "@/lib/vault/types";
-import { textToMailHtml } from "@/lib/mailOut";
+import { textToMailHtml, withQuotedHistory } from "@/lib/mailOut";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,6 +97,10 @@ export async function POST(req: NextRequest) {
   const baseSubject = (target.subject ?? "").trim() || "(no subject)";
   const subject = /^re:/i.test(baseSubject) ? baseSubject : `RE: ${baseSubject}`;
 
+  // Quoted history rides along (Flow B replaces the draft body wholesale).
+  const targetRow = rows.find((r) => r.messageId === target.messageId);
+  const updateHtml = textToMailHtml(bodyText, identity.label, identity.email!);
+
   try {
     const result = await postMailIntent({
       action: "reply",
@@ -104,7 +108,7 @@ export async function POST(req: NextRequest) {
       to: target.to,
       cc: target.cc,
       subject,
-      bodyHtml: textToMailHtml(bodyText, identity.label, identity.email!),
+      bodyHtml: targetRow ? withQuotedHistory(updateHtml, targetRow) : updateHtml,
       fromIdentity: workstream as Workstream,
     });
     if (!result.ok) {

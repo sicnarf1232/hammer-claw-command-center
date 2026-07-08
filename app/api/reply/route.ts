@@ -16,6 +16,7 @@ import {
   gatherAttachments,
   sanitizeMailHtml,
   textToMailHtml,
+  withQuotedHistory,
   type AttachmentRef,
 } from "@/lib/mailOut";
 
@@ -115,9 +116,12 @@ export async function POST(req: NextRequest) {
   if (!rawHtml && !rawText) {
     return NextResponse.json({ error: "Reply body is empty." }, { status: 400 });
   }
-  const bodyHtml = rawHtml
-    ? sanitizeMailHtml(rawHtml)
-    : textToMailHtml(rawText, identity.label, identity.email!);
+  // Quoted history rides along: Flow B's reply branch replaces the whole
+  // draft body with what we send, so the context must be built here.
+  const bodyHtml = withQuotedHistory(
+    rawHtml ? sanitizeMailHtml(rawHtml) : textToMailHtml(rawText, identity.label, identity.email!),
+    email,
+  );
 
   const subject = String(body.subject ?? "").trim() ||
     `RE: ${email.subject ?? "(no subject)"}`;

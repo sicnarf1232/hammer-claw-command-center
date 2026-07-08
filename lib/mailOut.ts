@@ -36,6 +36,69 @@ export function textToMailHtml(text: string, name: string, email: string): strin
   return `<div>${bodyHtml}</div><br><div>${sig}</div>`;
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Append the classic quoted-history block below a reply body. Flow B's reply
+// branch PATCHes the whole draft body with what we send, which wipes the
+// quoted chain Graph's createReply pre-filled; recipients then get a bare
+// reply with no context. So the app builds the context itself: an Outlook
+// style separator, the From/Sent/To/Subject header, and the original
+// message's own HTML (which carries the earlier chain within it).
+export function withQuotedHistory(
+  html: string,
+  original: {
+    fromName?: string | null;
+    fromEmail?: string | null;
+    sentAt?: Date | null;
+    receivedAt?: Date | null;
+    subject?: string | null;
+    bodyHtml?: string | null;
+    bodyText?: string | null;
+    recipients?: unknown;
+  },
+): string {
+  const when = original.sentAt ?? original.receivedAt ?? null;
+  const whenStr = when
+    ? new Date(when).toLocaleString("en-US", {
+        timeZone: process.env.APP_TIMEZONE || "America/Denver",
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "";
+  const from = [
+    original.fromName?.trim(),
+    original.fromEmail ? `<${original.fromEmail}>` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const recips = Array.isArray(original.recipients)
+    ? (original.recipients as Array<{ email?: string; name?: string; role?: string }>)
+        .filter((r) => r?.email && r.role !== "from")
+        .map((r) => (r.name && r.name !== r.email ? `${r.name} <${r.email}>` : r.email!))
+        .join("; ")
+    : "";
+  const inner = original.bodyHtml?.trim()
+    ? (original.bodyHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? original.bodyHtml)
+    : escapeHtml(original.bodyText ?? "").replace(/\n/g, "<br>");
+  return [
+    html,
+    '<br><div style="border:none;border-top:solid #E1E1E1 1.0pt;padding:3pt 0 0 0">',
+    '<p style="font-size:11pt;color:#444;margin:0 0 12px 0">',
+    `<b>From:</b> ${escapeHtml(from)}<br>`,
+    whenStr ? `<b>Sent:</b> ${escapeHtml(whenStr)}<br>` : "",
+    recips ? `<b>To:</b> ${escapeHtml(recips)}<br>` : "",
+    `<b>Subject:</b> ${escapeHtml(original.subject ?? "")}`,
+    "</p></div>",
+    sanitizeMailHtml(inner),
+  ].join("");
+}
+
 export type AttachmentRef =
   | { kind: "document"; id: number }
   | { kind: "emailAttachment"; id: number }
