@@ -45,9 +45,32 @@ function timeOf(e: Pick<EmailRow, "sentAt" | "receivedAt" | "createdAt">): Date 
   return e.sentAt ?? e.receivedAt ?? e.createdAt ?? null;
 }
 
-function partyLabel(e: EmailRow): string {
+function partyLabel(e: Pick<EmailRow, "fromName" | "fromEmail">): string {
   return e.fromName?.trim() || e.fromEmail || "Unknown";
 }
+
+// The thread-list scan reads ONLY summary columns. Full bodies (body_text,
+// body_html) stay out of it: at 800 rows per inbox view plus the counts
+// poll, shipping bodies burned through Neon's data transfer quota.
+const SCAN_COLUMNS = {
+  id: emails.id,
+  threadId: emails.threadId,
+  subject: emails.subject,
+  fromName: emails.fromName,
+  fromEmail: emails.fromEmail,
+  sentAt: emails.sentAt,
+  receivedAt: emails.receivedAt,
+  createdAt: emails.createdAt,
+  direction: emails.direction,
+  status: emails.status,
+  read: emails.read,
+  flagged: emails.flagged,
+  needsReview: emails.needsReview,
+  hasAttachments: emails.hasAttachments,
+  accountId: emails.accountId,
+  bodyPreview: emails.bodyPreview,
+};
+type ScanRow = { [K in keyof typeof SCAN_COLUMNS]: EmailRow[K] };
 
 // Group the most recent messages into threads, newest activity first. Filtered
 // by view: attention = flagged or needs-review (and not archived); flagged =
@@ -56,10 +79,10 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
   const { view = "all", accountId, limit = 80 } = opts;
   if (!dbConfigured()) return [];
   const db = getDb();
-  let rows: EmailRow[];
+  let rows: ScanRow[];
   try {
     rows = await db
-      .select()
+      .select(SCAN_COLUMNS)
       .from(emails)
       .orderBy(desc(sql`coalesce(${emails.sentAt}, ${emails.receivedAt}, ${emails.createdAt})`))
       .limit(800);
@@ -119,7 +142,7 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
       // stay in the thread but don't resurface it as new activity.
       if (at && (!t.lastInboundAt || at > t.lastInboundAt)) {
         t.lastInboundAt = at;
-        t._inboundPreview = (e.bodyPreview ?? e.bodyText ?? "")?.slice(0, 160) || null;
+        t._inboundPreview = (e.bodyPreview ?? "")?.slice(0, 160) || null;
       }
     }
     // Newest message in the group sets subject, time, status, preview, direction.
@@ -128,7 +151,7 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
       t.subject = cleanSubject(e.subject) || t.subject;
       t._latestStatus = e.status ?? "new";
       t._newestRead = Boolean(e.read);
-      t.preview = (e.bodyPreview ?? e.bodyText ?? "")?.slice(0, 160) || null;
+      t.preview = (e.bodyPreview ?? "")?.slice(0, 160) || null;
       t.lastDirection = e.direction === "outbound" ? "outbound" : "inbound";
     }
   }
