@@ -30,7 +30,9 @@ const FOLDERS: {
   { key: "logistics", label: "Logistics", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "logistics" },
   { key: "fyi", label: "FYI", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "fyi" },
   { key: "noise", label: "Noise", group: "pathway", match: (t, tr) => !t.archived && tr?.pathway === "noise" },
-  { key: "all", label: "All mail", group: "top", match: (t) => !t.archived },
+  // All mail is a WORKING queue: reviewed mail triages away (it lives on in
+  // Reviewed and its pathway folder). Working views drain to zero.
+  { key: "all", label: "All mail", group: "top", match: (t, tr) => !t.archived && !tr?.reviewed },
   { key: "archived", label: "Archived", group: "top", match: (t) => t.archived },
 ];
 

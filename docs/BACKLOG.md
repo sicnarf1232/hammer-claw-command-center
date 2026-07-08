@@ -88,3 +88,17 @@ button (DB task + task_emails link via emailIdsForThreadKey). The panel-based
 ThreadDetail follows the Figma spec, which does not include it, so the
 affordance is gone. Add a small "Create task" action to the detail panel
 that posts to /api/tasks/create with the thread linked.
+
+### 13. Morning brief on the dashboard (small-medium)
+
+Jordan gets the morning brief via notifications but wants it front and
+center: a glowing card on the dashboard the morning it lands, read state
+tracked, with a "schedule my day" prompt that opens Build Your Day.
+Brief text already lives in app_settings (brief:<date>:<kind>).
+
+### 14. Triage agreement metrics, Stage 0.5 (small)
+
+Per docs/AGENTIC-TRIAGE.md: compare Jordan's manual triage corrections
+(manual=true rows, ai_snapshot originals) to the AI's first call and
+surface agreement rates per pathway. This is the gate evidence for
+autonomous triage; build before any autonomy ships.

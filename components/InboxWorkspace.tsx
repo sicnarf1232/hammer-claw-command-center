@@ -157,7 +157,7 @@ function Workspace({
       if (!o) return true;
       if (o.archived === true && folder !== "archived") return false;
       if (o.archived === false && folder === "archived") return false;
-      if (folder === "attention" && o.reviewed === true) return false;
+      if ((folder === "attention" || folder === "all") && o.reviewed === true) return false;
       if (folder === "reviewed" && o.reviewed === false) return false;
       if (folder === "flagged" && o.flagged === false) return false;
       return true;
@@ -482,10 +482,34 @@ function Row({
   if (archived) return null;
   const curPath = pathway ? PATHWAY[pathway] : null;
 
+  // Swipe commits: announce over hc-thread-update (the workspace hides the
+  // row and refreshes) and persist in the background.
+  function swipeReviewed() {
+    window.dispatchEvent(
+      new CustomEvent("hc-thread-update", { detail: { key: t.key, reviewed: true } }),
+    );
+    fetch("/api/inbox/triage-set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: t.key, reviewed: true }),
+    }).catch(() => {});
+  }
+  function swipeArchive() {
+    window.dispatchEvent(
+      new CustomEvent("hc-thread-update", { detail: { key: t.key, archived: true } }),
+    );
+    fetch("/api/inbox/thread-action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: t.key, action: "archive" }),
+    }).catch(() => {});
+  }
+
   // Panel-open mode: rows condense to the Figma card anatomy (sender, subject,
   // AI gist, key chips) so the 300px rail stays a real inbox, not a bare list.
   if (compact) {
     return (
+      <SwipeShell onReviewed={swipeReviewed} onArchive={swipeArchive}>
       <Link
         href={`/inbox/${encodeURIComponent(t.key)}`}
         onClick={(e) => {
@@ -574,10 +598,12 @@ function Row({
           ) : null}
         </div>
       </Link>
+      </SwipeShell>
     );
   }
 
   return (
+    <SwipeShell onReviewed={swipeReviewed} onArchive={swipeArchive}>
     <Link
       href={`/inbox/${encodeURIComponent(t.key)}`}
       onClick={(e) => {
@@ -737,12 +763,101 @@ function Row({
         </div>
       </div>
     </Link>
+    </SwipeShell>
   );
 }
 
 function shortDate(iso: string): string {
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// Swipe-to-triage. A one-finger horizontal slide on a Magic Mouse or
+// trackpad arrives as wheel events with deltaX; the row follows the finger
+// over a revealed action, and past the threshold it commits: left-to-right
+// marks reviewed, right-to-left archives. The row announces the change over
+// hc-thread-update so the list and server stay in sync.
+const SWIPE_COMMIT_PX = 80;
+
+function SwipeShell({
+  onReviewed,
+  onArchive,
+  children,
+}: {
+  onReviewed: () => void;
+  onArchive: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState(0);
+  const acc = useRef(0);
+  const settleTimer = useRef<number | null>(null);
+  const committed = useRef(false);
+  const actions = useRef({ onReviewed, onArchive });
+  actions.current = { onReviewed, onArchive };
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical scroll passes through
+      e.preventDefault(); // keep the browser's back/forward swipe out of it
+      if (committed.current) return;
+      acc.current = Math.max(-140, Math.min(140, acc.current - e.deltaX));
+      setOffset(acc.current);
+      if (settleTimer.current) window.clearTimeout(settleTimer.current);
+      settleTimer.current = window.setTimeout(() => {
+        const v = acc.current;
+        if (v > SWIPE_COMMIT_PX) {
+          committed.current = true;
+          setOffset(420);
+          window.setTimeout(() => actions.current.onReviewed(), 160);
+        } else if (v < -SWIPE_COMMIT_PX) {
+          committed.current = true;
+          setOffset(-420);
+          window.setTimeout(() => actions.current.onArchive(), 160);
+        } else {
+          acc.current = 0;
+          setOffset(0);
+        }
+      }, 110);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      if (settleTimer.current) window.clearTimeout(settleTimer.current);
+    };
+  }, []);
+
+  const revealed = Math.min(Math.abs(offset) / SWIPE_COMMIT_PX, 1);
+  return (
+    <div ref={ref} className="relative overflow-hidden">
+      <div
+        className="absolute inset-0 flex items-center justify-between px-4"
+        style={{
+          background: offset > 0 ? "var(--accent)" : offset < 0 ? "var(--due)" : "transparent",
+          opacity: offset === 0 ? 0 : 0.25 + revealed * 0.75,
+        }}
+      >
+        <span className="text-xs font-bold text-white" style={{ opacity: offset > 0 ? 1 : 0 }}>
+          ✓ Reviewed
+        </span>
+        <span className="text-xs font-bold text-white" style={{ opacity: offset < 0 ? 1 : 0 }}>
+          Archive
+        </span>
+      </div>
+      <div
+        className="bg-surface"
+        style={{
+          transform: `translateX(${offset}px)`,
+          transition:
+            offset === 0 || Math.abs(offset) > 200 ? "transform .18s ease" : undefined,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 // Icon per top folder for the collapsed 28px rail (letters read terribly).
@@ -894,14 +1009,20 @@ function EmptyState({ folder, searching }: { folder: string; searching: boolean 
         <SparkGlyph className="h-6 w-6" />
       </div>
       <div className="text-sm font-semibold text-fg">
-        {searching ? "No matches" : folder === "attention" ? "You're all caught up" : "Nothing here yet"}
+        {searching
+          ? "No matches"
+          : folder === "attention" || folder === "all"
+            ? "You're all caught up"
+            : "Nothing here yet"}
       </div>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
         {searching
           ? "Try a different search."
           : folder === "attention"
             ? "Flagged mail, unmapped senders, and anything the AI says needs a reply surface here."
-            : "Mail lands in this folder as it arrives and gets triaged."}
+            : folder === "all"
+              ? "Everything is reviewed or archived. New mail lands here as it arrives."
+              : "Mail lands in this folder as it arrives and gets triaged."}
       </p>
     </div>
   );
