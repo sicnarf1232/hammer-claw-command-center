@@ -480,6 +480,13 @@ export default function ThreadDetail({
         </button>
       </div>
 
+      {/* 4b. Create a task from this thread (linked to it and the account) */}
+      <CreateTaskInline
+        threadKey={threadKey}
+        accountName={data.acct?.name ?? null}
+        subject={data.subject}
+      />
+
       {/* 5. Unmapped sender, one inline line (FIX 5) */}
       {data.senderSuggestion && !senderLinked ? (
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted">
@@ -704,6 +711,148 @@ function PersonChip({ p, muted = false }: { p: PersonRef; muted?: boolean }) {
 
 const CLAMP_THRESHOLD = 200;
 const MAX_RECIPIENT_CHIPS = 3;
+
+// "Add action from this thread": a collapsed row that expands into a quick
+// task form. The created task links back to this thread (task_emails +
+// linked_thread_key), so Send update and the task views know the context.
+function CreateTaskInline({
+  threadKey,
+  accountName,
+  subject,
+}: {
+  threadKey: string;
+  accountName: string | null;
+  subject: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [due, setDue] = useState("");
+  const [priority, setPriority] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function create() {
+    const t = title.trim();
+    if (!t || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/tasks/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: t,
+          due: due || undefined,
+          priority: priority || undefined,
+          customer: accountName ?? undefined,
+          threadKey,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data.error ?? "Could not create the task.");
+      } else {
+        setDone(t);
+        setTitle("");
+        setDue("");
+        setPriority("");
+        setOpen(false);
+      }
+    } catch {
+      setErr("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done && !open) {
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-ok">✓ Task created: {done}</span>
+        <Link href="/tasks" className="font-medium text-accent hover:underline">
+          View in Tasks →
+        </Link>
+        <button
+          type="button"
+          onClick={() => {
+            setDone(null);
+            setOpen(true);
+          }}
+          className="text-muted hover:text-fg"
+        >
+          Add another
+        </button>
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          if (!title) setTitle(subject);
+        }}
+        className="mt-2 flex w-full items-center gap-1.5 rounded-xl border border-dashed border-line2 px-3 py-2 text-left text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+      >
+        + Add task from this thread
+        {accountName ? <span className="text-2xs">(links to {accountName})</span> : null}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-border bg-surface p-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") create();
+            if (e.key === "Escape") setOpen(false);
+          }}
+          placeholder="Task title"
+          autoFocus
+          className="input min-w-[200px] flex-1 px-2.5 py-1.5 text-xs"
+        />
+        <input
+          type="date"
+          value={due}
+          onChange={(e) => setDue(e.target.value)}
+          className="input px-2 py-1.5 text-xs"
+          title="Due date"
+        />
+        <select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+          className="input px-2 py-1.5 text-xs"
+          title="Priority"
+        >
+          <option value="">Normal</option>
+          <option value="high">High</option>
+        </select>
+        <button
+          type="button"
+          onClick={create}
+          disabled={busy || !title.trim()}
+          className="btn-primary text-xs disabled:opacity-60"
+        >
+          {busy ? "Creating…" : "Create task"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-xs text-muted hover:text-fg"
+        >
+          Cancel
+        </button>
+      </div>
+      {err ? <p className="mt-1.5 text-xs text-danger">{err}</p> : null}
+    </div>
+  );
+}
 
 // Render the original HTML email in a sandboxed iframe: no scripts can run
 // (sandbox omits allow-scripts), links open in a new tab, and the frame sizes
