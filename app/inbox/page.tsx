@@ -57,7 +57,9 @@ export default async function InboxPage({
   const triage = await getTriageMap(all.map((t) => t.key));
 
   // A review only counts until the next inbound message: when new mail
-  // arrives on a reviewed thread, it comes back as unreviewed.
+  // arrives on a reviewed thread, it comes back as unreviewed AND as
+  // needing attention (they wrote after Jordan closed it, so it demands
+  // eyes until he reviews again). Missing this means missed emails.
   for (const t of all) {
     const tr = triage.get(t.key);
     if (
@@ -65,7 +67,7 @@ export default async function InboxPage({
       t.lastInboundAt &&
       (!tr.reviewedAt || tr.reviewedAt < t.lastInboundAt)
     ) {
-      triage.set(t.key, { ...tr, reviewed: false });
+      triage.set(t.key, { ...tr, reviewed: false, needsReply: true });
     }
   }
 

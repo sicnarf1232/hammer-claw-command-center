@@ -859,17 +859,23 @@ function CreateTaskInline({
 // Render the original HTML email in a sandboxed iframe: no scripts can run
 // (sandbox omits allow-scripts), links open in a new tab, and the frame sizes
 // itself to the content. This is what preserves tables and inline images.
+// In dark mode the sheet renders dark with forced-light text so an expanded
+// email stops flashing a white page.
 function EmailHtmlFrame({ html }: { html: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(200);
-  const doc = useMemo(() => buildEmailDoc(html), [html]);
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    setDark(document.documentElement.classList.contains("dark"));
+  }, []);
+  const doc = useMemo(() => buildEmailDoc(html, dark), [html, dark]);
   return (
     <iframe
       ref={ref}
       sandbox="allow-same-origin"
       srcDoc={doc}
       title="Email content"
-      className="w-full rounded-xl border border-border bg-white"
+      className={`w-full rounded-xl border border-border ${dark ? "bg-transparent" : "bg-white"}`}
       style={{ height }}
       onLoad={() => {
         try {
@@ -881,12 +887,20 @@ function EmailHtmlFrame({ html }: { html: string }) {
   );
 }
 
-function buildEmailDoc(html: string): string {
+function buildEmailDoc(html: string, dark: boolean): string {
   const styles = Array.from(html.matchAll(/<style[\s\S]*?<\/style>/gi))
     .map((m) => m[0])
     .join("\n");
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   const inner = bodyMatch ? bodyMatch[1] : html;
+  // Dark mode strips the email's own colors: text goes light, backgrounds go
+  // transparent, table borders dim. Images and links keep their identity.
+  const darkOverrides = [
+    "body { color: #E6E6E2; background: #1C2433; }",
+    "body * { color: #E6E6E2 !important; background-color: transparent !important; }",
+    "a, a * { color: #5CC6BB !important; }",
+    "table, td, th { border-color: rgba(230,230,226,0.25) !important; }",
+  ].join("\n");
   return [
     '<!doctype html><html><head><meta charset="utf-8"><base target="_blank">',
     styles,
@@ -894,6 +908,7 @@ function buildEmailDoc(html: string): string {
     'body { margin: 14px; font: 14px/1.55 -apple-system, "Segoe UI", Arial, sans-serif; color: #111; background: #fff; word-break: break-word; }',
     "img { max-width: 100%; height: auto; }",
     "table { max-width: 100%; }",
+    dark ? darkOverrides : "",
     "</style></head><body>",
     inner,
     "</body></html>",
@@ -1000,8 +1015,14 @@ function DetailMessageCard({
           ) : (
             <div
               className={`whitespace-pre-wrap break-words text-sm leading-relaxed text-fg/85 ${
-                (clampable || hasRich) && !expanded ? "line-clamp-3" : ""
+                (clampable || hasRich) && !expanded ? "line-clamp-3 cursor-pointer" : ""
               }`}
+              onClick={
+                (clampable || hasRich) && !expanded ? () => setExpanded(true) : undefined
+              }
+              title={
+                (clampable || hasRich) && !expanded ? "Click to read the full email" : undefined
+              }
             >
               {m.bodyMain || "(no text body)"}
             </div>

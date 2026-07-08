@@ -123,6 +123,26 @@ function Workspace({
     return () => window.removeEventListener("hc-thread-update", onUpdate);
   }, [router]);
 
+  // Reconcile the local overrides against fresh server data: an unread
+  // thread means NEW inbound mail arrived, so a session-old "reviewed"
+  // override must not keep hiding it (that is a missed email).
+  useEffect(() => {
+    setLive((m) => {
+      let changed = false;
+      const next = new Map(m);
+      for (const [key, o] of next) {
+        if (o.reviewed === true) {
+          const t = threads.find((x) => x.key === key);
+          if (t?.unread) {
+            next.delete(key);
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : m;
+    });
+  }, [threads]);
+
   useEffect(() => {
     const pending = threads
       .filter((t) => !t.summary && !requested.current.has(t.key))
