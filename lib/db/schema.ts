@@ -515,3 +515,14 @@ export const appMeta = pgTable("app_meta", {
     .notNull()
     .defaultNow(),
 });
+
+// Per-agent knobs for the /agents oversight view (self-provisioned by
+// lib/agents/settings.ts; drizzle/0009 is the hand-run record).
+export const agentSettings = pgTable("agent_settings", {
+  agent: text("agent").primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  modelChoice: text("model_choice").notNull().default("default"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

@@ -710,6 +710,9 @@ const PATHWAYS: EmailPathway[] = [
 
 export async function triageEmailThread(
   input: TriageThreadInput,
+  // Agent settings pick between the two configured runtime models only
+  // ("smart" = model(), "fast" = fastModel(), default fast).
+  opts?: { modelChoice?: "smart" | "fast" },
 ): Promise<EmailTriageResult> {
   const system = [
     "You triage email threads for the Merit Medical OEM sales team (Jordan Francis).",
@@ -740,7 +743,7 @@ export async function triageEmailThread(
     .slice(0, 9000);
 
   const res = await client().messages.create({
-    model: fastModel(),
+    model: opts?.modelChoice === "smart" ? model() : fastModel(),
     max_tokens: 400,
     system,
     messages: [

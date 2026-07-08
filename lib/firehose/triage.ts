@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
 import { emailTriage } from "@/lib/db/schema";
 import { aiConfigured, triageEmailThread } from "@/lib/ai";
+import { getAgentSetting, resolveModelChoice } from "@/lib/agents/settings";
 import { getThread, type ThreadMessage } from "./read";
 import { ensureFirehoseSchema } from "./schema";
 
@@ -69,6 +70,9 @@ export async function ensureTriageForKeys(
 ): Promise<Map<string, Triage>> {
   const result = new Map<string, Triage>();
   if (!aiConfigured() || !dbConfigured() || !keys.length) return result;
+  // The Triage agent's own switch and model choice (set on /agents).
+  const agentCfg = await getAgentSetting("triage");
+  if (!agentCfg.enabled) return result;
   await ensureFirehoseSchema();
   const existing = await getTriageMap(keys);
 
@@ -97,16 +101,19 @@ export async function ensureTriageForKeys(
             item.messages.find((m) => m.accountId != null)?.accountId != null
               ? String(item.messages.find((m) => m.accountId != null)!.accountId)
               : null;
-          const t = await triageEmailThread({
-            subject: item.subject,
-            account,
-            messages: item.messages.map((m) => ({
-              direction: m.direction,
-              from: m.fromName?.trim() || m.fromEmail || "unknown",
-              at: (m.sentAt ?? m.receivedAt)?.toISOString?.() ?? null,
-              text: textOf(m),
-            })),
-          });
+          const t = await triageEmailThread(
+            {
+              subject: item.subject,
+              account,
+              messages: item.messages.map((m) => ({
+                direction: m.direction,
+                from: m.fromName?.trim() || m.fromEmail || "unknown",
+                at: (m.sentAt ?? m.receivedAt)?.toISOString?.() ?? null,
+                text: textOf(m),
+              })),
+            },
+            { modelChoice: resolveModelChoice(agentCfg.modelChoice, item.key) },
+          );
           await db
             .insert(emailTriage)
             .values({
