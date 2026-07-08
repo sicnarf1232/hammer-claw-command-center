@@ -97,6 +97,32 @@ function Workspace({
   const requested = useRef<Set<string>>(new Set());
   const [triaging, setTriaging] = useState(false);
 
+  // Live triage state from the open detail panel. Marking reviewed is our
+  // "mark as read": the row leaves Needs attention immediately, archive
+  // leaves every live folder, no reload needed.
+  const [live, setLive] = useState<
+    Map<string, { reviewed?: boolean; archived?: boolean; flagged?: boolean }>
+  >(new Map());
+  useEffect(() => {
+    const onUpdate = (e: Event) => {
+      const d = (e as CustomEvent).detail as {
+        key?: string;
+        reviewed?: boolean;
+        archived?: boolean;
+        flagged?: boolean;
+      };
+      if (!d?.key) return;
+      setLive((m) => {
+        const next = new Map(m);
+        next.set(d.key!, { ...next.get(d.key!), ...d });
+        return next;
+      });
+      router.refresh();
+    };
+    window.addEventListener("hc-thread-update", onUpdate);
+    return () => window.removeEventListener("hc-thread-update", onUpdate);
+  }, [router]);
+
   useEffect(() => {
     const pending = threads
       .filter((t) => !t.summary && !requested.current.has(t.key))
@@ -126,13 +152,23 @@ function Workspace({
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return threads;
-    return threads.filter((t) =>
+    const inFolder = threads.filter((t) => {
+      const o = live.get(t.key);
+      if (!o) return true;
+      if (o.archived === true && folder !== "archived") return false;
+      if (o.archived === false && folder === "archived") return false;
+      if (folder === "attention" && o.reviewed === true) return false;
+      if (folder === "reviewed" && o.reviewed === false) return false;
+      if (folder === "flagged" && o.flagged === false) return false;
+      return true;
+    });
+    if (!needle) return inFolder;
+    return inFolder.filter((t) =>
       [t.subject, t.who, t.preview, t.summary, t.accountName]
         .filter(Boolean)
         .some((s) => s!.toLowerCase().includes(needle)),
     );
-  }, [q, threads]);
+  }, [q, threads, live, folder]);
 
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
   const hasSelection = selectedKey != null;

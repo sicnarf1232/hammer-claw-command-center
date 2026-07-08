@@ -195,12 +195,25 @@ export default function ThreadDetail({
     return () => window.removeEventListener(INSERT_REPLY_EVENT, onInsert);
   }, []);
 
+  // The thread list keeps rows in sync with what happens here: marking a
+  // thread reviewed pulls it out of Needs attention right away, archiving
+  // pulls it out of every live folder.
+  function announce(change: Record<string, unknown>) {
+    window.dispatchEvent(
+      new CustomEvent("hc-thread-update", { detail: { key: threadKey, ...change } }),
+    );
+  }
+
   function toggleFlag() {
     const next = !flagged;
     setFlagged(next);
+    announce({ flagged: next });
     post("/api/inbox/thread-action", { key: threadKey, action: next ? "flag" : "unflag" }).then(
       (ok) => {
-        if (!ok) setFlagged(!next);
+        if (!ok) {
+          setFlagged(!next);
+          announce({ flagged: !next });
+        }
       },
     );
   }
@@ -208,11 +221,15 @@ export default function ThreadDetail({
   function toggleArchive() {
     const next = !archived;
     setArchived(next);
+    announce({ archived: next });
     post("/api/inbox/thread-action", {
       key: threadKey,
       action: next ? "archive" : "unarchive",
     }).then((ok) => {
-      if (!ok) setArchived(!next);
+      if (!ok) {
+        setArchived(!next);
+        announce({ archived: !next });
+      }
     });
   }
 
@@ -227,8 +244,12 @@ export default function ThreadDetail({
   function toggleReviewed() {
     const next = !reviewed;
     setReviewed(next);
+    announce({ reviewed: next });
     post("/api/inbox/triage-set", { key: threadKey, reviewed: next }).then((ok) => {
-      if (!ok) setReviewed(!next);
+      if (!ok) {
+        setReviewed(!next);
+        announce({ reviewed: !next });
+      }
     });
   }
 
