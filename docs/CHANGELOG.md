@@ -2,6 +2,34 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Inbox hardening day (2026-07-08)
+
+- **Flow B actually sends now.** All three branches (new, forward, reply)
+  created Outlook drafts and stopped; /send steps were added, the new
+  branch's foreach interpolation bug and setProperty('@odata.type') bug
+  were fixed, and a markRead case was added. Replies were already
+  threading via createReply.
+- **Reviewed = handled until they speak again**: reviewed clears the
+  thread from Needs attention instantly, new inbound mail reopens it
+  (reviewed_at vs last inbound), and reviewing syncs Outlook read state
+  through Flow B markRead (un-review marks unread).
+- **Full emails in the panel**: original HTML (tables, images) in a
+  sandboxed no-script iframe; cid: inline images resolve by file name;
+  per-message Reply and Forward; up/down thread jumping; the composer
+  opens on Reply with the quoted context of the exact message.
+- **List truths**: names resolve like the detail view, All mail is the
+  default folder, threads sort and preview by the newest INBOUND message
+  so Jordan's own replies stop resurfacing threads as new.
+- **Neon 402 outage and fix**: the 800-row thread scan shipped full
+  bodies on every view plus the counts poll and exhausted the free-tier
+  data transfer quota (empty inbox everywhere, firehose stores dropped).
+  Scan now reads 16 summary columns; Neon upgraded to a paid plan; the
+  outage window was recovered by resubmitting Flow A's failed runs.
+- Brain panel per DESIGN_HANDOFF 5b (320px/44px, scoping, Cmd+K, lite
+  markdown, per-answer model chip) with a user model picker (Opus smart
+  default, Sonnet fast) and Mountain Time dates in the prompt (the UTC
+  clock made it think evening was tomorrow).
+
 ## Figma UX fixes 1-6: panel-based inbox (2026-07-07)
 
 Spec: docs/FIGMA-FIXES-2026-07.md. Six fixes, shipped as six commits.
