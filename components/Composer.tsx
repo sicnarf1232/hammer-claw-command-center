@@ -11,9 +11,11 @@ interface UploadRef {
   size: number;
 }
 
-// Compose a new email or forward one. AI can draft the body in Jordan's voice;
+// Compose a new email or forward one and SEND it via Flow B (direct send as
+// of the 2026-07-08 flow fix; it no longer leaves an Outlook draft).
+// AI can draft the body in Jordan's voice;
 // the prompt-in box steers it. Attachments are read in the browser and sent as
-// base64 to Flow B, which creates an Outlook draft. For a forward, Flow B keeps
+// base64 to Flow B. For a forward, Flow B keeps
 // the original's attachments automatically, so these are extras.
 export default function Composer({
   mode,
@@ -127,7 +129,7 @@ export default function Composer({
   if (done) {
     return (
       <div className="card p-5 text-sm text-ok">
-        Draft created in Outlook. Review and send it from there.
+        Sent. It is in your Outlook Sent folder.
         <div className="mt-3">
           <button type="button" onClick={() => router.push("/inbox")} className="btn-outline text-sm">
             Back to inbox
@@ -248,10 +250,10 @@ export default function Composer({
       {error ? <div className="mt-3 text-xs text-danger">{error}</div> : null}
       <div className="mt-4 flex items-center justify-between">
         <span className="text-2xs text-muted">
-          Creates a draft as Jordan.Francis@merit.com in Outlook.
+          Sends as Jordan.Francis@merit.com from Outlook.
         </span>
         <button type="button" onClick={send} disabled={busy !== ""} className="btn-primary text-sm">
-          {busy === "send" ? "Creating draft…" : "Create draft"}
+          {busy === "send" ? "Sending…" : "Send"}
         </button>
       </div>
     </div>

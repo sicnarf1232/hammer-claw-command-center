@@ -62,3 +62,13 @@ export async function postMailIntent(
 ): Promise<{ ok: boolean; status: number; body: string }> {
   return postToFlowB(intent);
 }
+
+// Sync Outlook's read state with the app's reviewed state (Flow B markRead
+// case, added 2026-07-08): read=true marks the message read, false unread.
+// The message is addressed by its internetMessageId, carried in inReplyTo.
+export async function postMarkRead(
+  internetMessageId: string,
+  read: boolean,
+): Promise<{ ok: boolean; status: number; body: string }> {
+  return postToFlowB({ action: "markRead", inReplyTo: internetMessageId, read });
+}
