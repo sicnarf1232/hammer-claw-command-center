@@ -94,6 +94,63 @@ describe("parseTemplatedNote", () => {
   });
 });
 
+// Jordan's real note shape (2026-07-09): H1 sections WITH trailing colons,
+// the whole meta block on one line, 🗓 instead of 📅, parentheticals in the
+// attendee list, and horizontal rules between sections.
+const REAL_WORLD = `# 📝 T.N. | Merit PCN [samples, GTIN, bridge]
+
+🗓 06|18|26 🏢 Merit OEM / T.N. (remote neuro group) 📍 Product Change Notification 📎 Syringe kits (KO4 x2, K12 x2) 👥 Jordan Francis (Merit OEM), Hailey, Scott, Jessica Chen (T.N. side: Daniel, Sapna)
+
+---
+
+# 📌 TL;DR:
+
+Both sides need internal alignment before a clear path forward.
+
+---
+
+# ✅ Action Items:
+
+- [ ] Scott: Compile full list of outstanding EO sterilization documentation. Due: Tomorrow (Jun 19)
+- [ ] Jordan Francis: Respond to T.N. with ETA on EO documentation delivery. Due: Tomorrow (Jun 19)
+
+---
+
+# 🎯 Key Decisions:
+
+- EO sterilization docs are required for MDR submission.
+
+---
+
+# ⚠ Watch-Outs:
+
+- Bridge supply window is tight.
+
+---
+
+# 📖 Full Notes:
+
+EO Sterilization Documentation (MDR): details here.
+`;
+
+describe("real-world template variant", () => {
+  it("matches despite colons, H1 headers, and rules", () => {
+    expect(matchesNoteTemplate(REAL_WORLD)).toBe(true);
+  });
+
+  it("parses the one-line meta block", () => {
+    const p = parseTemplatedNote(REAL_WORLD);
+    expect(p.title).toBe("T.N. | Merit PCN [samples, GTIN, bridge]");
+    expect(p.date).toBe("06|18|26");
+    expect(p.company).toContain("Merit OEM / T.N.");
+    expect(p.attendees).toEqual(["Jordan Francis", "Hailey", "Scott", "Jessica Chen"]);
+    expect(p.actionItems).toHaveLength(2);
+    expect(p.actionItems[0].owner).toBe("Scott");
+    expect(p.actionItems[0].due).toBe("Tomorrow (Jun 19)");
+    expect(p.watchouts).toEqual(["Bridge supply window is tight."]);
+  });
+});
+
 describe("triagedFromTemplate", () => {
   const t = triagedFromTemplate(parseTemplatedNote(TEMPLATED), {
     fallbackTitle: "fallback",

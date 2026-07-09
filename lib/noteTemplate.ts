@@ -25,6 +25,7 @@ function normalizeHeader(line: string): string {
     .replace(/^#{1,6}\s*/, "")
     .replace(/\*\*/g, "")
     .replace(/^[^a-zA-Z]+/, "")
+    .replace(/:\s*$/, "")
     .trim()
     .toLowerCase();
 }
@@ -99,26 +100,35 @@ export function parseTemplatedNote(md: string): ParsedTemplateNote {
     else header.push(line);
   }
 
-  // Header block: title is the first heading; meta lines are keyed by emoji
-  // or by label.
+  // Header block: title is the first heading; meta fields are keyed by emoji
+  // and can arrive one per line OR all on one line, so tokenize the whole
+  // header text by the emoji markers.
   for (const line of header) {
     const t = line.trim();
     if (!t) continue;
-    if (!out.title && /^#{1,3}\s+/.test(t)) {
+    if (/^#{1,3}\s+/.test(t)) {
       out.title = t.replace(/^#{1,3}\s+/, "").replace(/^[^a-zA-Z0-9[]+/, "").trim() || null;
-      continue;
+      break;
     }
-    const val = t.replace(/^[^a-zA-Z0-9[]+/, "").replace(/^\*\*[^*]+\*\*:?\s*/, "").trim();
-    if (/📅/.test(t) || /^date\b/i.test(normalizeHeader(t))) out.date = out.date ?? val;
-    else if (/🏢/.test(t)) out.company = out.company ?? val;
-    else if (/📍/.test(t)) out.topic = out.topic ?? val;
-    else if (/🔗/.test(t)) out.account = out.account ?? val;
-    else if (/👥/.test(t) || /^attendees\b/i.test(normalizeHeader(t))) {
+  }
+  const headerText = header.join("\n");
+  for (const [, key, rawVal] of headerText.matchAll(
+    /(📅|🗓|🏢|📍|🔗|👥)\s*([^📅🗓🏢📍🔗👥📎\n]*)/gu,
+  )) {
+    const val = rawVal.replace(/^\*\*[^*]+\*\*:?\s*/, "").trim();
+    if (!val) continue;
+    if (key === "📅" || key === "🗓") out.date = out.date ?? val;
+    else if (key === "🏢") out.company = out.company ?? val;
+    else if (key === "📍") out.topic = out.topic ?? val;
+    else if (key === "🔗") out.account = out.account ?? val;
+    else if (key === "👥" && !out.attendees.length) {
+      // Drop parenthetical asides ("(Merit OEM)", "(T.N. side: ...)") before
+      // splitting on commas so they don't shatter the name list.
       out.attendees = val
-        .replace(/^\(.*?\)\s*/, "")
+        .replace(/\([^)]*\)/g, "")
         .split(/[,;]/)
         .map((a) => a.trim())
-        .filter((a) => a && !a.startsWith("("));
+        .filter(Boolean);
     }
   }
 
