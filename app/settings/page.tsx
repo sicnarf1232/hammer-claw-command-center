@@ -1,5 +1,6 @@
 import VoiceSettings from "@/components/VoiceSettings";
 import ExportCard from "@/components/ExportCard";
+import DevFeedbackCard from "@/components/DevFeedbackCard";
 import { getVoiceProfile, EMPTY_VOICE } from "@/lib/voice";
 import { cutoverActive } from "@/lib/dbSource";
 
@@ -20,6 +21,7 @@ export default async function SettingsPage() {
       </header>
       <VoiceSettings initial={profile} />
       {(await cutoverActive().catch(() => false)) ? <ExportCard /> : null}
+      <DevFeedbackCard />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { setManualTriage } from "@/lib/firehose/triage";
+import { addAgentFeedback } from "@/lib/feedback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +23,20 @@ export async function POST(req: NextRequest) {
   if (!key || !PATHWAYS.includes(pathway)) {
     return NextResponse.json({ error: "key and a valid pathway are required." }, { status: 400 });
   }
+  const proposed = typeof body?.proposed === "string" ? body.proposed : null;
+  const note = typeof body?.note === "string" && body.note.trim() ? body.note.trim() : null;
   try {
     await setManualTriage(key, { pathway });
+    // The verdict, with Jordan's optional justification: the contextual
+    // training record that shapes the agent beyond raw agree/disagree.
+    await addAgentFeedback({
+      agent: "triage",
+      itemKey: key,
+      verdict: proposed && proposed !== pathway ? "edited" : "approved",
+      proposed,
+      corrected: pathway,
+      note,
+    }).catch(() => {});
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
+import InboxBrain from "@/components/InboxBrain";
 import { BrandColorsProvider } from "@/components/BrandColors";
 
 // Merit Type Style Guide: Inter carries body & UI (weights 300–700), Outfit
@@ -55,8 +56,12 @@ export default function RootLayout({
         <BrandColorsProvider>
           <Nav />
           <main className="min-w-0 transition-[padding] duration-200 md:pl-[var(--nav-w,236px)]">
-            <div className="page-shell mx-auto max-w-[1360px] animate-fade-in px-4 py-6 pb-24 sm:px-9 sm:py-8">
-              {children}
+            <div className="page-shell mx-auto flex max-w-[1360px] items-start gap-4 animate-fade-in px-4 py-6 pb-24 sm:px-9 sm:py-8">
+              <div className="min-w-0 flex-1">{children}</div>
+              {/* The brain rides along on every page (collapsible; Cmd+K). */}
+              <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] shrink-0 self-start lg:block">
+                <InboxBrain collapsible />
+              </aside>
             </div>
           </main>
         </BrandColorsProvider>

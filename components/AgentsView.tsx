@@ -52,8 +52,9 @@ function rel(isoDate: string | null): string {
 }
 
 export default function AgentsView({ data }: { data: AgentsData }) {
+  const router = useRouter();
   const [tab, setTab] = useState<"roster" | "review" | "scorecard" | "ledger">("roster");
-  const pendingCount = data.review.length;
+  const pendingCount = data.review.filter((i) => !gradedIds.has(i.id)).length;
 
   return (
     <div>
@@ -84,7 +85,10 @@ export default function AgentsView({ data }: { data: AgentsData }) {
           <button
             key={key}
             type="button"
-            onClick={() => setTab(key)}
+            onClick={() => {
+              setTab(key);
+              router.refresh();
+            }}
             className={`flex items-center gap-1.5 border-b-2 pb-2 text-sm font-semibold transition-colors ${
               tab === key
                 ? "border-[var(--accent)] text-accent"
@@ -268,29 +272,56 @@ function Stat({ big, label, accent }: { big: string; label: string; accent?: boo
 
 // ---------------------------------------------------------------- Review ----
 
+// Graded item ids survive tab switches and server refreshes within the
+// session, so an already-graded item never repopulates the queue while the
+// server data catches up.
+const gradedIds = new Set<string>();
+
 function Review({ items }: { items: ReviewItem[] }) {
   const router = useRouter();
-  const [idx, setIdx] = useState(0);
+  const [, force] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [doneCount, setDoneCount] = useState(0);
-  const remaining = items.slice(idx);
-  const item = remaining[0] ?? null;
+  const [err, setErr] = useState<string | null>(null);
+  const queue = items.filter((i) => !gradedIds.has(i.id));
+  const doneCount = items.length - queue.length;
+  const item = queue[0] ?? null;
+
+  function advance(id: string) {
+    gradedIds.add(id);
+    setEditing(false);
+    setNote("");
+    setErr(null);
+    force((n) => n + 1);
+    router.refresh(); // resync the scorecard and queue with the server
+  }
 
   async function verdictTriage(pathway: string) {
     if (!item || busy) return;
     setBusy(true);
+    setErr(null);
     try {
-      await fetch("/api/agents/verdict", {
+      const res = await fetch("/api/agents/verdict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: item.threadKey, pathway }),
+        body: JSON.stringify({
+          key: item.threadKey,
+          pathway,
+          proposed: item.proposed,
+          note: note.trim() || undefined,
+        }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data.error ?? "Saving the verdict failed. Nothing was recorded.");
+        return;
+      }
+      advance(item.id);
+    } catch {
+      setErr("Network error. Nothing was recorded.");
     } finally {
       setBusy(false);
-      setEditing(false);
-      setDoneCount((c) => c + 1);
-      setIdx((i) => i + 1);
     }
   }
 
@@ -298,16 +329,23 @@ function Review({ items }: { items: ReviewItem[] }) {
     if (!item || busy) return;
     const id = Number(item.id.split(":")[1]);
     setBusy(true);
+    setErr(null);
     try {
-      await fetch("/api/proposals/decide", {
+      const res = await fetch("/api/proposals/decide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: [id], action }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data.error ?? "Deciding the proposal failed. Nothing was recorded.");
+        return;
+      }
+      advance(item.id);
+    } catch {
+      setErr("Network error. Nothing was recorded.");
     } finally {
       setBusy(false);
-      setDoneCount((c) => c + 1);
-      setIdx((i) => i + 1);
     }
   }
 
@@ -446,6 +484,16 @@ function Review({ items }: { items: ReviewItem[] }) {
                     </button>
                   ))}
                 </div>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={2}
+                  placeholder="Why the change? Context here trains the agent (optional but powerful)."
+                  className="input mt-2 w-full resize-none px-2.5 py-1.5 text-xs"
+                />
+                <div className="mt-1 text-[9.5px] text-muted">
+                  Pick the correct pathway above to save; your note rides along.
+                </div>
               </div>
             ) : null}
           </>
@@ -455,6 +503,8 @@ function Review({ items }: { items: ReviewItem[] }) {
             discards it.
           </div>
         )}
+
+        {err ? <p className="mt-3 text-xs text-danger">{err}</p> : null}
 
         <div className="mt-4 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">

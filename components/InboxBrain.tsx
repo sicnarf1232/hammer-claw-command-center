@@ -178,6 +178,53 @@ export default function InboxBrain({
   async function send(text?: string) {
     const content = (text ?? input).trim();
     if (!content || busy) return;
+
+    // /devfeedback <note>: log an app improvement note straight to the dev
+    // feedback bucket, no AI involved. Drained during build sessions.
+    const devCmd = content.match(/^\/(?:devfeedback|feedback|dev)\b\s*([\s\S]*)$/i);
+    if (devCmd) {
+      const noteText = devCmd[1].trim();
+      const history: ChatMsg[] = [...state.history, { role: "user", content }];
+      if (!noteText) {
+        update({
+          ...state,
+          history: [
+            ...history,
+            { role: "assistant", content: "Add the note after /devfeedback and send again." },
+          ],
+        });
+        setInput("");
+        return;
+      }
+      update({ ...state, history });
+      setInput("");
+      setBusy(true);
+      try {
+        const res = await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: noteText, page: window.location.pathname }),
+        });
+        update({
+          ...state,
+          history: [
+            ...history,
+            {
+              role: "assistant",
+              content: res.ok
+                ? "Logged to the dev feedback bucket. It gets drained in the next build session."
+                : "Could not save that note. Try again.",
+            },
+          ],
+        });
+      } catch {
+        setErr("Network error.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     const history: ChatMsg[] = [...state.history, { role: "user", content }];
     update({ ...state, history });
     setInput("");
@@ -475,7 +522,7 @@ export default function InboxBrain({
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 px-1">
           <span className="text-[9.5px] text-muted">
-            Shift+Enter for a new line · searches your inbox and records
+            Shift+Enter for a new line · /devfeedback logs an app note
           </span>
           <select
             value={modelChoice}
