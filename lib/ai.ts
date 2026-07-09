@@ -332,6 +332,9 @@ export interface TriageInput {
 // action items) in one call. Jordan reviews everything in /meetings afterward.
 export async function triageMeeting(
   input: TriageInput,
+  // "smart" = model() for notes that need a full restructure into Jordan's
+  // template (his call, 2026-07-09); default stays fastModel().
+  opts?: { modelChoice?: "smart" | "fast" },
 ): Promise<TriagedMeeting> {
   const system = [
     "You triage and structure meeting notes for Jordan Francis, who works mainly on Merit Medical OEM accounts.",
@@ -373,7 +376,7 @@ export async function triageMeeting(
   ];
 
   const res = await client().messages.create({
-    model: fastModel(),
+    model: opts?.modelChoice === "smart" ? model() : fastModel(),
     max_tokens: 2500,
     system,
     messages: [{ role: "user", content: parts.join("\n") }],

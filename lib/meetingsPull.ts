@@ -27,6 +27,11 @@ import {
   type OwnerClass,
 } from "@/lib/ai";
 import {
+  matchesNoteTemplate,
+  parseTemplatedNote,
+  triagedFromTemplate,
+} from "@/lib/noteTemplate";
+import {
   meetingBasename,
   meetingFolder,
   renderMeetingNote,
@@ -194,16 +199,32 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
       }
 
       const attendees = attendeeNames(note);
-      const triaged = await triageMeeting({
-        title: note.title,
-        folderNames: (note.folder_membership ?? []).map((f) => f.name),
-        attendees: attendees.map((name) =>
-          describeAttendee(name, roster),
-        ),
-        summaryMarkdown: note.summary_markdown ?? note.summary_text ?? null,
-        knownAccounts,
-        date,
-      });
+      const rawSummary = note.summary_markdown ?? note.summary_text ?? null;
+      // Less is more (Jordan, 2026-07-09): a note that already follows his
+      // template was generated from the raw transcript once; re-parsing it is
+      // double work that loses context. Templated notes pass through with
+      // ZERO AI; only non-templated notes get one structuring pass, on Opus.
+      let triaged: TriagedMeeting;
+      if (rawSummary && matchesNoteTemplate(rawSummary)) {
+        triaged = triagedFromTemplate(parseTemplatedNote(rawSummary), {
+          fallbackTitle: note.title ?? null,
+          attendees,
+          knownAccounts,
+          date,
+        });
+      } else {
+        triaged = await triageMeeting(
+          {
+            title: note.title,
+            folderNames: (note.folder_membership ?? []).map((f) => f.name),
+            attendees: attendees.map((name) => describeAttendee(name, roster)),
+            summaryMarkdown: rawSummary,
+            knownAccounts,
+            date,
+          },
+          { modelChoice: "smart" },
+        );
+      }
       for (const ai of triaged.actionItems) {
         ai.ownerClass = classifyOwner(ai, roster);
       }
