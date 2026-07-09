@@ -184,9 +184,21 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
         alreadyPending += 1;
         continue;
       }
-      if (prior?.status === "approved" || prior?.status === "rejected") {
-        skipped.push({ title: label, reason: `previously ${prior.status}` });
+      if (prior?.status === "approved") {
+        skipped.push({ title: label, reason: "previously approved" });
         continue;
+      }
+      // A rejected meeting comes back ONLY when the Granola note changed
+      // after the rejection (Jordan fixed it at the source and re-pulled).
+      if (prior?.status === "rejected") {
+        const changedSince =
+          summary.updated_at &&
+          prior.decidedAt &&
+          new Date(summary.updated_at) > new Date(prior.decidedAt);
+        if (!changedSince) {
+          skipped.push({ title: label, reason: "previously rejected" });
+          continue;
+        }
       }
 
       const note = await getNote(summary.id, false);
@@ -300,6 +312,7 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
         payload,
         summary: meetingSummaryLine(payload),
         model: triaged.modelUsed,
+        allowRestageRejected: prior?.status === "rejected",
       });
       if (res.action === "staged" || res.action === "refreshed") {
         staged.push({

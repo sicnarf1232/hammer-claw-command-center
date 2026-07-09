@@ -16,6 +16,9 @@ export interface StageInput {
   payload: unknown;
   summary: string;
   model: string | null;
+  // The source note changed after a rejection: a changed payload may be
+  // staged fresh instead of staying latched.
+  allowRestageRejected?: boolean;
 }
 
 export type StagedAction =
@@ -75,7 +78,11 @@ export async function stageProposal(input: StageInput): Promise<StageResult> {
   const existing = await latestProposalFor(input.kind, input.dedupeKey);
   const changed =
     !existing || stableStringify(existing.payload) !== stableStringify(input.payload);
-  const action = stageAction(existing?.status ?? null, changed);
+  const action = stageAction(
+    existing?.status ?? null,
+    changed,
+    input.allowRestageRejected ?? false,
+  );
 
   switch (action) {
     case "unchanged":

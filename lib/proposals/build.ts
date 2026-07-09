@@ -35,6 +35,10 @@ export type StageAction =
 export function stageAction(
   existingStatus: string | null,
   payloadChanged: boolean,
+  // A rejected proposal may be re-staged when the SOURCE changed since the
+  // rejection (Jordan fixed the note in Granola): only genuinely changed
+  // content comes back; re-pulling the same bad note stays latched.
+  allowRestageRejected = false,
 ): StageAction {
   switch (existingStatus) {
     case null:
@@ -47,7 +51,7 @@ export function stageAction(
     case "approved":
       return "skip-approved";
     case "rejected":
-      return "skip-rejected";
+      return allowRestageRejected && payloadChanged ? "insert" : "skip-rejected";
     default:
       return "insert";
   }

@@ -78,6 +78,12 @@ describe("stageAction", () => {
     expect(stageAction("approved", true)).toBe("skip-approved");
     expect(stageAction("rejected", true)).toBe("skip-rejected");
   });
+
+  it("restages a rejected proposal only when allowed AND the payload changed", () => {
+    expect(stageAction("rejected", true, true)).toBe("insert");
+    expect(stageAction("rejected", false, true)).toBe("skip-rejected");
+    expect(stageAction("approved", true, true)).toBe("skip-approved");
+  });
 });
 
 describe("stableStringify", () => {
