@@ -8,7 +8,11 @@ import {
   applyMeetingToSeries,
   mmdd,
 } from "@/lib/vault/series";
-import { buildSeriesScaffold, seriesDocPath } from "@/lib/vault/seriesCreate";
+import {
+  buildSeriesScaffold,
+  seriesDocPath,
+  isOneOnOneName,
+} from "@/lib/vault/seriesCreate";
 import { updateSeries } from "@/lib/ai";
 import { todayISO } from "@/lib/dates";
 
@@ -116,6 +120,55 @@ export async function createSeries(
   }
 
   return { path, sessions: ordered.length };
+}
+
+export interface CreateManualSeriesInput {
+  name: string;
+  accountName?: string; // drives placement; blank means Internal
+  cadence?: string;
+  participants: string[]; // key customer attendees
+  keywords: string[]; // title keywords for matching
+}
+
+// Manual pre-seeding: Jordan declares a recurring series before any meetings
+// exist. No AI and no meetings folded in; the scaffold carries explicit
+// matchRules (title keywords + key attendees) so the next Granola pull links
+// matching meetings automatically. DB-only, origin 'app'; the vault copy lands
+// on the next export.
+export async function createManualSeries(
+  input: CreateManualSeriesInput,
+): Promise<CreateSeriesResult> {
+  const name = input.name?.trim() ?? "";
+  if (!name) throw new Error("A series name is required.");
+  const participants = input.participants.map((p) => p.trim()).filter(Boolean);
+  const keywords = input.keywords.map((k) => k.trim()).filter(Boolean);
+  if (!participants.length && !keywords.length) {
+    throw new Error(
+      "Add at least one attendee or title keyword so future meetings can match.",
+    );
+  }
+
+  const dbActive = await cutoverActive();
+  if (!dbActive) {
+    throw new Error("Manual series creation requires the app database.");
+  }
+
+  const bucket = input.accountName?.trim() || "Internal";
+  const path = seriesDocPath(bucket, name, isOneOnOneName(name));
+  if ((await getSeriesByPath(path)) !== null) {
+    throw new Error(`A series doc already exists at ${path}.`);
+  }
+
+  const doc = buildSeriesScaffold({
+    name,
+    participants,
+    cadence: input.cadence,
+    createdISO: todayISO(),
+    matchRules: { titleContains: keywords, attendeesInclude: participants },
+  });
+
+  await dbSaveSeriesContent(path, doc, "app");
+  return { path, sessions: 0 };
 }
 
 // Turn a parsed meeting note into a summary string for updateSeries. Skips the

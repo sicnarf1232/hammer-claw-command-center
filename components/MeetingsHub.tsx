@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { customerHue, initials, isInternalBucket } from "@/lib/customerHues";
 import SuggestedSeries, { type HubCandidate } from "@/components/SuggestedSeries";
+import NewSeriesForm from "@/components/NewSeriesForm";
 
 export interface HubRow {
   date: string; // YYYY-MM-DD
@@ -139,6 +140,9 @@ export default function MeetingsHub({
       {view === "all" && !query && (
         <HotAndStats rows={rows} series={series} customers={customers} today={today} />
       )}
+
+      {/* Set up a series by hand, ahead of any meetings */}
+      {view === "series" && <NewSeriesForm accountNames={accountNames} />}
 
       {/* Suggested series: recurring meetings not yet a rolling series */}
       {view === "series" && <SuggestedSeries candidates={candidates} />}

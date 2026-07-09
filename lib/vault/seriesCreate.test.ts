@@ -7,7 +7,7 @@ import {
   buildSeriesScaffold,
   defaultParticipants,
 } from "./seriesCreate";
-import { parseSeriesDoc, applyMeetingToSeries } from "./series";
+import { parseSeriesDoc, applyMeetingToSeries, matchesSeries } from "./series";
 
 describe("placement", () => {
   it("puts internal series in Internal/Rolling and customers in their folder", () => {
@@ -67,6 +67,46 @@ describe("buildSeriesScaffold", () => {
     expect(s.participants).toEqual(["Jordan Francis", "Nick Francis"]);
     expect(s.status).toBe("active");
     expect(s.log).toHaveLength(0);
+  });
+
+  it("round-trips explicit matchRules and drives matching (manual create)", () => {
+    const manual = buildSeriesScaffold({
+      name: "Stryker Weekly Sync",
+      participants: ["Alice Smith", "Bob Jones"],
+      cadence: "Weekly",
+      createdISO: "2026-07-09",
+      matchRules: {
+        titleContains: ["stryker", "weekly sync"],
+        attendeesInclude: ["Alice Smith", "Bob Jones"],
+      },
+    });
+    const s = parseSeriesDoc(manual, "x/Stryker Weekly Sync.md");
+    expect(s.matchRules.titleContains).toEqual(["stryker", "weekly sync"]);
+    expect(s.matchRules.attendeesInclude).toEqual(["Alice Smith", "Bob Jones"]);
+    expect(s.currentState).toBe("(no current state captured)");
+    expect(s.log).toHaveLength(0);
+
+    // Title keyword alone is enough.
+    expect(
+      matchesSeries(s, { title: "Stryker check-in", attendees: [] }),
+    ).toBe(true);
+    // Attendee match with a tight attendee set (owner allowed as the one extra).
+    expect(
+      matchesSeries(s, {
+        title: "Sync",
+        attendees: ["Alice Smith", "Bob Jones", "Jordan Francis"],
+      }),
+    ).toBe(true);
+    // Neither signal: no match.
+    expect(
+      matchesSeries(s, { title: "Random touch base", attendees: ["Charlie Day"] }),
+    ).toBe(false);
+  });
+
+  it("omits the matchRules block when no explicit rules are given", () => {
+    expect(doc).not.toContain("matchRules:");
+    const s = parseSeriesDoc(doc, "x/Nick 1on1.md");
+    expect(s.matchRules.attendeesInclude).toEqual(["Nick"]);
   });
 
   it("accepts a folded-in meeting (the create flow's per-meeting step)", () => {

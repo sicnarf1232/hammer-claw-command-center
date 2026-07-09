@@ -7,6 +7,10 @@ import { mmdd } from "./series";
 
 const ONE_ON_ONE_RE = /\b1\s*[:\- ]?\s*1\b|1on1|one[\s-]?on[\s-]?one/i;
 
+export function isOneOnOneName(name: string): boolean {
+  return ONE_ON_ONE_RE.test(name);
+}
+
 // Where a new series doc lives: alongside that bucket's meetings, in a Rolling
 // subfolder. Customer series -> "300 Merit/Meetings/<Customer>/Rolling";
 // internal ones -> "300 Merit/Meetings/Internal/Rolling" (matches Mike/Nick).
@@ -51,6 +55,11 @@ export function seriesDocPath(bucket: string, name: string, isOneOnOne: boolean)
   return `${seriesFolderForBucket(bucket)}/${seriesFilename(name, isOneOnOne)}.md`;
 }
 
+export interface ScaffoldMatchRules {
+  titleContains?: string[];
+  attendeesInclude?: string[];
+}
+
 export interface ScaffoldInput {
   name: string;
   participants: string[];
@@ -58,6 +67,7 @@ export interface ScaffoldInput {
   tags?: string[];
   workstream?: string; // defaults to "merit"
   createdISO: string; // YYYY-MM-DD
+  matchRules?: ScaffoldMatchRules;
 }
 
 // The empty starting doc: frontmatter the parser understands plus the two
@@ -74,6 +84,7 @@ export function buildSeriesScaffold(input: ScaffoldInput): string {
     ...(input.cadence ? [`cadence: ${input.cadence}`] : []),
     `participants: [${participants.join(", ")}]`,
     `tags: [${tags.join(", ")}]`,
+    ...matchRulesLines(input.matchRules),
     `workstream: ${ws}`,
     "status: active",
     `created: ${input.createdISO}`,
@@ -94,6 +105,20 @@ export function buildSeriesScaffold(input: ScaffoldInput): string {
     "",
   ];
   return fm.join("\n") + "\n" + body.join("\n");
+}
+
+// Explicit matchRules as nested frontmatter YAML. parseSeriesDoc prefers these
+// over the name-derived rules, so a manually created series matches exactly the
+// keywords and attendees Jordan gave it.
+function matchRulesLines(rules?: ScaffoldMatchRules): string[] {
+  const titles = (rules?.titleContains ?? []).map((s) => s.trim()).filter(Boolean);
+  const attendees = (rules?.attendeesInclude ?? []).map((s) => s.trim()).filter(Boolean);
+  if (!titles.length && !attendees.length) return [];
+  return [
+    "matchRules:",
+    ...(titles.length ? [`  titleContains: [${titles.join(", ")}]`] : []),
+    ...(attendees.length ? [`  attendeesInclude: [${attendees.join(", ")}]`] : []),
+  ];
 }
 
 // Best-effort participants for the create form to pre-fill: a 1:1 is Jordan
