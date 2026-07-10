@@ -71,6 +71,15 @@ export default function MeetingsHub({
 
   const customers = useMemo(() => distinctBuckets(rows), [rows]);
 
+  // Past meetings the New Series form can seed from (rows arrive newest first).
+  const seedMeetings = useMemo(
+    () =>
+      rows
+        .filter((r): r is HubRow & { notePath: string } => !!r.notePath)
+        .map((r) => ({ title: r.title, date: r.date, path: r.notePath })),
+    [rows],
+  );
+
   function pickView(v: View) {
     setView(v);
     setTile("all");
@@ -141,8 +150,11 @@ export default function MeetingsHub({
         <HotAndStats rows={rows} series={series} customers={customers} today={today} />
       )}
 
-      {/* Set up a series by hand, ahead of any meetings */}
-      {view === "series" && <NewSeriesForm accountNames={accountNames} />}
+      {/* Set up a series by hand, ahead of any meetings, or seed one from
+          selected past meetings (Opus derives the fields) */}
+      {view === "series" && (
+        <NewSeriesForm accountNames={accountNames} recentMeetings={seedMeetings} />
+      )}
 
       {/* Suggested series: recurring meetings not yet a rolling series */}
       {view === "series" && <SuggestedSeries candidates={candidates} />}

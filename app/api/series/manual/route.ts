@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createManualSeries } from "@/lib/createSeries";
+import { dbLinkMeetingsToSeries } from "@/lib/meetingsDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,9 +13,10 @@ const CADENCES: Record<string, string> = {
   "ad hoc": "Ad hoc",
 };
 
-// Create a rolling series by hand, before any meetings exist. No AI call and
-// no vault write: the scaffold doc (with explicit matchRules) is saved to the
-// DB and future Granola pulls link matching meetings to it.
+// Create a rolling series by hand. No AI call and no vault write: the scaffold
+// doc (with explicit matchRules) is saved to the DB and future Granola pulls
+// link matching meetings to it. Optional meetingPaths (the past meetings the
+// form was seeded from) get linked to the new series by series_id.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") {
@@ -31,6 +33,7 @@ export async function POST(req: NextRequest) {
   const cadence = cadenceRaw ? CADENCES[cadenceRaw.toLowerCase()] : undefined;
   const participants = strArray(b.participants);
   const keywords = strArray(b.keywords);
+  const meetingPaths = strArray(b.meetingPaths);
 
   if (!name) {
     return NextResponse.json({ error: "A series name is required." }, { status: 400 });
@@ -56,7 +59,15 @@ export async function POST(req: NextRequest) {
       participants,
       keywords,
     });
-    return NextResponse.json({ ok: true, path: res.path, sessions: res.sessions });
+    const linked = meetingPaths.length
+      ? await dbLinkMeetingsToSeries(res.path, meetingPaths)
+      : 0;
+    return NextResponse.json({
+      ok: true,
+      path: res.path,
+      sessions: res.sessions,
+      linked,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Create failed.";
     const status = /already exists/i.test(message) ? 409 : 500;

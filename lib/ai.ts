@@ -7,6 +7,7 @@ import {
 } from "@/lib/vault/types";
 import type { RawQuoteInput } from "@/lib/quote/types";
 import type { VoiceProfile } from "@/lib/voice";
+import { inferCadenceFromDates } from "@/lib/seriesDerive";
 
 // AI drafting for email replies (Phase 2) and briefs (Phase 4). Optional:
 // without ANTHROPIC_API_KEY the app skips AI and Jordan writes the body himself.
@@ -538,6 +539,117 @@ export async function updateSeries(
     typeof raw.currentState === "string" ? raw.currentState.trim() : "",
   );
   return { logBullets: bullets, currentState, modelUsed: res.model };
+}
+
+// ---- Series derivation (manual series creation, 2026-07-10): Jordan picks
+// past meetings in the New Series form and Opus derives the series fields
+// (name, account, cadence, stable attendees, title keywords) from them. He
+// reviews and edits everything before creating; nothing is written here.
+
+export interface DeriveSeriesMeeting {
+  title: string;
+  date: string | null; // YYYY-MM-DD when known
+  account: string | null; // customer display name, null for internal
+  attendees: string[];
+}
+
+export interface DerivedSeriesRules {
+  name: string;
+  accountName: string | null;
+  cadence: "weekly" | "biweekly" | "monthly" | "ad hoc" | null;
+  participants: string[];
+  keywords: string[];
+  modelUsed: string; // true model that served the call (provenance)
+}
+
+const DERIVE_CADENCES = ["weekly", "biweekly", "monthly", "ad hoc"] as const;
+
+export async function deriveSeriesRules(input: {
+  meetings: DeriveSeriesMeeting[];
+}): Promise<DerivedSeriesRules> {
+  // Deterministic date-spacing read, fed to the model as a hint so cadence is
+  // grounded in the actual gaps rather than vibes (lib/seriesDerive, tested).
+  const cadenceHint = inferCadenceFromDates(input.meetings.map((m) => m.date));
+
+  const system = [
+    "You define a recurring meeting SERIES for Jordan Francis from a handful of past meetings he selected.",
+    "The series fields become match rules: future meetings whose title or attendees match get linked automatically. Jordan reviews and edits every field before creating.",
+    "Return ONLY valid JSON, no markdown, no commentary. Schema:",
+    "{",
+    '  "name": string,          // a clean series name, e.g. "Stryker Weekly Sync" (no date, no attendee list)',
+    '  "account_name": string|null, // the customer account these meetings share; null for internal/mixed',
+    '  "cadence": "weekly"|"biweekly"|"monthly"|"ad hoc"|null, // null when the dates do not support a call',
+    '  "participants": string[], // the stable core attendees',
+    '  "keywords": string[]      // distinctive recurring title tokens for matching',
+    "}",
+    "Guidance:",
+    "- participants: attendees who appear in MOST of the meetings (the stable core). Exclude Jordan Francis himself; he is in every meeting.",
+    "- keywords: 1-4 distinctive tokens or short phrases that recur across the titles. Never generic words like meeting, sync, call, weekly, notes.",
+    "- cadence: infer from the date spacing when 3+ dates are given; otherwise null.",
+    "- name: short and human, usually account or topic plus the rhythm.",
+    "House style: never use em dashes in any field.",
+  ].join("\n");
+
+  const lines = input.meetings.map((m, i) => {
+    const parts = [
+      `${i + 1}. ${m.date ?? "(no date)"} | ${m.title}`,
+      `   account: ${m.account ?? "(internal)"}`,
+      `   attendees: ${m.attendees.join(", ") || "(none captured)"}`,
+    ];
+    return parts.join("\n");
+  });
+  const user = [
+    "Selected meetings:",
+    ...lines,
+    "",
+    cadenceHint
+      ? `Date-spacing analysis of these meetings suggests: ${cadenceHint}.`
+      : "Too few dated meetings for a date-spacing read; use null cadence unless the titles state one.",
+    "",
+    "Return the JSON object now.",
+  ].join("\n");
+
+  const res = await client().messages.create({
+    model: model(),
+    max_tokens: 700,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  const raw = parseJsonObject(text);
+  const strList = (v: unknown, max: number): string[] =>
+    Array.isArray(v)
+      ? v.map((x) => noEmDash(String(x).trim())).filter(Boolean).slice(0, max)
+      : [];
+  const cadence = DERIVE_CADENCES.includes(
+    raw.cadence as (typeof DERIVE_CADENCES)[number],
+  )
+    ? (raw.cadence as (typeof DERIVE_CADENCES)[number])
+    : null;
+  const accountName =
+    typeof raw.account_name === "string" && raw.account_name.trim()
+      ? noEmDash(raw.account_name.trim())
+      : null;
+  // Belt and braces: the prompt excludes Jordan, but never let him slip into
+  // his own match rules.
+  const participants = strList(raw.participants, 8).filter(
+    (p) => !/^jordan(\s+francis)?$/i.test(p),
+  );
+
+  return {
+    name: noEmDash(String(raw.name ?? "").trim()),
+    accountName,
+    cadence,
+    participants,
+    keywords: strList(raw.keywords, 6),
+    modelUsed: res.model,
+  };
 }
 
 // ---- Brain: answer a question grounded in the vault (Milestone 2 #5) ----

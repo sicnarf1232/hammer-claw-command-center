@@ -1,4 +1,4 @@
-import { eq, isNull, sql } from "drizzle-orm";
+import { eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   getDb,
   accounts as accountsT,
@@ -267,6 +267,30 @@ export async function dbSaveSeriesContent(
     await db.insert(seriesT).values({ ...values, sourcePath: path });
   }
   return { commitSha: "", path };
+}
+
+// Link existing meetings to a series row by source path (manual series
+// creation seeded from selected past meetings). Sets meetings.series_id, the
+// same linkage the seed writes for series-named notes (lib/cutover/apply).
+// Returns how many rows were linked.
+export async function dbLinkMeetingsToSeries(
+  seriesPath: string,
+  meetingPaths: string[],
+): Promise<number> {
+  if (!meetingPaths.length) return 0;
+  const db = getDb();
+  const [s] = await db
+    .select({ id: seriesT.id })
+    .from(seriesT)
+    .where(eq(seriesT.sourcePath, seriesPath))
+    .limit(1);
+  if (!s) return 0;
+  const rows = await db
+    .update(meetingsT)
+    .set({ seriesId: s.id, updatedAt: new Date() })
+    .where(inArray(meetingsT.sourcePath, meetingPaths))
+    .returning({ id: meetingsT.id });
+  return rows.length;
 }
 
 export async function existingMeetingBasenamesFromDb(): Promise<Set<string> | null> {
