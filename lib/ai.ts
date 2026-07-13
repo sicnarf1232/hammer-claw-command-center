@@ -515,30 +515,47 @@ export async function updateSeries(
     "Return the JSON object now.",
   ];
 
-  const res = await client().messages.create({
-    model: fastModel(),
-    max_tokens: 2000,
-    system,
-    messages: [{ role: "user", content: parts.join("\n") }],
-  });
+  // One retry with a sterner reminder: a single prose or truncated reply
+  // must not kill a multi-meeting series create.
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await client().messages.create({
+      model: fastModel(),
+      max_tokens: 3000,
+      system:
+        attempt === 0
+          ? system
+          : `${system}\nYour previous reply was not a valid JSON object. Reply with ONLY the JSON object, nothing else.`,
+      messages: [{ role: "user", content: parts.join("\n") }],
+    });
 
-  const text = res.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
+    const text = res.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
 
-  const raw = parseJsonObject(text);
-  const bullets = Array.isArray(raw.logBullets)
-    ? raw.logBullets
-        .map((b) => noEmDash(String(b).trim()))
-        .filter(Boolean)
-        .slice(0, 5)
-    : [];
-  const currentState = noEmDash(
-    typeof raw.currentState === "string" ? raw.currentState.trim() : "",
+    try {
+      const raw = parseJsonObject(text);
+      const bullets = Array.isArray(raw.logBullets)
+        ? raw.logBullets
+            .map((b) => noEmDash(String(b).trim()))
+            .filter(Boolean)
+            .slice(0, 5)
+        : [];
+      const currentState = noEmDash(
+        typeof raw.currentState === "string" ? raw.currentState.trim() : "",
+      );
+      return { logBullets: bullets, currentState, modelUsed: res.model };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(
+    `Series update for "${input.meetingTitle}" did not return valid JSON after a retry.${
+      lastErr instanceof Error ? ` (${lastErr.message})` : ""
+    }`,
   );
-  return { logBullets: bullets, currentState, modelUsed: res.model };
 }
 
 // ---- Series derivation (manual series creation, 2026-07-10): Jordan picks

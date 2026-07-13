@@ -42,6 +42,7 @@ export interface CreateSeriesInput {
 export interface CreateSeriesResult {
   path: string;
   sessions: number;
+  skipped?: string[]; // meetings whose fold failed after a retry
 }
 
 const EMPTY_STATE = "(no current state captured)";
@@ -77,7 +78,8 @@ export async function createSeries(
     createdISO: todayISO(),
   });
 
-  doc = await foldMeetingsIntoDoc(doc, path, input.name, input.cadence, ordered);
+  const fold = await foldMeetingsIntoDoc(doc, path, input.name, input.cadence, ordered);
+  doc = fold.doc;
 
   if (dbActive) {
     // User-initiated creation: the row is the canonical doc (origin 'app');
@@ -91,7 +93,7 @@ export async function createSeries(
     });
   }
 
-  return { path, sessions: ordered.length };
+  return { path, sessions: fold.folded, skipped: fold.skipped };
 }
 
 export interface CreateManualSeriesInput {
@@ -146,12 +148,17 @@ export async function createManualSeries(
   const ordered = [...(input.meetings ?? [])].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
+  let folded = 0;
+  let skipped: string[] = [];
   if (ordered.length) {
-    doc = await foldMeetingsIntoDoc(doc, path, name, input.cadence, ordered);
+    const fold = await foldMeetingsIntoDoc(doc, path, name, input.cadence, ordered);
+    doc = fold.doc;
+    folded = fold.folded;
+    skipped = fold.skipped;
   }
 
   await dbSaveSeriesContent(path, doc, "app");
-  return { path, sessions: ordered.length };
+  return { path, sessions: folded, skipped };
 }
 
 // Fold meetings into a series doc oldest to newest: each one is summarized
@@ -164,38 +171,48 @@ async function foldMeetingsIntoDoc(
   seriesName: string,
   cadence: string | undefined,
   ordered: CreateSeriesMeeting[],
-): Promise<string> {
+): Promise<{ doc: string; folded: number; skipped: string[] }> {
   let out = doc;
+  let folded = 0;
+  const skipped: string[] = [];
   for (const m of ordered) {
-    const note = m.notePath ? await getMeetingNoteByPath(m.notePath) : null;
-    const summary = note ? noteSummary(note) : m.title;
+    try {
+      const note = m.notePath ? await getMeetingNoteByPath(m.notePath) : null;
+      const summary = note ? noteSummary(note) : m.title;
 
-    const series = parseSeriesDoc(out, path);
-    const priorState =
-      series.currentState === EMPTY_STATE ? "" : series.currentState;
+      const series = parseSeriesDoc(out, path);
+      const priorState =
+        series.currentState === EMPTY_STATE ? "" : series.currentState;
 
-    const upd = await updateSeries({
-      seriesName,
-      cadence,
-      currentState: priorState,
-      meetingTitle: m.title,
-      meetingDate: m.date,
-      meetingSummary: summary,
-    });
+      const upd = await updateSeries({
+        seriesName,
+        cadence,
+        currentState: priorState,
+        meetingTitle: m.title,
+        meetingDate: m.date,
+        meetingSummary: summary,
+      });
 
-    out = applyMeetingToSeries(
-      series,
-      {
-        date: m.date,
-        title: m.title,
-        bullets: upd.logBullets,
-        meetingBasename: m.noteBasename,
-      },
-      upd.currentState,
-      mmdd(m.date),
-    );
+      out = applyMeetingToSeries(
+        series,
+        {
+          date: m.date,
+          title: m.title,
+          bullets: upd.logBullets,
+          meetingBasename: m.noteBasename,
+        },
+        upd.currentState,
+        mmdd(m.date),
+      );
+      folded += 1;
+    } catch (err) {
+      // One stubborn meeting must not kill the whole series create; the
+      // series lands with the rest and the skip is reported.
+      console.error(`[createSeries] fold failed for "${m.title}":`, err);
+      skipped.push(m.title);
+    }
   }
-  return out;
+  return { doc: out, folded, skipped };
 }
 
 // Turn a parsed meeting note into a summary string for updateSeries. Skips the

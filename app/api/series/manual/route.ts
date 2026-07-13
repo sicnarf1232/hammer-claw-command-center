@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       path: res.path,
       sessions: res.sessions,
+      skipped: res.skipped ?? [],
       linked,
     });
   } catch (err) {
