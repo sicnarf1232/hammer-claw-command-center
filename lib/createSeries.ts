@@ -77,35 +77,7 @@ export async function createSeries(
     createdISO: todayISO(),
   });
 
-  for (const m of ordered) {
-    const note = m.notePath ? await getMeetingNoteByPath(m.notePath) : null;
-    const summary = note ? noteSummary(note) : m.title;
-
-    const series = parseSeriesDoc(doc, path);
-    const priorState =
-      series.currentState === EMPTY_STATE ? "" : series.currentState;
-
-    const upd = await updateSeries({
-      seriesName: input.name,
-      cadence: input.cadence,
-      currentState: priorState,
-      meetingTitle: m.title,
-      meetingDate: m.date,
-      meetingSummary: summary,
-    });
-
-    doc = applyMeetingToSeries(
-      series,
-      {
-        date: m.date,
-        title: m.title,
-        bullets: upd.logBullets,
-        meetingBasename: m.noteBasename,
-      },
-      upd.currentState,
-      mmdd(m.date),
-    );
-  }
+  doc = await foldMeetingsIntoDoc(doc, path, input.name, input.cadence, ordered);
 
   if (dbActive) {
     // User-initiated creation: the row is the canonical doc (origin 'app');
@@ -128,12 +100,16 @@ export interface CreateManualSeriesInput {
   cadence?: string;
   participants: string[]; // key customer attendees
   keywords: string[]; // title keywords for matching
+  // Past meetings selected in the form: folded into the rolling doc at
+  // creation so the series opens with real history, not 0 sessions.
+  meetings?: CreateSeriesMeeting[];
 }
 
-// Manual pre-seeding: Jordan declares a recurring series before any meetings
-// exist. No AI and no meetings folded in; the scaffold carries explicit
-// matchRules (title keywords + key attendees) so the next Granola pull links
-// matching meetings automatically. DB-only, origin 'app'; the vault copy lands
+// Manual pre-seeding: Jordan declares a recurring series by hand. The
+// scaffold carries explicit matchRules (title keywords + key attendees) so
+// the next Granola pull links matching meetings automatically. When past
+// meetings are selected, they are folded into the rolling log the same way
+// the AI-summary create does. DB-only, origin 'app'; the vault copy lands
 // on the next export.
 export async function createManualSeries(
   input: CreateManualSeriesInput,
@@ -159,7 +135,7 @@ export async function createManualSeries(
     throw new Error(`A series doc already exists at ${path}.`);
   }
 
-  const doc = buildSeriesScaffold({
+  let doc = buildSeriesScaffold({
     name,
     participants,
     cadence: input.cadence,
@@ -167,8 +143,59 @@ export async function createManualSeries(
     matchRules: { titleContains: keywords, attendeesInclude: participants },
   });
 
+  const ordered = [...(input.meetings ?? [])].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+  if (ordered.length) {
+    doc = await foldMeetingsIntoDoc(doc, path, name, input.cadence, ordered);
+  }
+
   await dbSaveSeriesContent(path, doc, "app");
-  return { path, sessions: 0 };
+  return { path, sessions: ordered.length };
+}
+
+// Fold meetings into a series doc oldest to newest: each one is summarized
+// from its note, run through the series updater, and appended to the rolling
+// log with Current State carried forward. Shared by the AI-summary create
+// and the manual create when it is seeded from past meetings.
+async function foldMeetingsIntoDoc(
+  doc: string,
+  path: string,
+  seriesName: string,
+  cadence: string | undefined,
+  ordered: CreateSeriesMeeting[],
+): Promise<string> {
+  let out = doc;
+  for (const m of ordered) {
+    const note = m.notePath ? await getMeetingNoteByPath(m.notePath) : null;
+    const summary = note ? noteSummary(note) : m.title;
+
+    const series = parseSeriesDoc(out, path);
+    const priorState =
+      series.currentState === EMPTY_STATE ? "" : series.currentState;
+
+    const upd = await updateSeries({
+      seriesName,
+      cadence,
+      currentState: priorState,
+      meetingTitle: m.title,
+      meetingDate: m.date,
+      meetingSummary: summary,
+    });
+
+    out = applyMeetingToSeries(
+      series,
+      {
+        date: m.date,
+        title: m.title,
+        bullets: upd.logBullets,
+        meetingBasename: m.noteBasename,
+      },
+      upd.currentState,
+      mmdd(m.date),
+    );
+  }
+  return out;
 }
 
 // Turn a parsed meeting note into a summary string for updateSeries. Skips the

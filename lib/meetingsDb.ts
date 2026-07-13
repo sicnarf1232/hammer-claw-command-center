@@ -55,6 +55,25 @@ export async function meetingNoteByPathFromDb(
   return parseMeetingNote(row.bodyMarkdown, path);
 }
 
+// Date + title for a set of meeting paths, for folding selected past
+// meetings into a manually created series.
+export async function meetingHeadersByPaths(
+  paths: string[],
+): Promise<Array<{ sourcePath: string; date: string | null; title: string }>> {
+  if (!paths.length || !(await cutoverActive())) return [];
+  const rows = await getDb()
+    .select({
+      sourcePath: meetingsT.sourcePath,
+      date: meetingsT.date,
+      title: meetingsT.title,
+    })
+    .from(meetingsT)
+    .where(inArray(meetingsT.sourcePath, paths));
+  return rows
+    .filter((r): r is typeof r & { sourcePath: string } => !!r.sourcePath)
+    .map((r) => ({ sourcePath: r.sourcePath, date: r.date, title: r.title }));
+}
+
 export async function meetingPathsFromDb(): Promise<string[] | null> {
   if (!(await cutoverActive())) return null;
   const rows = await getDb()

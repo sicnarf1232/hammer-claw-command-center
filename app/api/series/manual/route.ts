@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createManualSeries } from "@/lib/createSeries";
-import { dbLinkMeetingsToSeries } from "@/lib/meetingsDb";
+import { createManualSeries, type CreateSeriesMeeting } from "@/lib/createSeries";
+import { dbLinkMeetingsToSeries, meetingHeadersByPaths } from "@/lib/meetingsDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Folding seeded meetings runs one series-update AI call per meeting.
+export const maxDuration = 300;
 
 // Canonical cadence labels for the manual create form's four options.
 const CADENCES: Record<string, string> = {
@@ -13,10 +15,11 @@ const CADENCES: Record<string, string> = {
   "ad hoc": "Ad hoc",
 };
 
-// Create a rolling series by hand. No AI call and no vault write: the scaffold
-// doc (with explicit matchRules) is saved to the DB and future Granola pulls
-// link matching meetings to it. Optional meetingPaths (the past meetings the
-// form was seeded from) get linked to the new series by series_id.
+// Create a rolling series by hand. The scaffold doc (with explicit
+// matchRules) is saved to the DB and future Granola pulls link matching
+// meetings to it. Selected past meetings (meetingPaths) are folded into the
+// rolling log so the series opens with real history, then linked by
+// series_id. No vault write.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") {
@@ -52,12 +55,24 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    let seedMeetings: CreateSeriesMeeting[] = [];
+    if (meetingPaths.length) {
+      seedMeetings = (await meetingHeadersByPaths(meetingPaths))
+        .filter((m) => m.date)
+        .map((m) => ({
+          date: m.date!,
+          title: m.title,
+          noteBasename: basenameOf(m.sourcePath),
+          notePath: m.sourcePath,
+        }));
+    }
     const res = await createManualSeries({
       name,
       accountName,
       cadence,
       participants,
       keywords,
+      meetings: seedMeetings,
     });
     const linked = meetingPaths.length
       ? await dbLinkMeetingsToSeries(res.path, meetingPaths)
@@ -79,4 +94,9 @@ function strArray(v: unknown): string[] {
   return Array.isArray(v)
     ? v.map((x) => String(x).trim()).filter(Boolean)
     : [];
+}
+
+function basenameOf(path: string): string {
+  const last = path.split("/").pop() ?? path;
+  return last.replace(/\.md$/i, "");
 }
