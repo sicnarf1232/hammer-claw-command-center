@@ -496,11 +496,23 @@ export interface SeriesUpdate {
 export async function updateSeries(
   input: SeriesUpdateInput,
 ): Promise<SeriesUpdate> {
+  // The rolling-note discipline comes from Jordan's LLM-PARSING-GUIDE
+  // (docs/LLM-PARSING-GUIDE.md, section 2): the full note is the transcript
+  // of one meeting; the rolling note is the running memory. Current State is
+  // a bounded REWRITE, never an append pile.
   const system = [
     `You maintain the rolling-series note "${input.seriesName}"${input.cadence ? ` (${input.cadence})` : ""} for Jordan Francis.`,
-    "A new meeting in this series was just filed. Do two things:",
-    "1) logBullets: 3-5 concise bullets summarizing THIS meeting for the reverse-chronological log. Capture what moved, asks, and status. Do not restate the full action-item list.",
-    "2) currentState: rewrite the pinned Current State markdown. Carry forward still-open threads, retire resolved ones, update numbers, dates, and status. Keep it tight and current; it is the single source of truth for where this stands. Use short markdown (bold lead-ins, bullets) like the existing one.",
+    "A new meeting in this series was just filed as its own full note. Do two things:",
+    "",
+    "1) logBullets: 3 to 5 TIGHT bullets digesting THIS meeting for the log. Capture only what CHANGED or was DECIDED, plus new numbers and dates. This is a digest, not a re-log; never paste the action-item list (the full note holds it).",
+    "",
+    "2) currentState: a COMPLETE REWRITE of the pinned Current State, reconciling the old one against the new meeting:",
+    "- Lead with what is now most important (usually the new meeting's headline).",
+    "- Carry forward every still-open thread; silence is not resolution. Update its status, numbers, and dates in place.",
+    "- Merge, do not duplicate: if the meeting advances an existing thread, edit that thread, never add a second bullet about the same thing.",
+    "- Retire resolved threads (a short **Resolved:** line when notable, else drop; the detail lives in the log).",
+    "- Group into short labeled sections like **Open threads:** and **Decisions in play:**. A reader must absorb it in about 30 seconds.",
+    "- HARD BOUND: Current State stays roughly constant size as meetings accumulate; keep it under about 200 words. If the prior state is longer, condense it while keeping every open thread.",
     "House style: never use em dashes (use commas, colons, or periods). Do not invent facts. Work only from the existing Current State and the new meeting.",
     'Output ONLY a single JSON object: {"logBullets":["..."],"currentState":"..."}',
   ].join("\n");
