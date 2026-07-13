@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { dbConfigured } from "@/lib/db";
-import { listThreads, accountNames, type ThreadSummary } from "@/lib/firehose/read";
+import { listThreads, type ThreadSummary } from "@/lib/firehose/read";
 import { getTriageMap, type TriageRow } from "@/lib/firehose/triage";
-import { linkedTaskContextForThreads } from "@/lib/inboxContext";
-import { personCardsForEmails } from "@/lib/peopleDb";
-import { prettyLocalPart } from "@/lib/inboxThread";
-import InboxWorkspace, { type InboxThread, type Folder } from "@/components/InboxWorkspace";
+import { buildInboxRows, reconcileReviewedTriage } from "@/lib/inboxRows";
+import InboxWorkspace, { type Folder } from "@/components/InboxWorkspace";
 import SetupNotice from "@/components/SetupNotice";
 
 export const dynamic = "force-dynamic";
@@ -56,20 +54,9 @@ export default async function InboxPage({
   const all = await listThreads({ view: "all", limit: 500 });
   const triage = await getTriageMap(all.map((t) => t.key));
 
-  // A review only counts until the next inbound message: when new mail
-  // arrives on a reviewed thread, it comes back as unreviewed AND as
-  // needing attention (they wrote after Jordan closed it, so it demands
-  // eyes until he reviews again). Missing this means missed emails.
-  for (const t of all) {
-    const tr = triage.get(t.key);
-    if (
-      tr?.reviewed &&
-      t.lastInboundAt &&
-      (!tr.reviewedAt || tr.reviewedAt < t.lastInboundAt)
-    ) {
-      triage.set(t.key, { ...tr, reviewed: false, needsReply: true });
-    }
-  }
+  // Reviewed state expires on new inbound mail (see reconcileReviewedTriage:
+  // missing this means missed emails).
+  reconcileReviewedTriage(all, triage);
 
   const folders: Folder[] = FOLDERS.map((f) => ({
     key: f.key,
@@ -80,52 +67,7 @@ export default async function InboxPage({
 
   const active = FOLDERS.find((f) => f.key === folderKey)!;
   const shown = all.filter((t) => active.match(t, triage.get(t.key))).slice(0, 200);
-
-  const partyEmails = Array.from(
-    new Set(shown.flatMap((t) => t.parties.filter((p) => p.includes("@")))),
-  );
-  const [accounts, linkedTasks, cards] = await Promise.all([
-    accountNames(shown.map((t) => t.accountId).filter((x): x is number => x != null)),
-    linkedTaskContextForThreads(shown.map((t) => t.key)).catch(
-      () => new Map<string, never>(),
-    ),
-    personCardsForEmails(partyEmails).catch(() => new Map()),
-  ]);
-
-  // Parties arrive as "name or raw address"; resolve addresses to real names
-  // via the people table, else prettify the local part.
-  const displayName = (p: string) =>
-    p.includes("@") ? (cards.get(p.toLowerCase())?.fullName ?? prettyLocalPart(p)) : p;
-
-  const threads: InboxThread[] = shown.map((t) => {
-    const acct = t.accountId != null ? accounts.get(t.accountId) : undefined;
-    const tr = triage.get(t.key);
-    const anchor = t.lastInboundAt ?? t.lastAt;
-    return {
-      key: t.key,
-      subject: t.subject,
-      preview: t.preview,
-      lastAtISO: anchor ? anchor.toISOString() : null,
-      count: t.count,
-      inbound: t.inbound,
-      outbound: t.outbound,
-      lastDirection: t.lastDirection,
-      who: t.parties.length ? t.parties.map(displayName).join(", ") : "You",
-      accountName: acct?.name ?? null,
-      accountSlug: acct?.slug ?? null,
-      needsReview: t.needsReview,
-      hasAttachments: t.hasAttachments,
-      flagged: t.flagged,
-      replied: t.replied,
-      unread: t.unread,
-      summary: tr?.summary ?? null,
-      pathway: tr?.pathway ?? null,
-      priority: tr?.priority ?? null,
-      needsReply: Boolean(tr?.needsReply),
-      reviewed: Boolean(tr?.reviewed),
-      linkedTask: linkedTasks.get(t.key) ?? null,
-    };
-  });
+  const threads = await buildInboxRows(shown, triage);
 
   return (
     <Shell>

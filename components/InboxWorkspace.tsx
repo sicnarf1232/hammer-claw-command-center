@@ -7,6 +7,7 @@ import { customerHue, initials } from "@/lib/customerHues";
 import ThreadDetail from "@/components/ThreadDetail";
 import HoverPopout from "@/components/HoverPopout";
 import { ChevronLeftIcon } from "@/components/icons";
+import { mergeThreadDelta } from "@/lib/inboxLive";
 
 export interface InboxThread {
   key: string;
@@ -30,6 +31,9 @@ export interface InboxThread {
   priority: string | null;
   needsReply: boolean;
   reviewed: boolean;
+  // Server-side archived state, so live delta rows can be folder-matched
+  // client-side (the page itself filters archived threads before render).
+  archived: boolean;
   // The most urgent open task linked to this thread: the "why this matters".
   linkedTask: { taskId: string; title: string; due: string | null; overdue: boolean } | null;
 }
@@ -99,6 +103,69 @@ function Workspace({
   const requested = useRef<Set<string>>(new Set());
   const [triaging, setTriaging] = useState(false);
 
+  // The server-rendered threads seed the list; the background poll merges
+  // deltas into this client copy. Every full server render (navigation,
+  // router.refresh) replaces it wholesale and stays authoritative.
+  const [list, setList] = useState(threads);
+  const listRef = useRef(list);
+  listRef.current = list;
+  const [freshCount, setFreshCount] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setList(threads);
+    setFreshCount(0);
+  }, [threads]);
+
+  // Quiet background delta sync (~45s, paused while the tab is hidden, one
+  // immediate check on return). Only the list store mutates: the open thread
+  // pane, selection, scroll, and composer are never touched. New rows for the
+  // current folder surface an "N new" pill unless Jordan is already at the top.
+  const cursor = useRef(new Date().toISOString());
+  useEffect(() => {
+    let cancelled = false;
+    let busy = false;
+    async function poll() {
+      if (document.hidden || busy) return;
+      busy = true;
+      try {
+        const res = await fetch(
+          `/api/inbox/updates?since=${encodeURIComponent(cursor.current)}`,
+        );
+        const data = await res.json().catch(() => null);
+        if (cancelled || !data?.ok) return;
+        if (typeof data.now === "string") cursor.current = data.now;
+        const incoming = Array.isArray(data.threads)
+          ? (data.threads as InboxThread[])
+          : [];
+        if (incoming.length === 0) return;
+        const { threads: merged, added } = mergeThreadDelta(
+          listRef.current,
+          incoming,
+          folder,
+        );
+        if (merged !== listRef.current) setList(merged);
+        if (added > 0 && (scrollRef.current?.scrollTop ?? 0) > 40) {
+          setFreshCount((c) => c + added);
+        }
+      } catch {
+        // Network blip: the next tick retries with the same cursor.
+      } finally {
+        busy = false;
+      }
+    }
+    const id = setInterval(poll, 45_000);
+    const onVisible = () => {
+      if (!document.hidden) poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [folder]);
+  useEffect(() => setFreshCount(0), [folder]);
+
   // Live triage state from the open detail panel. Marking reviewed is our
   // "mark as read": the row leaves Needs attention immediately, archive
   // leaves every live folder, no reload needed.
@@ -125,8 +192,8 @@ function Workspace({
     return () => window.removeEventListener("hc-thread-update", onUpdate);
   }, [router]);
 
-  // Reconcile the local overrides against fresh server data: an unread
-  // thread means NEW inbound mail arrived, so a session-old "reviewed"
+  // Reconcile the local overrides against fresh server (or delta) data: an
+  // unread thread means NEW inbound mail arrived, so a session-old "reviewed"
   // override must not keep hiding it (that is a missed email).
   useEffect(() => {
     setLive((m) => {
@@ -134,7 +201,7 @@ function Workspace({
       const next = new Map(m);
       for (const [key, o] of next) {
         if (o.reviewed === true) {
-          const t = threads.find((x) => x.key === key);
+          const t = list.find((x) => x.key === key);
           if (t?.unread) {
             next.delete(key);
             changed = true;
@@ -143,10 +210,10 @@ function Workspace({
       }
       return changed ? next : m;
     });
-  }, [threads]);
+  }, [list]);
 
   useEffect(() => {
-    const pending = threads
+    const pending = list
       .filter((t) => !t.summary && !requested.current.has(t.key))
       .slice(0, 6)
       .map((t) => t.key);
@@ -170,13 +237,15 @@ function Workspace({
     return () => {
       cancelled = true;
     };
-  }, [threads, router]);
+  }, [list, router]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const inFolder = threads.filter((t) => {
+    const inFolder = list.filter((t) => {
       const o = live.get(t.key);
-      if (!o) return true;
+      // Server-side archived state (a delta row can flip it mid-session)
+      // yields to any local override below.
+      if (!o) return folder === "archived" ? true : !t.archived;
       if (o.archived === true && folder !== "archived") return false;
       if (o.archived === false && folder === "archived") return false;
       if ((folder === "attention" || folder === "all") && o.reviewed === true) return false;
@@ -190,7 +259,7 @@ function Workspace({
         .filter(Boolean)
         .some((s) => s!.toLowerCase().includes(needle)),
     );
-  }, [q, threads, live, folder]);
+  }, [q, list, live, folder]);
 
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
   const hasSelection = selectedKey != null;
@@ -249,7 +318,21 @@ function Workspace({
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto pb-4 lg:pr-0.5">
+        <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto pb-4 lg:pr-0.5">
+          {freshCount > 0 ? (
+            <div className="sticky top-0 z-20 flex justify-center pb-2">
+              <button
+                type="button"
+                onClick={() => {
+                  scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                  setFreshCount(0);
+                }}
+                className="rounded-full border border-border bg-surface px-3 py-1 text-2xs font-bold text-accent shadow-elevated transition-colors hover:bg-surface2"
+              >
+                {freshCount} new
+              </button>
+            </div>
+          ) : null}
           {filtered.length === 0 ? (
             <EmptyState folder={folder} searching={q.trim().length > 0} />
           ) : (

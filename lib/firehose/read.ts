@@ -1,5 +1,5 @@
 import { get } from "@vercel/blob";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, or, sql } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
 import { emails, emailAttachments, accounts } from "@/lib/db/schema";
 import { isInlineAttachment } from "./attach";
@@ -72,25 +72,9 @@ const SCAN_COLUMNS = {
 };
 type ScanRow = { [K in keyof typeof SCAN_COLUMNS]: EmailRow[K] };
 
-// Group the most recent messages into threads, newest activity first. Filtered
-// by view: attention = flagged or needs-review (and not archived); flagged =
-// flagged only; all = everything. An optional accountId scopes to one account.
-export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSummary[]> {
-  const { view = "all", accountId, limit = 80 } = opts;
-  if (!dbConfigured()) return [];
-  const db = getDb();
-  let rows: ScanRow[];
-  try {
-    rows = await db
-      .select(SCAN_COLUMNS)
-      .from(emails)
-      .orderBy(desc(sql`coalesce(${emails.sentAt}, ${emails.receivedAt}, ${emails.createdAt})`))
-      .limit(800);
-  } catch {
-    // Tables not provisioned yet (no firehose traffic): show empty, not an error.
-    return [];
-  }
-
+// Fold scanned rows into thread summaries, newest activity first. Shared by
+// the full list scan and the delta scan so both produce identical shapes.
+function summarizeScanRows(rows: ScanRow[]): ThreadSummary[] {
   type Acc = ThreadSummary & {
     _parties: Set<string>;
     _latestStatus: string;
@@ -156,7 +140,7 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
     }
   }
 
-  let out = Array.from(byKey.values()).map((t) => {
+  const out = Array.from(byKey.values()).map((t) => {
     t.parties = Array.from(t._parties).slice(0, 4);
     t.archived = t._latestStatus === "archived";
     // Unread = the newest message is one Jordan received and has not opened.
@@ -166,16 +150,76 @@ export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSum
     return t as ThreadSummary;
   });
 
-  if (accountId != null) out = out.filter((t) => t.accountId === accountId);
-  if (view === "attention") out = out.filter((t) => (t.flagged || t.needsReview) && !t.archived);
-  else if (view === "flagged") out = out.filter((t) => t.flagged && !t.archived);
-
   out.sort(
     (a, b) =>
       ((b.lastInboundAt ?? b.lastAt)?.getTime() ?? 0) -
       ((a.lastInboundAt ?? a.lastAt)?.getTime() ?? 0),
   );
+  return out;
+}
+
+// Group the most recent messages into threads, newest activity first. Filtered
+// by view: attention = flagged or needs-review (and not archived); flagged =
+// flagged only; all = everything. An optional accountId scopes to one account.
+export async function listThreads(opts: ListThreadsOpts = {}): Promise<ThreadSummary[]> {
+  const { view = "all", accountId, limit = 80 } = opts;
+  if (!dbConfigured()) return [];
+  const db = getDb();
+  let rows: ScanRow[];
+  try {
+    rows = await db
+      .select(SCAN_COLUMNS)
+      .from(emails)
+      .orderBy(desc(sql`coalesce(${emails.sentAt}, ${emails.receivedAt}, ${emails.createdAt})`))
+      .limit(800);
+  } catch {
+    // Tables not provisioned yet (no firehose traffic): show empty, not an error.
+    return [];
+  }
+
+  let out = summarizeScanRows(rows);
+  if (accountId != null) out = out.filter((t) => t.accountId === accountId);
+  if (view === "attention") out = out.filter((t) => (t.flagged || t.needsReview) && !t.archived);
+  else if (view === "flagged") out = out.filter((t) => t.flagged && !t.archived);
   return out.slice(0, limit);
+}
+
+// Delta scan for the live inbox poll: find threads with any message newer than
+// `since`, then rebuild ONLY those threads from the same narrow SCAN_COLUMNS
+// (never bodies; same Neon egress discipline as listThreads). Two phases so a
+// thread's summary stays complete (counts, parties) even when only its newest
+// message is inside the window.
+export async function listThreadsSince(sinceISO: string): Promise<ThreadSummary[]> {
+  if (!dbConfigured()) return [];
+  const since = new Date(sinceISO);
+  if (Number.isNaN(since.getTime())) return [];
+  const db = getDb();
+  try {
+    const fresh = await db
+      .select({ id: emails.id, threadId: emails.threadId })
+      .from(emails)
+      .where(sql`coalesce(${emails.sentAt}, ${emails.receivedAt}, ${emails.createdAt}) > ${since}`)
+      .limit(200);
+    if (fresh.length === 0) return [];
+
+    const threadIds = Array.from(
+      new Set(fresh.map((r) => r.threadId).filter((x): x is string => x != null)),
+    );
+    const soloIds = fresh.filter((r) => r.threadId == null).map((r) => r.id);
+    const conds = [];
+    if (threadIds.length) conds.push(inArray(emails.threadId, threadIds));
+    if (soloIds.length) conds.push(inArray(emails.id, soloIds));
+
+    const rows: ScanRow[] = await db
+      .select(SCAN_COLUMNS)
+      .from(emails)
+      .where(or(...conds))
+      .orderBy(desc(sql`coalesce(${emails.sentAt}, ${emails.receivedAt}, ${emails.createdAt})`))
+      .limit(800);
+    return summarizeScanRows(rows);
+  } catch {
+    return [];
+  }
 }
 
 // Counts for the inbox tabs (attention / flagged / all), one cheap pass.
