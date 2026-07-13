@@ -30,6 +30,7 @@ export function fakeTriagedMeeting(
     account: "MicroVention Terumo",
     bucket: "Terumo",
     series: null,
+    attendees: [],
     title: "GTIN Alignment",
     topic: "Sample build, GTIN implementation",
     tldr: "Merit cannot build samples without a valid GTIN from Terumo.",

@@ -174,6 +174,20 @@ describe("triagedFromTemplate", () => {
     expect(t.actionItems[1].dueText).toBe("Next 2 weeks");
   });
 
+  it("carries the template's attendee list, falling back to captured attendees", () => {
+    expect(t.attendees).toEqual(["Jordan Francis", "Jennifer Pham", "Davis Ruiz"]);
+    const noLine = triagedFromTemplate(
+      parseTemplatedNote(TEMPLATED.replace(/👥 [^\n]*/, "👥 ")),
+      {
+        fallbackTitle: null,
+        attendees: ["Jordan Francis", "Mike Spencer"],
+        knownAccounts: [],
+        date: "2026-07-08",
+      },
+    );
+    expect(noLine.attendees).toEqual(["Jordan Francis", "Mike Spencer"]);
+  });
+
   it("falls back to Internal bucket without an account", () => {
     const internal = triagedFromTemplate(
       parseTemplatedNote(TEMPLATED.replace("🔗 Stryker", "🔗 ").replace("🏢 Merit / Stryker", "🏢 ")),

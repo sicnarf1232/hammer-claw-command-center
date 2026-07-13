@@ -241,6 +241,19 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
         ai.ownerClass = classifyOwner(ai, roster);
       }
 
+      // Triage may recover attendees named only in the summary text (Granola's
+      // structured list is often just who it identified on the call), so
+      // prefer its fuller list. Roster matching wants plain names, without
+      // the "(Stryker, PMO)" style affiliations the display list keeps.
+      const displayAttendees = triaged.attendees.length
+        ? triaged.attendees
+        : attendees;
+      const plainAttendees = dedupe(
+        displayAttendees
+          .map((a) => a.replace(/\([^)]*\)/g, "").trim())
+          .filter(Boolean),
+      );
+
       // Recompute the basename from the cleaned title triage produced.
       const finalBasename = meetingBasename(date, triaged.title);
       if (existingBasenames.has(finalBasename.toLowerCase())) {
@@ -250,7 +263,7 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
 
       // Series membership: a clear match links the note to the series and
       // stages a second, separately-approvable proposal for the rolling doc.
-      const matched = findSeries(series, triaged, attendees);
+      const matched = findSeries(series, triaged, plainAttendees);
       if (matched) triaged.series = matched.name;
 
       const folder = meetingFolder(
@@ -263,7 +276,7 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
         triaged,
         date,
         meetingTime: meetingTimeLabel(note),
-        attendees,
+        attendees: displayAttendees,
         granolaId: note.id,
         webUrl: note.web_url,
         createdISO: todayISO(),
@@ -276,7 +289,7 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
         const acct = accounts.find((a) => a.name === triaged.account);
         if (acct) {
           const names = resolveAttendees(
-            attendees,
+            plainAttendees,
             acct.contacts.map((c) => c.name),
             roster,
           )
@@ -301,7 +314,7 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
         workstream: triaged.workstream,
         bucket: triaged.bucket,
         account: triaged.account,
-        attendees,
+        attendees: displayAttendees,
         tldr: triaged.tldr,
         contactsToAdd,
         seriesName: matched?.name ?? null,
@@ -442,15 +455,20 @@ function meetingTimeLabel(note: GranolaNote): string | null {
 }
 
 function attendeeNames(note: GranolaNote): string[] {
-  const fromAttendees = (note.attendees ?? [])
+  // Granola's captured list is often just who it identified on the call, so
+  // calendar invitees fill in the rest rather than only serving as a fallback.
+  const named = (note.attendees ?? [])
     .map((a) => a.name?.trim() || localPart(a.email))
     .filter(Boolean);
-  if (fromAttendees.length) return dedupe(fromAttendees);
-  // Fall back to calendar invitees when attendees are not captured.
-  const invitees = (note.calendar_event?.invitees ?? []).map((i) =>
-    localPart(i.email),
+  const knownEmails = new Set(
+    (note.attendees ?? []).map((a) => a.email?.toLowerCase()).filter(Boolean),
   );
-  return dedupe(invitees.filter(Boolean));
+  const namedLower = new Set(named.map((n) => n.toLowerCase()));
+  const invitees = (note.calendar_event?.invitees ?? [])
+    .filter((i) => i.email && !knownEmails.has(i.email.toLowerCase()))
+    .map((i) => localPart(i.email))
+    .filter((n) => n && !namedLower.has(n.toLowerCase()));
+  return dedupe([...named, ...invitees]);
 }
 
 function describeAttendee(name: string, roster: Roster): string {

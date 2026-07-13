@@ -196,6 +196,7 @@ export function triagedFromTemplate(
     account,
     bucket: account ?? "Internal",
     series: null,
+    attendees: parsed.attendees.length ? parsed.attendees : ctx.attendees,
     title:
       parsed.title?.replace(/\s*--.*$/, "").trim() ||
       ctx.fallbackTitle ||

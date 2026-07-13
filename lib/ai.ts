@@ -308,6 +308,7 @@ export interface TriagedMeeting {
   account: string | null; // customer/account display name, e.g. "MicroVention Terumo"
   bucket: string; // Meetings-Index bucket, e.g. "Terumo" or "Internal"
   series: string | null; // recurring series name if evident, else null
+  attendees: string[]; // full attendee list, captured plus any named in the summary
   title: string; // clean meeting title (no date, no customer prefix)
   topic: string | null; // one-line topic for the meta line
   tldr: string; // 2-4 sentence summary
@@ -345,6 +346,7 @@ export async function triageMeeting(
     "   - account is the customer/company display name (e.g. 'MicroVention Terumo'). Prefer an exact match from the known-accounts list when the meeting is with that customer. Use null for internal/1:1/non-customer meetings.",
     "   - bucket is a short label for the meetings index: the customer short name (e.g. 'Terumo', 'Stryker') for customer meetings, or 'Internal' for internal ones.",
     "   - series: the recurring-series name if the title/summary clearly indicates a recurring meeting, else null.",
+    "   - attendees: the COMPLETE attendee list. Merge the captured attendee list you are given with every attendee named in the summary (for example an 'Attendees:' line). Keep each entry as the person's name plus a short parenthetical affiliation or role when the input states one, e.g. 'Pat McCormick (Stryker, Sr. Director of R&D)'. Never invent people; include only names present in the input.",
     "2) STRUCTURE it into the canonical note format:",
     "   - topic: a short one-line topic for the meeting (e.g. 'Regulatory, Quality Plan addendum'), or null.",
     "   - tldr: 2-4 sentences on what was decided, what moved, what is next.",
@@ -355,7 +357,7 @@ export async function triageMeeting(
     "   - fullNotes: the detailed notes grouped into 1-5 subsections, each {subsection, text}. text may use simple bullet lines. This is where the substance goes.",
     "House style, follow exactly: never use em dashes (use commas, colons, or periods). Do not invent facts, names, dates, prices, or commitments. If something is unknown, leave it out rather than guessing.",
     "Output ONLY a single JSON object, no markdown fence, no commentary. Schema:",
-    '{"workstream":"merit","account":null,"bucket":"Internal","series":null,"title":"...","topic":null,"tldr":"...","actionItems":[{"owner":"Jordan","text":"...","isJordans":true,"priority":"high","due":"2026-06-20","dueText":""}],"decisions":["..."],"numbers":["..."],"watchouts":["..."],"fullNotes":[{"subsection":"...","text":"..."}]}',
+    '{"workstream":"merit","account":null,"bucket":"Internal","series":null,"attendees":["Jordan Francis (Merit OEM)"],"title":"...","topic":null,"tldr":"...","actionItems":[{"owner":"Jordan","text":"...","isJordans":true,"priority":"high","due":"2026-06-20","dueText":""}],"decisions":["..."],"numbers":["..."],"watchouts":["..."],"fullNotes":[{"subsection":"...","text":"..."}]}',
   ].join("\n");
 
   const parts = [
@@ -475,11 +477,18 @@ function normalizeTriage(
         .filter((x): x is TriagedActionItem => x !== null)
     : [];
 
+  // Fallback strips the roster decoration ("Name [customer:Acct]") the input
+  // attendees carry, so the note never renders classification brackets.
+  const attendees = lineList(raw.attendees);
+
   return {
     workstream: ws,
     account: strOrNull(raw.account),
     bucket: strOrNull(raw.bucket) ?? (ws === "merit" ? "Merit" : "Internal"),
     series: strOrNull(raw.series),
+    attendees: attendees.length
+      ? attendees
+      : input.attendees.map((a) => a.replace(/\s*\[[^\]]*\]\s*$/, "").trim()).filter(Boolean),
     title: noEmDash(strOrNull(raw.title) ?? input.title ?? "Untitled meeting"),
     topic: strOrNull(raw.topic) ? noEmDash(strOrNull(raw.topic)!) : null,
     tldr: noEmDash(str(raw.tldr).trim()),

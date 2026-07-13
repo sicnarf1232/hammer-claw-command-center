@@ -17,6 +17,7 @@ const baseTriage: TriagedMeeting = {
   account: "MicroVention Terumo",
   bucket: "Terumo",
   series: "Terumo / Merit PCN Recurring",
+  attendees: [],
   title: "GTIN Alignment",
   topic: "Sample build, GTIN implementation",
   tldr: "Merit cannot build samples without a valid GTIN from Terumo.",
