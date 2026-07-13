@@ -7,6 +7,7 @@ import {
   upsertMeetingsIndex,
   rebuildMeetingsIndex,
   indexRowFromPath,
+  renderManualMeetingNote,
 } from "./meetingFormat";
 import type { TriagedMeeting } from "./ai";
 
@@ -272,5 +273,43 @@ describe("upsertMeetingsIndex", () => {
       .split("\n")
       .filter((l) => l.includes("2026-06-10 - Old Meeting")).length;
     expect(count).toBe(1);
+  });
+});
+
+describe("renderManualMeetingNote", () => {
+  it("renders frontmatter, TL;DR from the first body line, and Full Notes", () => {
+    const md = renderManualMeetingNote({
+      title: "QBR prep",
+      date: "2026-07-13",
+      createdISO: "2026-07-13",
+      account: "MicroVention Terumo",
+      attendees: ["Jordan Francis", "Zoya"],
+      body: "Walked the GTIN gap list.\nAgreed to split sample builds.",
+    });
+    expect(md).toContain("workstream: merit");
+    expect(md).toContain("type: meeting");
+    expect(md).toContain("status: active");
+    expect(md).toContain("created: 2026-07-13");
+    expect(md).toContain("date: 2026-07-13");
+    expect(md).toContain('customer: "[[MicroVention Terumo]]"');
+    expect(md).toContain("attendees: [Jordan Francis, Zoya]");
+    expect(md).toContain("# QBR prep -- MicroVention Terumo");
+    expect(md).toContain("## TL;DR\n\nWalked the GTIN gap list.");
+    expect(md).toContain(
+      "## Full Notes\n\nWalked the GTIN gap list.\nAgreed to split sample builds.",
+    );
+  });
+
+  it("omits customer/attendees and falls back to (manual note) when empty", () => {
+    const md = renderManualMeetingNote({
+      title: "Ops huddle",
+      date: "2026-07-13",
+      createdISO: "2026-07-13",
+    });
+    expect(md).not.toContain("customer:");
+    expect(md).not.toContain("attendees:");
+    expect(md).toContain("# Ops huddle\n");
+    expect(md).toContain("## TL;DR\n\n(manual note)");
+    expect(md).toContain("## Full Notes\n\n(manual note, no body)");
   });
 });

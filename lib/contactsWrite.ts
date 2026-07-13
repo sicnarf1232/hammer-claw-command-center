@@ -7,6 +7,7 @@
 
 export interface NewContact {
   name: string;
+  title?: string;
   email?: string;
 }
 
@@ -39,7 +40,8 @@ function bulletName(line: string): string | null {
 
 function bulletFor(c: NewContact): string {
   const name = c.name.trim();
-  return c.email ? `- **${name}** — ${c.email.trim()}` : `- **${name}**`;
+  const detail = [c.title?.trim(), c.email?.trim()].filter(Boolean).join(" — ");
+  return detail ? `- **${name}** — ${detail}` : `- **${name}**`;
 }
 
 export function addContactsToNote(

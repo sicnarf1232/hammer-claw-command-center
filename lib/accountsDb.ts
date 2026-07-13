@@ -226,6 +226,7 @@ export async function dbAddAccountContacts(
       fullName: name,
       classification: "customer",
       accountId: row.id,
+      title: c.title?.trim() || null,
       email: c.email?.trim() || null,
       sourcePaths: [path],
       ...APP_EDIT,

@@ -172,6 +172,50 @@ function bullets(items: string[]): string {
   return items.map((d) => `- ${d}`).join("\n");
 }
 
+export interface ManualNoteInput {
+  title: string;
+  date: string; // YYYY-MM-DD
+  createdISO: string; // YYYY-MM-DD the note was filed (today)
+  account?: string | null;
+  attendees?: string[];
+  body?: string; // free-text notes, lands under Full Notes
+}
+
+// Render a manually filed meeting note (no Granola pull). Same frontmatter
+// contract as renderMeetingNote (workstream, type, status, created, date,
+// customer, attendees); TL;DR seeds from the first body line or "(manual
+// note)"; the body rides under Full Notes. Pure, so it is unit-tested.
+export function renderManualMeetingNote(input: ManualNoteInput): string {
+  const title = input.title.trim();
+  const account = input.account?.trim() || null;
+  const attendees = (input.attendees ?? []).map((a) => a.trim()).filter(Boolean);
+  const bodyText = (input.body ?? "").replace(/\r\n/g, "\n").trim();
+
+  const fm: string[] = ["---"];
+  fm.push("workstream: merit");
+  fm.push("type: meeting");
+  fm.push("status: active");
+  fm.push(`created: ${input.createdISO}`);
+  fm.push(`date: ${input.date}`);
+  if (account) fm.push(`customer: ${yamlString(`[[${account}]]`)}`);
+  if (attendees.length) fm.push(`attendees: ${yamlList(attendees)}`);
+  fm.push("---");
+
+  const titleSuffix = account ? ` -- ${account}` : "";
+  const meta: string[] = [];
+  if (account) meta.push(`**Customer:** [[${account}]]`);
+  meta.push(`**Date:** ${input.date}`);
+
+  const tldr =
+    bodyText.split("\n").map((l) => l.trim()).find(Boolean) ?? "(manual note)";
+
+  const out: string[] = ["", `# ${title}${titleSuffix}`, "", meta.join(" · ")];
+  out.push("", "## TL;DR", "", tldr);
+  out.push("", "## Full Notes", "", bodyText || "(manual note, no body)");
+  out.push("");
+  return [...fm, ...out].join("\n");
+}
+
 // Action items: one combined "- [ ] Owner: task" list. Jordan's ("me") items
 // carry an inline field row so they surface as real tasks (created = meeting
 // date; due is the concrete date or TBD to flag). Team/customer items are

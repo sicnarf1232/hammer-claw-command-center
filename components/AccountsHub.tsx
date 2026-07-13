@@ -61,6 +61,12 @@ export default function AccountsHub({
     <div className="flex flex-col items-start gap-5 lg:flex-row">
       {/* LIST */}
       <div className="card w-full flex-none p-3.5 lg:sticky lg:top-6 lg:w-[340px]">
+        <NewAccountForm
+          onCreated={(s) => {
+            setSlug(s);
+            setTab("overview");
+          }}
+        />
         <div className="relative mb-1.5">
           <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
@@ -430,13 +436,232 @@ function Overview({ a, today }: { a: AccountHub; today: string }) {
 }
 
 function Contacts({ a }: { a: AccountHub }) {
-  if (a.contacts.length === 0)
-    return <p className="text-sm text-muted">No contacts listed on this account note. Use Edit to add one.</p>;
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {a.contacts.map((c) => (
-        <ContactCard key={c.name} c={c} />
-      ))}
+    <div>
+      <AddContactForm path={a.path} />
+      {a.contacts.length === 0 ? (
+        <p className="text-sm text-muted">No contacts listed on this account yet.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {a.contacts.map((c) => (
+            <ContactCard key={c.name} c={c} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Manually add a contact to the selected account. Calls the same writer the
+// review queue and meeting executor use, so the row lands DB-first with
+// provenance and shows up everywhere the account's contacts render.
+function AddContactForm({ path }: { path: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/accounts/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path,
+          name: name.trim(),
+          title: title.trim() || undefined,
+          email: email.trim() || undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        added?: string[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error || `Add failed (${res.status}).`);
+      if (!data.added?.length) throw new Error("That contact is already on this account.");
+      setOpen(false);
+      setName("");
+      setTitle("");
+      setEmail("");
+      setBusy(false);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Add failed.");
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mb-3 flex justify-end">
+        <button onClick={() => setOpen(true)} className="btn btn-ghost px-3 py-1.5 text-xs">
+          + Add contact
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card mb-3 p-4" style={{ borderLeft: "3px solid var(--accent)" }}>
+      <h3 className="mb-3 text-sm font-bold text-fg">Add contact</h3>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="text-xs font-semibold text-muted">
+          Name
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Alice Smith"
+            className="input mt-1 w-full"
+            disabled={busy}
+          />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Title (optional)
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Supply Chain Manager"
+            className="input mt-1 w-full"
+            disabled={busy}
+          />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Email (optional)
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="alice@example.com"
+            className="input mt-1 w-full"
+            disabled={busy}
+          />
+        </label>
+      </div>
+      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          onClick={add}
+          disabled={busy || !name.trim()}
+          className="btn btn-primary px-3 py-1.5 text-xs"
+        >
+          {busy ? "Adding…" : "Add contact"}
+        </button>
+        <button onClick={() => setOpen(false)} disabled={busy} className="btn btn-ghost px-3 py-1.5 text-xs">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Manually add a customer account. Calls the same createAccount writer the
+// people review queue uses (DB-first post-cutover, origin "app"); the new
+// account is selected once the refresh lands.
+function NewAccountForm({ onCreated }: { onCreated: (slug: string) => void }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/accounts/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          accountNumber: accountNumber.trim() || undefined,
+          note: note.trim() || undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        slug?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.slug) throw new Error(data.error || `Create failed (${res.status}).`);
+      setOpen(false);
+      setName("");
+      setAccountNumber("");
+      setNote("");
+      setBusy(false);
+      onCreated(data.slug);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Create failed.");
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mb-2 flex justify-end">
+        <button onClick={() => setOpen(true)} className="btn btn-ghost px-3 py-1.5 text-xs">
+          + New account
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="mb-3 rounded-md border p-3"
+      style={{ borderColor: "var(--line-2)", borderLeft: "3px solid var(--accent)" }}
+    >
+      <h3 className="mb-2 text-sm font-bold text-fg">New account</h3>
+      <div className="grid gap-2">
+        <label className="text-xs font-semibold text-muted">
+          Name
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Acme Medical"
+            className="input mt-1 w-full"
+            disabled={busy}
+          />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Account number (optional)
+          <input
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            placeholder="10-12345"
+            className="input mt-1 w-full"
+            disabled={busy}
+          />
+        </label>
+        <label className="text-xs font-semibold text-muted">
+          Note (optional, lands in Overview)
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Met at trade show, wants VAC pricing"
+            className="input mt-1 w-full"
+            disabled={busy}
+          />
+        </label>
+      </div>
+      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+      <div className="mt-2.5 flex items-center gap-2">
+        <button
+          onClick={create}
+          disabled={busy || !name.trim()}
+          className="btn btn-primary px-3 py-1.5 text-xs"
+        >
+          {busy ? "Creating…" : "Create account"}
+        </button>
+        <button onClick={() => setOpen(false)} disabled={busy} className="btn btn-ghost px-3 py-1.5 text-xs">
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

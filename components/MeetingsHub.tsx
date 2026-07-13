@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { customerHue, initials, isInternalBucket } from "@/lib/customerHues";
 import SuggestedSeries, { type HubCandidate } from "@/components/SuggestedSeries";
 import NewSeriesForm from "@/components/NewSeriesForm";
+import NewMeetingForm from "@/components/NewMeetingForm";
 
 export interface HubRow {
   date: string; // YYYY-MM-DD
@@ -150,6 +151,9 @@ export default function MeetingsHub({
       {view === "all" && !query && (
         <HotAndStats rows={rows} series={series} customers={customers} today={today} />
       )}
+
+      {/* File a meeting note by hand (no Granola pull needed) */}
+      <NewMeetingForm accountNames={accountNames} />
 
       {/* Set up a series by hand, ahead of any meetings, or seed one from
           selected past meetings (Opus derives the fields) */}

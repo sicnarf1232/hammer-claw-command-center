@@ -251,6 +251,23 @@ export async function dbSaveMeetingContent(
   return { commitSha: "", path };
 }
 
+// Manual meeting note creation: insert-only. Returns created: false when a
+// row already claims the source path (the caller turns that into a 409), so
+// a hand-filed note can never clobber an existing meeting.
+export async function dbCreateMeeting(
+  path: string,
+  content: string,
+): Promise<{ path: string; created: boolean }> {
+  const [existing] = await getDb()
+    .select({ id: meetingsT.id })
+    .from(meetingsT)
+    .where(eq(meetingsT.sourcePath, path))
+    .limit(1);
+  if (existing) return { path, created: false };
+  await dbSaveMeetingContent(path, content, "app");
+  return { path, created: true };
+}
+
 // Reclassify: content transforms already applied by the caller; here we save
 // content + update account linkage. source_path stays (identity, not location).
 export async function dbReclassifyMeeting(
