@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { customerHue, initials, isInternalBucket } from "@/lib/customerHues";
 import SuggestedSeries, { type HubCandidate } from "@/components/SuggestedSeries";
 import NewSeriesForm from "@/components/NewSeriesForm";
@@ -177,6 +178,82 @@ export default function MeetingsHub({
   );
 }
 
+// A rolling-series tile with a two-step delete (the notes stay; only the
+// rolling doc and its linkage are removed).
+function SeriesTile({ s }: { s: HubSeries }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function remove() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/series/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: s.path }),
+      });
+      if (res.ok) router.refresh();
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <div className="group relative w-[238px] shrink-0">
+      <Link
+        href={`/meetings?series=${encodeURIComponent(s.path)}`}
+        className="card lift block p-4"
+      >
+        <Avatar label={initials(s.name)} hue="var(--accent)" soft="var(--accent-soft)" />
+        <div className="mt-3 truncate text-sm font-semibold text-fg">{s.name}</div>
+        <div className="mt-0.5 text-xs text-muted">
+          {s.sessions} session{s.sessions === 1 ? "" : "s"}
+          {s.latest ? ` · latest ${monthDay(s.latest)}` : ""}
+        </div>
+      </Link>
+      {confirming ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-surface/95 p-3 text-center">
+          <div className="text-xs font-semibold text-fg">Delete this series?</div>
+          <div className="text-2xs text-muted">
+            The meeting notes stay; only the rolling doc goes.
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={remove}
+              disabled={busy}
+              className="rounded-lg px-2.5 py-1 text-2xs font-bold text-white disabled:opacity-60"
+              style={{ background: "var(--due)" }}
+            >
+              {busy ? "Deleting…" : "Delete"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              disabled={busy}
+              className="rounded-lg border border-border px-2.5 py-1 text-2xs text-fg/70"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          title="Delete series"
+          aria-label="Delete series"
+          className="absolute right-2 top-2 hidden h-6 w-6 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:text-fg group-hover:flex"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
 function HotAndStats({
   rows,
   series,
@@ -312,18 +389,7 @@ function TileRail({
     return (
       <div className="mb-6 flex gap-3 overflow-x-auto pb-1">
         {series.map((s) => (
-          <Link
-            key={s.path}
-            href={`/meetings?series=${encodeURIComponent(s.path)}`}
-            className="card lift w-[238px] shrink-0 p-4"
-          >
-            <Avatar label={initials(s.name)} hue="var(--accent)" soft="var(--accent-soft)" />
-            <div className="mt-3 truncate text-sm font-semibold text-fg">{s.name}</div>
-            <div className="mt-0.5 text-xs text-muted">
-              {s.sessions} session{s.sessions === 1 ? "" : "s"}
-              {s.latest ? ` · latest ${monthDay(s.latest)}` : ""}
-            </div>
-          </Link>
+          <SeriesTile key={s.path} s={s} />
         ))}
         {series.length === 0 && (
           <div className="text-sm text-muted">No rolling series yet.</div>

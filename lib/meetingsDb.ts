@@ -55,6 +55,31 @@ export async function meetingNoteByPathFromDb(
   return parseMeetingNote(row.bodyMarkdown, path);
 }
 
+// Delete a series row and unlink its meetings (their notes stay; only the
+// rolling doc and the linkage go). DB-only; the vault copy, if any, is
+// untouched and disappears from exports naturally.
+export async function dbDeleteSeries(
+  path: string,
+): Promise<{ deleted: boolean; unlinked: number }> {
+  if (!(await cutoverActive())) {
+    throw new Error("Series deletion requires the app database.");
+  }
+  const db = getDb();
+  const [row] = await db
+    .select({ id: seriesT.id })
+    .from(seriesT)
+    .where(eq(seriesT.sourcePath, path))
+    .limit(1);
+  if (!row) return { deleted: false, unlinked: 0 };
+  const unlinked = await db
+    .update(meetingsT)
+    .set({ seriesId: null, updatedAt: new Date() })
+    .where(eq(meetingsT.seriesId, row.id))
+    .returning({ id: meetingsT.id });
+  await db.delete(seriesT).where(eq(seriesT.id, row.id));
+  return { deleted: true, unlinked: unlinked.length };
+}
+
 // Date + title for a set of meeting paths, for folding selected past
 // meetings into a manually created series.
 export async function meetingHeadersByPaths(
