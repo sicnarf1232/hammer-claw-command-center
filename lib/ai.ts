@@ -376,20 +376,38 @@ export async function triageMeeting(
     "Return the JSON object now.",
   ];
 
-  const res = await client().messages.create({
-    model: opts?.modelChoice === "smart" ? model() : fastModel(),
-    max_tokens: 2500,
-    system,
-    messages: [{ role: "user", content: parts.join("\n") }],
-  });
+  // One retry with a sterner reminder: a dense meeting can push the reply
+  // past the token cap and truncate the JSON mid-array, which must not kill
+  // the whole pull for that meeting.
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await client().messages.create({
+      model: opts?.modelChoice === "smart" ? model() : fastModel(),
+      max_tokens: 4000,
+      system:
+        attempt === 0
+          ? system
+          : `${system}\nYour previous reply was cut off or was not a valid JSON object. Reply with ONLY the complete JSON object. Keep fullNotes tight enough that the whole object fits.`,
+      messages: [{ role: "user", content: parts.join("\n") }],
+    });
 
-  const text = res.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
+    const text = res.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
 
-  return { ...normalizeTriage(parseJsonObject(text), input), modelUsed: res.model };
+    try {
+      return { ...normalizeTriage(parseJsonObject(text), input), modelUsed: res.model };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(
+    `Triage for "${input.title ?? "(untitled)"}" did not return valid JSON after a retry.${
+      lastErr instanceof Error ? ` (${lastErr.message})` : ""
+    }`,
+  );
 }
 
 // Pull the first balanced JSON object out of a model response (tolerates a
