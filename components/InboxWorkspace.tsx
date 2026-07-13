@@ -5,6 +5,8 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useRouter, useSearchParams } from "next/navigation";
 import { customerHue, initials } from "@/lib/customerHues";
 import ThreadDetail from "@/components/ThreadDetail";
+import HoverPopout from "@/components/HoverPopout";
+import { ChevronLeftIcon } from "@/components/icons";
 
 export interface InboxThread {
   key: string;
@@ -322,50 +324,81 @@ function FolderSidebar({
 }) {
   const top = folders.filter((f) => f.group === "top");
   const pathways = folders.filter((f) => f.group === "pathway");
+
+  // Arrow-pinned open: the chevron reopens the labeled rail while a thread
+  // stays open. Auto-collapse-on-open is unchanged; closing the thread (or
+  // the same arrow) drops the pin so the next open collapses again.
+  const [pinned, setPinned] = useState(false);
+  useEffect(() => {
+    if (!collapsed) setPinned(false);
+  }, [collapsed]);
+  const iconRail = collapsed && !pinned;
+
   return (
     <aside
-      className="hidden shrink-0 overflow-hidden md:block"
-      style={{ width: collapsed ? 28 : 186, transition: "width .22s ease" }}
+      className={`relative hidden shrink-0 md:block ${iconRail ? "overflow-visible" : "overflow-hidden"}`}
+      style={{ width: iconRail ? 28 : 186, transition: "width .22s ease" }}
     >
-      {collapsed ? (
+      {iconRail ? (
         <nav className="flex flex-col items-center gap-1 pt-1">
+          <button
+            type="button"
+            onClick={() => setPinned(true)}
+            aria-label="Expand folders"
+            title="Expand folders"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface2 hover:text-fg"
+          >
+            <ChevronLeftIcon className="h-4 w-4 rotate-180" />
+          </button>
+          <span className="my-1.5 h-px w-4 bg-border" />
           {top.map((f) => (
-            <Link
-              key={f.key}
-              href={href(f.key)}
-              title={`${f.label}${f.count ? ` (${f.count})` : ""}`}
-              className={`relative flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
-                f.key === folder ? "bg-accentSoft text-accent" : "text-muted hover:bg-surface2 hover:text-fg"
-              }`}
-            >
-              {f.key === folder ? (
-                <span className="absolute inset-y-1 left-0 w-[2.5px] rounded-full" style={{ background: "var(--accent)" }} />
-              ) : null}
-              <FolderGlyph folderKey={f.key} />
-            </Link>
+            <HoverPopout key={f.key} label={f.label} detail={f.count > 0 ? f.count : undefined} href={href(f.key)}>
+              <Link
+                href={href(f.key)}
+                className={`relative flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+                  f.key === folder ? "bg-accentSoft text-accent" : "text-muted hover:bg-surface2 hover:text-fg"
+                }`}
+              >
+                {f.key === folder ? (
+                  <span className="absolute inset-y-1 left-0 w-[2.5px] rounded-full" style={{ background: "var(--accent)" }} />
+                ) : null}
+                <FolderGlyph folderKey={f.key} />
+              </Link>
+            </HoverPopout>
           ))}
           <span className="my-1.5 h-px w-4 bg-border" />
           {pathways.map((f) => (
-            <Link
-              key={f.key}
-              href={href(f.key)}
-              title={`${f.label}${f.count ? ` (${f.count})` : ""}`}
-              className={`relative flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-surface2 ${
-                f.key === folder ? "bg-accentSoft" : ""
-              }`}
-            >
-              {f.key === folder ? (
-                <span className="absolute inset-y-1 left-0 w-[2.5px] rounded-full" style={{ background: "var(--accent)" }} />
-              ) : null}
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ background: PATHWAY[f.key]?.color ?? "var(--ink-3)" }}
-              />
-            </Link>
+            <HoverPopout key={f.key} label={f.label} detail={f.count > 0 ? f.count : undefined} href={href(f.key)}>
+              <Link
+                href={href(f.key)}
+                className={`relative flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-surface2 ${
+                  f.key === folder ? "bg-accentSoft" : ""
+                }`}
+              >
+                {f.key === folder ? (
+                  <span className="absolute inset-y-1 left-0 w-[2.5px] rounded-full" style={{ background: "var(--accent)" }} />
+                ) : null}
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: PATHWAY[f.key]?.color ?? "var(--ink-3)" }}
+                />
+              </Link>
+            </HoverPopout>
           ))}
         </nav>
       ) : (
         <>
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={() => setPinned(false)}
+              aria-label="Collapse folders"
+              title="Collapse folders"
+              className="mb-1 flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface2 hover:text-fg"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </button>
+          ) : null}
           <nav className="space-y-0.5">
             {top.map((f) => (
               <FolderLink key={f.key} f={f} active={f.key === folder} />

@@ -22,6 +22,7 @@ import {
 } from "./icons";
 import ThemeToggle from "./ThemeToggle";
 import NotificationBell from "./NotificationBell";
+import HoverPopout from "./HoverPopout";
 
 type Item = {
   href: string;
@@ -133,12 +134,11 @@ function NavItem({
   onNavigate?: () => void;
   badge?: number;
 }) {
-  return (
+  const link = (
     <Link
       href={item.href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      title={collapsed ? item.label : undefined}
       className={`group relative flex items-center rounded-[11px] text-sm font-semibold transition-colors ${
         collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"
       }`}
@@ -171,6 +171,14 @@ function NavItem({
         </>
       ) : null}
     </Link>
+  );
+  if (!collapsed) return link;
+  // Collapsed rail: a labeled flyout per icon so Jordan never guesses from
+  // glyphs alone. The flyout is itself a link to the same destination.
+  return (
+    <HoverPopout label={item.label} detail={badge || undefined} href={item.href}>
+      {link}
+    </HoverPopout>
   );
 }
 
