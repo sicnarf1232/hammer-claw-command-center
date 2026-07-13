@@ -90,6 +90,19 @@ export async function recentNotifications(limit = 20) {
     .limit(limit);
 }
 
+// Newest notification of one kind (e.g. the latest brief for the dashboard
+// card). Null when none exists or the DB is not configured.
+export async function latestNotificationOfKind(kind: string) {
+  if (!dbConfigured()) return null;
+  const rows = await getDb()
+    .select()
+    .from(notifications)
+    .where(eq(notifications.kind, kind))
+    .orderBy(desc(notifications.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function unsentCount(): Promise<number> {
   if (!dbConfigured()) return 0;
   const db = getDb();

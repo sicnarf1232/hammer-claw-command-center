@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { dbConfigured } from "@/lib/db";
 import { recentNotifications } from "@/lib/notify";
 import { notifyConfigured } from "@/lib/notify";
+import { notificationHref } from "@/lib/notifyLink";
 import SetupNotice from "@/components/SetupNotice";
 import { ActivityIcon } from "@/components/icons";
 
@@ -62,9 +64,12 @@ export default async function NotificationsPage() {
         <div className="grid max-w-2xl gap-2">
           {rows.map((n) => {
             const status = kindStatus(n.kind);
-            return (
-              <div key={n.id} className="card p-3">
-                <div className="flex items-start gap-3">
+            // Click through to where the item lives (thread, tasks, brief
+            // card); entries that live right here stay plain.
+            const target = notificationHref(n.kind, n.meta);
+            const href = target && target !== "/notifications" ? target : null;
+            const inner = (
+              <div className="flex items-start gap-3">
                   <span
                     className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotClass[status]}`}
                     aria-hidden="true"
@@ -91,6 +96,14 @@ export default async function NotificationsPage() {
                     </div>
                   </div>
                 </div>
+            );
+            return href ? (
+              <Link key={n.id} href={href} className="card block p-3 transition-colors hover:bg-surface2">
+                {inner}
+              </Link>
+            ) : (
+              <div key={n.id} className="card p-3">
+                {inner}
               </div>
             );
           })}

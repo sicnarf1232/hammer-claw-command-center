@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/dashboard";
+import { notificationHref } from "@/lib/notifyLink";
 import { customerHue, initials } from "@/lib/customerHues";
 import TaskRow from "@/components/TaskRow";
 import AskBar from "@/components/AskBar";
-import { InboxIcon, MeetingsIcon, ActivityIcon, AlertIcon } from "@/components/icons";
+import { InboxIcon, MeetingsIcon, ActivityIcon, AlertIcon, ClockIcon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -192,16 +193,42 @@ export default async function DashboardPage() {
               <p className="px-1 text-xs text-muted">Nothing recent.</p>
             ) : (
               <div className="space-y-1">
+                {/* Each entry clicks through to where the item really lives:
+                    email to its thread, due-today to Tasks, briefs to the
+                    card below, everything else to the activity log. */}
                 {data.activity.map((n) => (
-                  <div key={n.id} className="flex items-start gap-2 px-1 py-1.5">
+                  <Link
+                    key={n.id}
+                    href={notificationHref(n.kind, n.meta) ?? "/notifications"}
+                    className="flex items-start gap-2 rounded-lg px-1 py-1.5 transition-colors hover:bg-surface2"
+                  >
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                     <div className="min-w-0">
                       <div className="truncate text-xs font-medium text-fg">{n.title}</div>
                       {n.body ? <div className="truncate text-2xs text-muted">{n.body}</div> : null}
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
+            )}
+          </div>
+
+          <div id="brief">
+            <RailHeader title="Latest brief" icon={<ClockIcon className="h-3.5 w-3.5" />} />
+            {data.brief ? (
+              <details className="rounded-xl border border-border bg-surface px-3 py-2">
+                <summary className="cursor-pointer list-none text-sm font-semibold text-fg">
+                  {data.brief.title}
+                  <span className="ml-1.5 text-2xs font-normal text-muted">expand</span>
+                </summary>
+                <div className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap border-t border-border pt-2 text-xs leading-relaxed text-fg/80">
+                  {data.brief.body || "This brief has no body."}
+                </div>
+              </details>
+            ) : (
+              <p className="px-1 text-xs text-muted">
+                No brief yet. The morning cron writes one here each day.
+              </p>
             )}
           </div>
         </aside>

@@ -7,7 +7,7 @@ import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
 import { listThreads, accountNames } from "@/lib/firehose/read";
 import { getTriageMap } from "@/lib/firehose/triage";
 import { linkedTaskContextForThreads } from "@/lib/inboxContext";
-import { recentNotifications } from "@/lib/notify";
+import { recentNotifications, latestNotificationOfKind } from "@/lib/notify";
 
 export interface InboxSnapshotThread {
   key: string;
@@ -41,6 +41,9 @@ export interface DashboardData {
   accounts: AccountWithStats[];
   meetings: UpcomingMeeting[];
   activity: Awaited<ReturnType<typeof recentNotifications>>;
+  // Latest generated brief (morning/eod/weekly all log kind "brief"); the
+  // dashboard is where briefs live post-cutover.
+  brief: Awaited<ReturnType<typeof latestNotificationOfKind>>;
 }
 
 // Aggregate everything the dashboard renders in one pass. Every section is
@@ -64,16 +67,17 @@ export async function getDashboardData(): Promise<DashboardData> {
   const commits = views.filter((t) => !t.done && (!t.due || t.due >= today));
   const overdue = views.filter((t) => !t.done && !!t.due && t.due < today);
 
-  const [inbox, accounts, meetings, activity] = await Promise.all([
+  const [inbox, accounts, meetings, activity, brief] = await Promise.all([
     inboxSnapshot(),
     getAccountsWithStats()
       .then((r) => r.accounts.filter((a) => a.overdueCount > 0).slice(0, 6))
       .catch(() => [] as AccountWithStats[]),
     upcomingMeetings(today),
     recentNotifications(6).catch(() => [] as Awaited<ReturnType<typeof recentNotifications>>),
+    latestNotificationOfKind("brief").catch(() => null),
   ]);
 
-  return { today, commits, overdue, inbox, accounts, meetings, activity };
+  return { today, commits, overdue, inbox, accounts, meetings, activity, brief };
 }
 
 async function inboxSnapshot(): Promise<DashboardData["inbox"]> {
