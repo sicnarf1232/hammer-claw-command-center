@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeftIcon, SparkIcon } from "./icons";
+import { ChevronLeftIcon, PaperclipIcon, SparkIcon } from "./icons";
+import {
+  ATTACHMENT_ACCEPT,
+  checkAttachmentCount,
+  formatBytes,
+  validateAttachment,
+  type AttachmentKind,
+  type AttachmentRef,
+} from "@/lib/brainAttachments";
 
 // The inbox brain: ONE persistent chat that lives across the whole Inbox tab.
 // State survives navigation via the inbox layout AND page reloads via
@@ -15,6 +23,20 @@ interface ChatMsg {
   content: string;
   steps?: string[]; // tool calls the agent made (search/read/brain)
   model?: string; // which model actually answered (from the API response)
+  // Uploaded files on a user turn: metadata only (name/kind/url), never bytes.
+  attachments?: AttachmentRef[];
+}
+
+// A file queued in the composer: uploads immediately, `ref` lands when the
+// server confirms. Bytes never touch localStorage; `preview` is a local
+// object URL for image thumbnails only.
+interface PendingAtt {
+  id: string;
+  name: string;
+  size: number;
+  kind: AttachmentKind;
+  preview?: string;
+  ref?: AttachmentRef;
 }
 
 interface BrainState {
@@ -74,8 +96,11 @@ export default function InboxBrain({
   const [modelChoice, setModelChoice] = useState<"smart" | "fast">("smart");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAtt[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   // Hydrate, follow the open thread, and stay in sync with the nav toggle.
   useEffect(() => {
@@ -175,9 +200,83 @@ export default function InboxBrain({
   const scopedKey = scopeCleared ? null : activeKey;
   const scopeLabel = scopeAccount ?? (activeKey ? "open thread" : null);
 
+  // ---- Attachments: paperclip, drag-drop, and paste all land here. Each file
+  // validates locally (type, 8 MB cap, 4 per message) then uploads right away;
+  // send() only ships the metadata refs the server returned.
+  function addFiles(list: FileList | File[] | null) {
+    if (!list) return;
+    const files = Array.from(list);
+    if (!files.length) return;
+    const countErr = checkAttachmentCount(pending.length, files.length);
+    if (countErr) {
+      setErr(countErr);
+      return;
+    }
+    setErr(null);
+    for (const file of files) {
+      const check = validateAttachment({ name: file.name, type: file.type, size: file.size });
+      if (!check.ok || !check.kind) {
+        setErr(check.error ?? "Unsupported file.");
+        continue;
+      }
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const preview =
+        check.kind === "image" ? URL.createObjectURL(file) : undefined;
+      setPending((p) => [
+        ...p,
+        { id, name: file.name, size: file.size, kind: check.kind!, preview },
+      ]);
+      void uploadOne(id, file);
+    }
+  }
+
+  async function uploadOne(id: string, file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/brain/upload", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.attachment) {
+        removePending(id);
+        setErr(typeof data.error === "string" ? data.error : "Upload failed.");
+        return;
+      }
+      setPending((p) =>
+        p.map((a) => (a.id === id ? { ...a, ref: data.attachment as AttachmentRef } : a)),
+      );
+    } catch {
+      removePending(id);
+      setErr("Upload failed. Check the connection and try again.");
+    }
+  }
+
+  function removePending(id: string) {
+    setPending((p) => {
+      const gone = p.find((a) => a.id === id);
+      if (gone?.preview) URL.revokeObjectURL(gone.preview);
+      return p.filter((a) => a.id !== id);
+    });
+  }
+
+  function clearPending() {
+    setPending((p) => {
+      for (const a of p) if (a.preview) URL.revokeObjectURL(a.preview);
+      return [];
+    });
+  }
+
+  const uploadsInFlight = pending.some((a) => !a.ref);
+
   async function send(text?: string) {
     const content = (text ?? input).trim();
-    if (!content || busy) return;
+    const atts = pending
+      .map((a) => a.ref)
+      .filter((r): r is AttachmentRef => Boolean(r));
+    if ((!content && !atts.length) || busy) return;
+    if (uploadsInFlight) {
+      setErr("A file is still uploading. One moment.");
+      return;
+    }
 
     // /devfeedback <note>: log an app improvement note straight to the dev
     // feedback bucket, no AI involved. Drained during build sessions.
@@ -225,9 +324,13 @@ export default function InboxBrain({
       return;
     }
 
-    const history: ChatMsg[] = [...state.history, { role: "user", content }];
+    const history: ChatMsg[] = [
+      ...state.history,
+      { role: "user", content, attachments: atts.length ? atts : undefined },
+    ];
     update({ ...state, history });
     setInput("");
+    clearPending();
     setBusy(true);
     setErr(null);
     try {
@@ -424,6 +527,20 @@ export default function InboxBrain({
                 style={{ borderRadius: "12px 12px 2px 12px" }}
               >
                 {m.content}
+                {m.attachments?.length ? (
+                  <div className={`flex flex-wrap gap-1 ${m.content ? "mt-1.5" : ""}`}>
+                    {m.attachments.map((a, j) => (
+                      <span
+                        key={j}
+                        className="inline-flex max-w-full items-center gap-1 rounded-md border border-line2 bg-surface2 px-1.5 py-0.5 text-[10px] text-fg/70"
+                        title={a.name}
+                      >
+                        <PaperclipIcon className="h-2.5 w-2.5 shrink-0" />
+                        <span className="truncate">{a.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : (
@@ -483,7 +600,21 @@ export default function InboxBrain({
         {err ? <div className="text-xs text-danger">{err}</div> : null}
       </div>
 
-      <div className="shrink-0 border-t border-border p-2">
+      <div
+        className={`shrink-0 border-t p-2 ${dragOver ? "border-accent bg-accentSoft/40" : "border-border"}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          addFiles(e.dataTransfer?.files ?? null);
+        }}
+      >
         {scopedKey && scopeLabel ? (
           <div className="mb-1.5 flex items-center gap-1.5 px-1 text-2xs text-muted">
             Asking about: <span className="font-medium text-accent">{scopeLabel}</span>
@@ -494,6 +625,42 @@ export default function InboxBrain({
             >
               clear scope
             </button>
+          </div>
+        ) : null}
+        {pending.length > 0 ? (
+          <div className="mb-1.5 flex flex-wrap gap-1.5 px-1">
+            {pending.map((a) => (
+              <span
+                key={a.id}
+                className={`inline-flex max-w-[220px] items-center gap-1.5 rounded-lg border border-border bg-surface2 px-1.5 py-1 text-2xs text-fg/80 ${a.ref ? "" : "opacity-60"}`}
+                title={a.name}
+              >
+                {a.preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={a.preview}
+                    alt=""
+                    className="h-6 w-6 shrink-0 rounded object-cover"
+                  />
+                ) : (
+                  <PaperclipIcon className="h-3 w-3 shrink-0 text-muted" />
+                )}
+                <span className="min-w-0">
+                  <span className="block max-w-[140px] truncate font-medium">{a.name}</span>
+                  <span className="block text-[9.5px] text-muted">
+                    {a.ref ? formatBytes(a.size) : "uploading…"}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removePending(a.id)}
+                  className="ml-0.5 text-muted hover:text-fg"
+                  aria-label={`Remove ${a.name}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
           </div>
         ) : null}
         <div className="flex items-end gap-1.5">
@@ -507,14 +674,41 @@ export default function InboxBrain({
                 send();
               }
             }}
+            onPaste={(e) => {
+              const files = e.clipboardData?.files;
+              if (files && files.length) {
+                e.preventDefault();
+                addFiles(files);
+              }
+            }}
             rows={2}
-            placeholder="Ask the brain…"
+            placeholder={dragOver ? "Drop files to attach…" : "Ask the brain…"}
             className="input min-h-[3rem] flex-1 resize-none px-2.5 py-1.5 text-xs"
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ACCEPT}
+            className="hidden"
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
           />
           <button
             type="button"
+            onClick={() => fileRef.current?.click()}
+            title="Attach files (images, PDFs, text; max 4, 8 MB each)"
+            aria-label="Attach files"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted hover:border-accent/40 hover:text-accent"
+          >
+            <PaperclipIcon className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
             onClick={() => send()}
-            disabled={busy || !input.trim()}
+            disabled={busy || uploadsInFlight || (!input.trim() && pending.length === 0)}
             className="btn-primary text-xs disabled:opacity-60"
           >
             Ask

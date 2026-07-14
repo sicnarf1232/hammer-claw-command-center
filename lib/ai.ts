@@ -1045,7 +1045,12 @@ export async function threadChat(input: ThreadChatInput): Promise<{
 
 export interface InboxAgentInput {
   system: string;
-  history: Array<{ role: "user" | "assistant"; content: string }>;
+  // Content is usually plain text; the latest user turn may carry content
+  // blocks (image/document/text) when Jordan attached files in the chat.
+  history: Array<{
+    role: "user" | "assistant";
+    content: string | Anthropic.ContentBlockParam[];
+  }>;
   executeTool: (name: string, input: Record<string, unknown>) => Promise<string>;
   // Jordan's per-chat pick: "smart" = model() (default), "fast" = fastModel().
   // Only ever the two configured runtime models, never an arbitrary id.
