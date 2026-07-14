@@ -41,6 +41,7 @@ import {
   seriesToDoc,
   MeetingDoc,
   docTheme,
+  paperCssVars,
   type DocPerson,
   type DocAction,
 } from "@/lib/meetingTemplate";
@@ -272,6 +273,7 @@ async function MeetingDetail({ path }: { path: string }) {
           className="mt-5 rounded-2xl p-6 sm:p-8"
           style={{
             ...(brandToCssVars(brand) as React.CSSProperties),
+            ...(paperCssVars(theme) as React.CSSProperties),
             background: theme.paper,
             color: theme.fg,
             border: `1px solid ${theme.line}`,
@@ -437,6 +439,7 @@ async function SeriesDetail({ path }: { path: string }) {
           className="mt-5 rounded-2xl p-6 sm:p-8"
           style={{
             ...(brandToCssVars(brand) as React.CSSProperties),
+            ...(paperCssVars(theme) as React.CSSProperties),
             background: theme.paper,
             color: theme.fg,
             border: `1px solid ${theme.line}`,

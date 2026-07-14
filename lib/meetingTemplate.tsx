@@ -151,6 +151,66 @@ export function docTheme(brand: BrandKit): DocTheme {
   };
 }
 
+// Scoped CSS variable overrides for the in-app paper card. App components
+// rendered inside the branded document (PersonLink, TaskRow, .chip) style
+// themselves with the page theme's variables; in dark mode that puts
+// near-white ink on white paper. Re-pointing both variable families (hex vars
+// for inline styles, --c-* RGB triples for Tailwind tokens) at the document
+// theme keeps every descendant readable on the paper, in either app theme.
+export function paperCssVars(t: DocTheme): Record<string, string> {
+  const vars: Record<string, string> = {
+    "--canvas": t.paper,
+    "--surface": t.paper,
+    "--surface-2": t.surface2,
+    "--hi": t.surface2,
+    "--ink": t.fg,
+    "--ink-2": t.ink2,
+    "--ink-3": t.muted,
+    "--muted": t.muted,
+    "--line": t.line,
+    "--line-2": t.line2,
+    "--accent": t.accent,
+    "--accent-2": t.accent,
+    "--accent-soft": t.accentSoft,
+    "--warm": t.warm,
+    "--warm-soft": t.warmSoft,
+    "--due": t.dueInk,
+    "--due-soft": t.dueSoft,
+  };
+  const triples: Array<[string, string]> = [
+    ["--c-page", t.paper],
+    ["--c-surface", t.paper],
+    ["--c-surface-2", t.surface2],
+    ["--c-hi", t.surface2],
+    ["--c-fg", t.fg],
+    ["--c-ink-2", t.ink2],
+    ["--c-muted", t.muted],
+    ["--c-border", t.line],
+    ["--c-line-2", t.line2],
+    ["--c-accent", t.accent],
+    ["--c-accent-soft", t.accentSoft],
+    ["--c-warm", t.warm],
+    ["--c-warm-soft", t.warmSoft],
+    ["--c-due", t.dueInk],
+    ["--c-due-soft", t.dueSoft],
+    ["--c-ok", t.ok],
+  ];
+  for (const [name, hex] of triples) {
+    const rgb = hexTriple(hex);
+    if (rgb) vars[name] = rgb;
+  }
+  return vars;
+}
+
+// "#rrggbb" -> "r g b" (the format Tailwind's rgb(var(...)) tokens expect).
+// Non-hex values (rgba tints) are skipped; those vars keep the page theme.
+function hexTriple(hex: string): string | null {
+  const m = /^#([0-9a-f]{6})$/i.exec((hex ?? "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+}
+
 /* ================================= mappers ================================= */
 
 const MONTHS = [
