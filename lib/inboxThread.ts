@@ -8,7 +8,7 @@ import { ensureTriageForKeys, getTriageMap, type TriageRow } from "@/lib/firehos
 import { suggestTasksForThread, type TaskSuggestion } from "@/lib/firehose/suggest";
 import { suggestDocsForThread } from "@/lib/firehose/docSuggest";
 import { suggestAccountForEmail, listDbAccounts } from "@/lib/firehose/senderSuggest";
-import { isInternal } from "@/lib/firehose/map";
+import { isInternal, isSelfAddress } from "@/lib/firehose/map";
 import { aiConfigured } from "@/lib/ai";
 import { formatEmailBody } from "@/lib/emailFormat";
 
@@ -104,13 +104,17 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
   const flagged = messages.some((m) => m.flagged);
   const archived = messages[messages.length - 1].status === "archived";
   // Reply targets the most recent inbound message (reply to the customer).
-  const latestInbound = [...messages].reverse().find((m) => m.direction === "inbound");
+  // A message FROM one of Jordan's own addresses is outbound even when the
+  // capture flow missed the tag; never anchor a reply on his own mail.
+  const latestInbound = [...messages]
+    .reverse()
+    .find((m) => msgDirection(m) === "inbound");
 
   // Sending identities on this thread (Jordan + any outbound sender): never
   // reply to ourselves.
   const self = new Set<string>([JORDAN]);
   for (const m of messages) {
-    if (m.direction === "outbound" && m.fromEmail) self.add(m.fromEmail.toLowerCase());
+    if (msgDirection(m) === "outbound" && m.fromEmail) self.add(m.fromEmail.toLowerCase());
   }
   const everyone = new Set<string>();
   for (const m of messages) {
@@ -349,10 +353,11 @@ function toThreadMsg(
     .filter((r) => r?.email && r.role !== "from")
     .map((r) => ({ email: r.email.toLowerCase(), name: r.name ?? r.email, cc: r.role === "cc" }));
   const from = m.fromEmail?.toLowerCase() ?? null;
+  const dir = msgDirection(m);
 
   let replyTo: string[] = [];
   let replyCc: string[] = [];
-  if (m.direction === "inbound" && from) {
+  if (dir === "inbound" && from) {
     replyTo = [from];
     replyCc = dedupe(recips.map((r) => r.email).filter((a) => !selfSet.has(a) && a !== from));
   } else {
@@ -364,8 +369,8 @@ function toThreadMsg(
 
   return {
     id: m.id,
-    direction: m.direction === "outbound" ? "outbound" : "inbound",
-    internal: from ? isInternal(from) : m.direction === "outbound",
+    direction: dir,
+    internal: from ? isInternal(from) : dir === "outbound",
     from: personRef(from ?? "", m.fromName, cards),
     recipients: recips.map((r) => personRef(r.email, r.name, cards)),
     atLabel: fmt(m.sentAt ?? m.receivedAt ?? m.createdAt),
@@ -385,6 +390,13 @@ function toThreadMsg(
     replyTo,
     replyCc,
   };
+}
+
+// Direction with the self-address guard: the Sent-capture flow does not
+// always tag Jordan's messages outbound; his own address settles it.
+function msgDirection(m: Pick<ThreadMessage, "direction" | "fromEmail">): "inbound" | "outbound" {
+  if (m.direction === "outbound") return "outbound";
+  return m.fromEmail && isSelfAddress(m.fromEmail) ? "outbound" : "inbound";
 }
 
 function dedupe(arr: string[]): string[] {

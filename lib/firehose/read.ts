@@ -3,6 +3,15 @@ import { desc, eq, inArray, or, sql } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
 import { emails, emailAttachments, accounts } from "@/lib/db/schema";
 import { isInlineAttachment } from "./attach";
+import { isSelfAddress } from "./map";
+
+// Direction with a self-address guard: the Sent-capture flow does not always
+// tag Jordan's messages outbound, and one miss would resurface the thread as
+// new inbound activity (top of list, unread, reopened). A message FROM one of
+// his own addresses is outbound no matter what the row says.
+function rowIsOutbound(direction: string | null, fromEmail: string | null): boolean {
+  return direction === "outbound" || (!!fromEmail && isSelfAddress(fromEmail));
+}
 
 export type EmailRow = typeof emails.$inferSelect;
 export type AttachmentRow = typeof emailAttachments.$inferSelect;
@@ -113,14 +122,15 @@ function summarizeScanRows(rows: ScanRow[]): ThreadSummary[] {
       byKey.set(key, t);
     }
     t.count++;
-    if (e.direction === "outbound") t.outbound++;
+    const outbound = rowIsOutbound(e.direction, e.fromEmail);
+    if (outbound) t.outbound++;
     else t.inbound++;
     if (e.hasAttachments) t.hasAttachments = true;
     if (e.needsReview) t.needsReview = true;
     if (e.flagged) t.flagged = true;
     if (e.status === "replied") t.replied = true;
     if (e.accountId != null && t.accountId == null) t.accountId = e.accountId;
-    if (e.direction !== "outbound") {
+    if (!outbound) {
       t._parties.add(partyLabel(e));
       // The newest INBOUND message anchors the list: Jordan's own replies
       // stay in the thread but don't resurface it as new activity.
@@ -136,7 +146,7 @@ function summarizeScanRows(rows: ScanRow[]): ThreadSummary[] {
       t._latestStatus = e.status ?? "new";
       t._newestRead = Boolean(e.read);
       t.preview = (e.bodyPreview ?? "")?.slice(0, 160) || null;
-      t.lastDirection = e.direction === "outbound" ? "outbound" : "inbound";
+      t.lastDirection = outbound ? "outbound" : "inbound";
     }
   }
 
@@ -288,7 +298,7 @@ export function pickReplyTarget(
   const timeOfMsg = (m: ReplyTargetMessage) =>
     (m.sentAt ?? m.receivedAt)?.getTime() ?? 0;
   const anchor = messages
-    .filter((m) => m.direction === "inbound" && m.messageId)
+    .filter((m) => !rowIsOutbound(m.direction, m.fromEmail) && m.messageId)
     .sort((a, b) => timeOfMsg(a) - timeOfMsg(b))
     .pop();
   if (!anchor || !anchor.fromEmail) return null;
