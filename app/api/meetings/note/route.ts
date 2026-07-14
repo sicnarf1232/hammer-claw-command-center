@@ -1,10 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { vaultConfigured } from "@/lib/vault";
+import { vaultConfigured, getMeetingNoteByPath } from "@/lib/vault";
 import { editMeetingNote, WriteBackError } from "@/lib/writeback";
+import { meetingNoteToEditable } from "@/lib/meetingEdit";
 import type { MeetingEdit, EditableActionItem } from "@/lib/meetingEdit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Editable JSON for a meeting note, the same shape POST accepts. Lets a
+// client load the note, adjust one field, and write the full edit back.
+export async function GET(req: NextRequest) {
+  const path = req.nextUrl.searchParams.get("path") ?? "";
+  if (!path.endsWith(".md") || !path.includes("/Meetings/")) {
+    return NextResponse.json(
+      { error: "A valid meeting-note path is required." },
+      { status: 400 },
+    );
+  }
+  const note = await getMeetingNoteByPath(path);
+  if (!note) {
+    return NextResponse.json({ error: "Meeting note not found." }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, edit: meetingNoteToEditable(note) });
+}
 
 // Phase C: write an edited meeting note back to the vault as a commit.
 export async function POST(req: NextRequest) {
