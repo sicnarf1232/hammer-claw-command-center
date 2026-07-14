@@ -98,7 +98,12 @@ export interface PullResult {
 // Jordan to approve on /meetings. STAGING NEVER WRITES THE VAULT; the approved
 // payload is executed by lib/proposals/executeMeeting. A meeting Jordan
 // rejected is never re-staged (the proposal latches by granola id).
-export async function stageGranolaMeetings(): Promise<PullResult> {
+export async function stageGranolaMeetings(opts?: {
+  // Re-run pending proposals through triage and refresh their payloads in
+  // place (same row, same children). Used after a triage improvement lands
+  // so waiting proposals pick it up; approved/rejected latches still hold.
+  refreshPending?: boolean;
+}): Promise<PullResult> {
   if (!granolaConfigured()) throw new GranolaNotConfiguredError();
   if (!vaultConfigured()) {
     throw new Error("Vault is not configured (GITHUB_TOKEN / VAULT_REPO).");
@@ -180,7 +185,7 @@ export async function stageGranolaMeetings(): Promise<PullResult> {
         "meeting-file",
         meetingDedupeKey(summary.id),
       );
-      if (prior?.status === "pending") {
+      if (prior?.status === "pending" && !opts?.refreshPending) {
         alreadyPending += 1;
         continue;
       }

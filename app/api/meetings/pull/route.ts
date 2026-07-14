@@ -13,7 +13,7 @@ export const maxDuration = 300;
 // Stage recent Granola meetings as proposals for review (Path A: app button).
 // Nothing is written to the vault here; approving on /meetings executes the
 // writes. Behind the app password gate (middleware), so only Jordan triggers it.
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
   if (!granolaConfigured()) {
     return NextResponse.json(
       { error: "Granola not configured (GRANOLA_API_KEY unset)." },
@@ -40,7 +40,10 @@ export async function POST(_req: NextRequest) {
   }
 
   try {
-    const result = await stageGranolaMeetings();
+    // ?refreshPending=1 re-triages waiting proposals in place, so a triage
+    // improvement reaches them without touching approved/rejected latches.
+    const refreshPending = req.nextUrl.searchParams.get("refreshPending") === "1";
+    const result = await stageGranolaMeetings({ refreshPending });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     if (err instanceof GranolaNotConfiguredError) {
