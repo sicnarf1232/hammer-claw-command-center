@@ -102,3 +102,64 @@ Per docs/AGENTIC-TRIAGE.md: compare Jordan's manual triage corrections
 (manual=true rows, ai_snapshot originals) to the AI's first call and
 surface agreement rates per pathway. This is the gate evidence for
 autonomous triage; build before any autonomy ships.
+
+## From the inbox/reply strategy conversation (2026-07-20)
+
+### 15. Smart chaining: request understood, routed, and closed the loop (large)
+
+**Status: open, blocking.** Jordan does not consider Main St. a completed
+cutover of his real workflow until this exists. The plumbing (thread capture,
+send/reply/chain, triage pathways, proposal-and-approval, the document
+library, doc suggestions per thread, tasks linked to threads with
+send-update, the agents grading loop) is close to done. What is missing is
+the decision layer that turns "email arrived" into "the right thing happened,
+and if it needed someone else, that got tracked to closure."
+
+Jordan's own frame, two worked examples:
+
+1. Customer requests a drawing Jordan already has in the Main St. library:
+   pull it, attach it, draft the reply, Jordan approves and sends.
+2. Customer requests a drawing Jordan does NOT have: draft a holding reply
+   to the customer ("I got your request, I've requested the drawing for you,
+   I should have it shortly"), AND fire a separate internal email to the
+   right person (an engineer) requesting it, AND track that request to
+   closure so the customer eventually gets the real answer.
+
+Three gaps identified, none of which exist today:
+
+- **Intent extraction.** Triage says "this is a doc request" (a pathway).
+  Nothing extracts the structured ask: which document/part number, for which
+  account, what the customer actually needs back.
+- **The routing table.** "Which engineer owns drawings for which account/
+  product line" lives only in Jordan's head. No model quality substitutes for
+  this table existing somewhere the app can read. Needs Jordan: he has to
+  supply the routing facts (who owns what) before this can be built; the
+  natural collection method is Jordan narrating real threads ("this one
+  should have gone to Ben") either to the Brain or directly to Claude, with
+  the result captured as a structured table, not prose.
+- **Multi-step state.** Example 2 is a commitment that spans two email
+  threads and multiple days: promise the customer, request internally, chase
+  the internal request if it goes quiet, then close the loop with the real
+  file once it arrives. The task system (thread-linked tasks, send-update)
+  is most of this shape already; nothing today creates and drives this kind
+  of chain automatically from an inbound request.
+
+Proposed build shape (playbook pattern, staged like everything else in this
+app): trigger (pathway match) -> decision (is the asset already in the
+library?) -> branch A (draft a reply with the attachment, Jordan approves,
+sends) or branch B (holding reply to the customer + internal request to the
+routed person + a tracking task that chases it, then a final "here it is"
+send once the asset lands). Every action stages as a proposal first, per the
+existing trust ladder; only graduates toward auto-send as the grading data
+(docs/AGENTIC-TRIAGE.md) earns it.
+
+Known prerequisite gap: outbound replies do not currently support attaching a
+file from the document library, so example 1 is not yet possible even by
+hand. That is the right first brick regardless of how the rest of this is
+sequenced.
+
+Working process going forward: routing facts and playbook specifics get
+captured in a new `docs/PLAYBOOKS.md` (one entry per chain: trigger, what to
+extract, the routing table, Jordan's reply phrasing in his voice, follow-up
+timing) so the build has a concrete spec instead of a conversation to
+re-derive from.

@@ -1,9 +1,18 @@
 # DB Cutover — making the app the source of truth
 
-Status: **design for review** (no data has been moved). Decision captured
-2026-06-22: the app becomes the source of truth; the vault becomes a seed +
-export target. Scope: **everything** (CRM identity, accounts, meetings, notes,
-series, tasks). Approach: **staged**, never a big bang.
+Status: **flipped 2026-07-07** (app database is source of truth; see
+CLAUDE.md rule 2). This document's original design-phase sections below are
+kept for the seed/reconciliation history and are otherwise historical.
+
+Jordan does not consider the cutover a complete replacement of his real
+workflow until docs/BACKLOG.md item 15 ("smart chaining": requests understood,
+routed to the right internal person when needed, and tracked to closure)
+ships. That is the one open, blocking item.
+
+Decision captured 2026-06-22: the app becomes the source of truth; the vault
+becomes a seed + export target. Scope: **everything** (CRM identity,
+accounts, meetings, notes, series, tasks). Approach: **staged**, never a big
+bang.
 
 ## Why
 
