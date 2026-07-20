@@ -53,6 +53,13 @@ function rowsOf(res: unknown): Record<string, unknown>[] {
     : (((res as { rows?: unknown })?.rows ?? []) as Record<string, unknown>[]);
 }
 
+// getThread returns messages oldest-first; reversed here so the newest
+// message leads the joined text. The combined cap is generous (60k, matching
+// the text-file upload cap elsewhere) so the Brain reads full message bodies
+// on real threads rather than a truncated slice; when a thread is long enough
+// to still exceed it, the cut lands on the OLDEST content, never the newest.
+const THREAD_CONTEXT_CHAR_CAP = 60_000;
+
 async function formatThread(key: string, label: string): Promise<string | null> {
   const { subject, messages } = await getThread(key).catch(() => ({
     subject: "",
@@ -67,7 +74,7 @@ async function formatThread(key: string, label: string): Promise<string | null> 
       return `[${m.direction === "outbound" ? "JORDAN" : who} ${at}]\n${formatEmailBody(m).main}`;
     })
     .join("\n\n---\n\n")
-    .slice(0, 9000);
+    .slice(0, THREAD_CONTEXT_CHAR_CAP);
   return `=== ${label}: "${subject}" (key: ${key}) ===\n${text}`;
 }
 
