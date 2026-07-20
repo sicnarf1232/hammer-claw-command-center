@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
+import { ensureFirehoseSchema } from "@/lib/firehose/schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,9 +14,11 @@ export async function POST() {
   if (!dbConfigured()) {
     return NextResponse.json({ error: "Database not configured." }, { status: 503 });
   }
+  await ensureFirehoseSchema();
   const db = getDb();
 
-  // Map by sender email -> person (and their account).
+  // Map by sender email -> person (and their account). Never overwrite a
+  // thread Jordan manually linked to an account (dev-feedback #13).
   const bySender = await db.execute(sql`
     update emails e
        set account_id = p.account_id,
@@ -24,6 +27,7 @@ export async function POST() {
      where lower(e.from_email) = lower(p.email)
        and p.email is not null
        and (e.account_id is null or e.person_id is null)
+       and (e.account_manual is not true)
     returning e.id
   `);
 

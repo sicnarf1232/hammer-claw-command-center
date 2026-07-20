@@ -46,6 +46,9 @@ const DDL: string[] = [
   `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "replied_at" timestamptz`,
   `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "read" boolean NOT NULL DEFAULT false`,
   `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "read_at" timestamptz`,
+  // dev-feedback #13: manual account override, so automatic remapping (domain
+  // link, sender backfill) never clobbers a thread Jordan linked by hand.
+  `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "account_manual" boolean NOT NULL DEFAULT false`,
   `CREATE INDEX IF NOT EXISTS "emails_message_id_idx" ON "emails" ("message_id")`,
   `CREATE INDEX IF NOT EXISTS "emails_flagged_idx" ON "emails" ("flagged")`,
   `CREATE INDEX IF NOT EXISTS "emails_thread_idx" ON "emails" ("thread_id")`,

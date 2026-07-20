@@ -347,6 +347,10 @@ export const emails = pgTable(
     accountId: integer("account_id"), // resolved customer account (no FK: firehose is self-provisioning)
     personId: integer("person_id"), // resolved sender person
     needsReview: boolean("needs_review").notNull().default(false), // unmapped sender/account
+    // dev-feedback #13: Jordan explicitly set this thread's account (manual
+    // override, e.g. an all-internal thread with no unmapped sender to link).
+    // Automatic remapping (domain link, sender backfill) must never clobber it.
+    accountManual: boolean("account_manual").notNull().default(false),
     // Action state (unified inbox). flagged = you flagged it in Outlook (the
     // explicit "act on this now" signal); status tracks triage of the thread.
     flagged: boolean("flagged").notNull().default(false),

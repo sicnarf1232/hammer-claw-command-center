@@ -76,7 +76,7 @@ interface ThreadData {
   count: number;
   messageIds: number[];
   latestMessageId: number;
-  acct: { name: string; slug: string } | null;
+  acct: { id: number; name: string; slug: string } | null;
   flagged: boolean;
   archived: boolean;
   threadMsgs: ThreadMsg[];
@@ -89,6 +89,10 @@ interface ThreadData {
     suggestion: { accountId: number; name: string } | null;
     accounts: { id: number; name: string }[];
   } | null;
+  // dev-feedback #13: always-available manual account link, independent of
+  // senderSuggestion (which stays null for an all-internal thread).
+  accounts: { id: number; name: string }[];
+  accountManual: boolean;
   docSuggestions: DocSuggestion[];
   quoteHref: string | null;
   taskEmailSuggestions: TaskEmailSuggestion[];
@@ -141,6 +145,14 @@ export default function ThreadDetail({
   const [linkAccountId, setLinkAccountId] = useState<string>("");
   const [linking, setLinking] = useState(false);
 
+  // dev-feedback #13: manual thread<->account link, always available (not
+  // gated on senderSuggestion, which stays null for an all-internal thread).
+  const [acctOverride, setAcctOverride] = useState<{ id: number; name: string } | null>(null);
+  const [accountManual, setAccountManual] = useState(false);
+  const [acctPickerOpen, setAcctPickerOpen] = useState(false);
+  const [acctPickValue, setAcctPickValue] = useState<string>("");
+  const [acctSaving, setAcctSaving] = useState(false);
+
   const [summaryOpen, setSummaryOpen] = useState(true);
   const [attachOpen, setAttachOpen] = useState(false);
   const [pickedDocIds, setPickedDocIds] = useState<Set<number>>(new Set());
@@ -182,6 +194,10 @@ export default function ThreadDetail({
       setLinkAccountId(
         j.senderSuggestion?.suggestion ? String(j.senderSuggestion.suggestion.accountId) : "",
       );
+      setAcctOverride(j.acct ? { id: j.acct.id, name: j.acct.name } : null);
+      setAccountManual(j.accountManual);
+      setAcctPickerOpen(false);
+      setAcctPickValue(j.acct ? String(j.acct.id) : "");
       const target =
         j.threadMsgs.find((m) => m.direction === "inbound") ?? j.threadMsgs[0] ?? null;
       setReplyTargetId(target?.id ?? null);
@@ -288,6 +304,29 @@ export default function ThreadDetail({
     if (ok) setSenderLinked(true);
   }
 
+  // dev-feedback #13: manual account link/unlink for the whole thread
+  // (every message), independent of any sender/domain mapping. Setting an
+  // account here also unlocks the Smart Action panel on next load, since it
+  // keys off the account name.
+  async function setAccount(accountId: number | null) {
+    const prevAcct = acctOverride;
+    const prevManual = accountManual;
+    const nextName =
+      accountId != null ? (data?.accounts.find((a) => a.id === accountId)?.name ?? null) : null;
+    setAcctSaving(true);
+    setAcctOverride(accountId != null && nextName ? { id: accountId, name: nextName } : null);
+    setAccountManual(accountId != null);
+    setAcctPickerOpen(false);
+    announce({ account: nextName });
+    const ok = await post("/api/inbox/set-account", { key: threadKey, accountId });
+    setAcctSaving(false);
+    if (!ok) {
+      setAcctOverride(prevAcct);
+      setAccountManual(prevManual);
+      announce({ account: prevAcct?.name ?? null });
+    }
+  }
+
   if (loading) {
     return (
       <div className="animate-pulse space-y-3 p-4">
@@ -336,6 +375,7 @@ export default function ThreadDetail({
     : 0;
 
   const whoLine =
+    acctOverride?.name ??
     data.acct?.name ??
     data.externalParticipants.map((p) => p.name).slice(0, 3).join(", ") ??
     "";
@@ -493,7 +533,7 @@ export default function ThreadDetail({
       {/* 4b. Create a task from this thread (linked to it and the account) */}
       <CreateTaskInline
         threadKey={threadKey}
-        accountName={data.acct?.name ?? null}
+        accountName={acctOverride?.name ?? data.acct?.name ?? null}
         subject={data.subject}
       />
 
@@ -505,6 +545,75 @@ export default function ThreadDetail({
         suggestions={data.taskEmailSuggestions}
         emailId={data.latestInboundEmailId}
       />
+
+      {/* 4d. Manual account link (dev-feedback #13): always available, unlike
+          senderSuggestion below (which only fires for an unmapped EXTERNAL
+          sender and stays null on an all-internal thread). Lets Jordan link,
+          reassign, or clear the account on any thread, e.g. an internal
+          colleague-to-colleague thread that is substantively about a
+          customer. Linking here also unlocks the Smart Action panel above
+          on next load, since it keys off the account name. */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+        <span>Account:</span>
+        {!acctPickerOpen ? (
+          <>
+            <span className={acctOverride ? "font-medium text-fg" : "text-fg/50"}>
+              {acctOverride?.name ?? "Not linked"}
+            </span>
+            {accountManual ? <span className="text-2xs text-accent">(manual)</span> : null}
+            <button
+              type="button"
+              onClick={() => {
+                setAcctPickValue(acctOverride ? String(acctOverride.id) : "");
+                setAcctPickerOpen(true);
+              }}
+              className="rounded-lg border border-border px-2 py-0.5 text-xs text-fg/70 hover:text-fg"
+            >
+              {acctOverride ? "Change" : "Link account"}
+            </button>
+            {acctOverride ? (
+              <button
+                type="button"
+                onClick={() => setAccount(null)}
+                disabled={acctSaving}
+                className="rounded-lg border border-border px-2 py-0.5 text-xs text-fg/70 hover:text-fg disabled:opacity-50"
+              >
+                Unlink
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <select
+              value={acctPickValue}
+              onChange={(e) => setAcctPickValue(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-1.5 py-0.5 text-xs text-fg"
+            >
+              <option value="">Choose account…</option>
+              {data.accounts.map((a) => (
+                <option key={a.id} value={String(a.id)}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => acctPickValue && setAccount(Number(acctPickValue))}
+              disabled={!acctPickValue || acctSaving}
+              className="rounded-lg border border-border px-2 py-0.5 text-xs font-semibold text-accent hover:bg-accentSoft disabled:opacity-50"
+            >
+              {acctSaving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAcctPickerOpen(false)}
+              className="rounded-lg border border-border px-2 py-0.5 text-xs text-fg/70 hover:text-fg"
+            >
+              Cancel
+            </button>
+          </>
+        )}
+      </div>
 
       {/* 5. Unmapped sender, one inline line (FIX 5) */}
       {data.senderSuggestion && !senderLinked ? (

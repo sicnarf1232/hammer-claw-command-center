@@ -78,7 +78,7 @@ export interface ThreadViewData {
   count: number;
   messageIds: number[];
   latestMessageId: number;
-  acct: { name: string; slug: string } | null;
+  acct: { id: number; name: string; slug: string } | null;
   flagged: boolean;
   archived: boolean;
   threadMsgs: ThreadMsg[];
@@ -91,6 +91,12 @@ export interface ThreadViewData {
     suggestion: { accountId: number; name: string } | null;
     accounts: { id: number; name: string }[];
   } | null;
+  // dev-feedback #13: always-available manual account link/unlink, independent
+  // of senderSuggestion (which only fires for an unmapped EXTERNAL sender and
+  // stays null for an all-internal thread). accountManual flags a thread
+  // Jordan explicitly linked/unlinked, so the AI/domain auto-mappers skip it.
+  accounts: { id: number; name: string }[];
+  accountManual: boolean;
   docSuggestions: Awaited<ReturnType<typeof suggestDocsForThread>>;
   taskSuggestions: TaskSuggestion[];
   quoteHref: string | null;
@@ -111,6 +117,10 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
 
   const acctId = messages.find((m) => m.accountId != null)?.accountId ?? null;
   const acct = acctId != null ? (await accountNames([acctId])).get(acctId) : undefined;
+  // dev-feedback #13: manual override state rides on the message row, not the
+  // resolved account, so it reads true whether or not acctId resolved.
+  const accountManual = messages.some((m) => m.accountManual);
+  const allAccounts = await listDbAccounts().catch(() => []);
 
   // Opening a thread marks it read in the inbox.
   await markRead(messages.map((m) => m.id)).catch(() => {});
@@ -237,10 +247,7 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
   // domain suggestion and a manual picker over all accounts.
   let senderSuggestion: ThreadViewData["senderSuggestion"] = null;
   if (acctId == null && latestInbound?.fromEmail && !isInternal(latestInbound.fromEmail)) {
-    const [s, allAccounts] = await Promise.all([
-      suggestAccountForEmail(latestInbound.fromEmail).catch(() => null),
-      listDbAccounts().catch(() => []),
-    ]);
+    const s = await suggestAccountForEmail(latestInbound.fromEmail).catch(() => null);
     senderSuggestion = {
       address: latestInbound.fromEmail,
       name: latestInbound.fromName ?? null,
@@ -254,7 +261,7 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
     count: messages.length,
     messageIds: messages.map((m) => m.id),
     latestMessageId: messages[messages.length - 1].id,
-    acct: acct ? { name: acct.name, slug: acct.slug } : null,
+    acct: acct && acctId != null ? { id: acctId, name: acct.name, slug: acct.slug } : null,
     flagged,
     archived,
     threadMsgs,
@@ -273,6 +280,8 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
     externalParticipants,
     internalParticipants,
     senderSuggestion,
+    accounts: allAccounts,
+    accountManual,
     docSuggestions,
     taskSuggestions,
     quoteHref,

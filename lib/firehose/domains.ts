@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
 import { MERIT_DOMAINS } from "./map";
+import { ensureFirehoseSchema } from "./schema";
 
 // Domain -> account mapping. Linking a sender links their whole company domain, so
 // every current and future address on that domain (e.g. anyone @stryker.com) maps
@@ -69,15 +70,20 @@ export async function linkDomainToAccount(domain: string, accountId: number): Pr
   const d = domain.trim().toLowerCase();
   if (!isLinkableDomain(d)) return false;
   await ensureDomainSchema();
+  await ensureFirehoseSchema();
   const db = getDb();
   await db.execute(
     sql`insert into account_domains (domain, account_id) values (${d}, ${accountId})
         on conflict (domain) do update set account_id = ${accountId}`,
   );
-  // Backfill unmapped mail + people on this domain.
+  // Backfill unmapped mail + people on this domain. Never touch a thread
+  // Jordan manually linked to an account (dev-feedback #13): a colleague's
+  // domain covers many customers, so a blanket domain link must not override
+  // a deliberate per-thread choice.
   await db.execute(
     sql`update emails set account_id = ${accountId}, needs_review = false
-         where lower(split_part(from_email, '@', 2)) = ${d} and account_id is null`,
+         where lower(split_part(from_email, '@', 2)) = ${d} and account_id is null
+           and account_manual is not true`,
   );
   await db.execute(
     sql`update people set account_id = ${accountId}
