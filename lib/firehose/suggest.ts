@@ -22,7 +22,10 @@ const STOP = new Set([
   "hello", "re", "fw", "fwd", "email", "reply", "let", "know", "get", "can",
 ]);
 
-function keywords(text: string): string[] {
+// Exported so other matchers (lib/taskEmailMatch.ts, the dev-feedback #11
+// task<->email linker) reuse the same keyword extraction instead of
+// duplicating it.
+export function extractKeywords(text: string): string[] {
   return Array.from(
     new Set(
       text
@@ -47,7 +50,7 @@ export async function suggestTasksForThread(
 
   const lookup = buildAccountLookup(accounts);
   const views = tasks.map((t) => toTaskView(t, lookup)).filter((t) => t.workstream !== "nextech");
-  const words = keywords(text);
+  const words = extractKeywords(text);
   const acct = accountName?.trim().toLowerCase() ?? null;
 
   const scored = views.map((t) => {

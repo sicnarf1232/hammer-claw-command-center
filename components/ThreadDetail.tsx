@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ReplyBox, { type SuggestedDoc } from "@/components/ReplyBox";
 import { INSERT_REPLY_EVENT } from "@/components/InboxBrain";
+import {
+  LinkedTaskChips,
+  TaskCompletionSuggestions,
+  type LinkedTask,
+  type TaskEmailSuggestion,
+} from "@/components/TaskEmailLink";
 
 // Self-contained thread detail panel (FIGMA FIX 3 + FIX 5): fetches
 // /api/inbox/thread-data and renders header, participants, AI summary,
@@ -85,6 +91,9 @@ interface ThreadData {
   } | null;
   docSuggestions: DocSuggestion[];
   quoteHref: string | null;
+  taskEmailSuggestions: TaskEmailSuggestion[];
+  linkedTasks: LinkedTask[];
+  latestInboundEmailId: number | null;
 }
 
 // Pathway meta (labels/colors), mirrored from components/InboxList.tsx.
@@ -486,6 +495,15 @@ export default function ThreadDetail({
         threadKey={threadKey}
         accountName={data.acct?.name ?? null}
         subject={data.subject}
+      />
+
+      {/* 4c. Smart task<->email linkage (dev-feedback #11): confirmed links
+          both directions, plus a suggestion Jordan confirms before it's
+          stored. Reasons ("WHY") ride along with every suggestion. */}
+      <LinkedTaskChips tasks={data.linkedTasks} />
+      <TaskCompletionSuggestions
+        suggestions={data.taskEmailSuggestions}
+        emailId={data.latestInboundEmailId}
       />
 
       {/* 5. Unmapped sender, one inline line (FIX 5) */}

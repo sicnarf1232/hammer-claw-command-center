@@ -12,6 +12,12 @@ import { isInternal, isSelfAddress } from "@/lib/firehose/map";
 import { appTimezone } from "@/lib/dates";
 import { aiConfigured } from "@/lib/ai";
 import { formatEmailBody } from "@/lib/emailFormat";
+import {
+  suggestTasksForEmail,
+  linkedTasksForEmailIds,
+  type LinkedTaskRef,
+} from "@/lib/taskEmailLinks";
+import type { TaskEmailMatch } from "@/lib/taskEmailMatch";
 
 const JORDAN = "jordan.francis@merit.com";
 
@@ -88,6 +94,13 @@ export interface ThreadViewData {
   docSuggestions: Awaited<ReturnType<typeof suggestDocsForThread>>;
   taskSuggestions: TaskSuggestion[];
   quoteHref: string | null;
+  // dev-feedback #11: smart task<->email linkage. taskEmailSuggestions is
+  // suggestion-only ("this email may complete..."), scored against the
+  // latest inbound message; linkedTasks is the CONFIRMED set already stored
+  // in task_emails for any message in this thread.
+  taskEmailSuggestions: (TaskEmailMatch & { title: string })[];
+  linkedTasks: LinkedTaskRef[];
+  latestInboundEmailId: number | null;
 }
 
 // Assemble the full thread view payload. Returns null when the thread has no
@@ -177,6 +190,26 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
     ? await suggestTasksForThread(acct?.name ?? null, suggestText, 3).catch(() => [])
     : [];
 
+  // Task<->email smart linkage (dev-feedback #11): suggestion-only, scored
+  // against the latest inbound message's actual text (not just the triage
+  // summary), so a sender name or part number the triage summary drops still
+  // scores. Same noise/FYI gate as the doc suggestions below.
+  const taskEmailSuggestions =
+    latestInbound && triage?.pathway !== "noise" && triage?.pathway !== "fyi"
+      ? await suggestTasksForEmail(
+          {
+            accountName: acct?.name ?? null,
+            subject,
+            bodyText: formatEmailBody(latestInbound).main,
+            fromName: latestInbound.fromName,
+            fromEmail: latestInbound.fromEmail,
+          },
+          latestInbound.id,
+          3,
+        ).catch(() => [])
+      : [];
+  const linkedTasks = await linkedTasksForEmailIds(messages.map((m) => m.id)).catch(() => []);
+
   // Quote handoff: a thread triaged as a quote request gets a one-tap "Create
   // quote" that opens the Quote builder prefilled (customer, contact) with the
   // email text queued to auto-parse into line items.
@@ -243,6 +276,9 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
     docSuggestions,
     taskSuggestions,
     quoteHref,
+    taskEmailSuggestions,
+    linkedTasks,
+    latestInboundEmailId: latestInbound?.id ?? null,
   };
 }
 

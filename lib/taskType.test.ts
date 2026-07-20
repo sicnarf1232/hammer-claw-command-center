@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyTaskType } from "./taskType";
+import { classifyTaskType, matchedTaskTypeKeyword } from "./taskType";
 
 describe("classifyTaskType", () => {
   it("maps OEM keywords to the right type", () => {
@@ -21,5 +21,16 @@ describe("classifyTaskType", () => {
   it("respects precedence (PCN before Quality)", () => {
     // Mentions both 'change notice' (PCN) and 'quality'; PCN wins by order.
     expect(classifyTaskType("Quality review of the change notice")).toBe("PCN");
+  });
+});
+
+describe("matchedTaskTypeKeyword", () => {
+  it("returns the literal snippet that drove the classification", () => {
+    expect(matchedTaskTypeKeyword("Build a quote for MSS031")).toBe("quote");
+    expect(matchedTaskTypeKeyword("Approve the PO and contract terms")).toBe("PO");
+  });
+
+  it("returns null for Admin/Other (nothing matched)", () => {
+    expect(matchedTaskTypeKeyword("Update my notes")).toBeNull();
   });
 });

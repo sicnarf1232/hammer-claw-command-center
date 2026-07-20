@@ -49,3 +49,17 @@ export function classifyTaskType(
   }
   return "Admin/Other";
 }
+
+// Which literal snippet drove the classification (dev-feedback #11 Part B:
+// gate "Create quote" and similar suggested actions on an actual signal, and
+// show a short WHY next to them). Re-runs the same RULES list so the keyword
+// set has exactly one source of truth; returns null for Admin/Other (nothing
+// matched).
+export function matchedTaskTypeKeyword(title: string, description?: string): string | null {
+  const hay = `${title} ${description ?? ""}`;
+  for (const r of RULES) {
+    const m = hay.match(r.re);
+    if (m) return m[0];
+  }
+  return null;
+}

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { TaskView } from "@/lib/taskView";
-import { TASK_TYPES, type TaskType } from "@/lib/taskType";
+import { TASK_TYPES, matchedTaskTypeKeyword, type TaskType } from "@/lib/taskType";
 import {
   TASK_STATUSES,
   applyTaskFieldUpdate,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/taskUpdate";
 import { formatDateShort } from "@/lib/dates";
 import { SearchIcon } from "./icons";
+import { TaskLinkedEmails } from "./TaskEmailLink";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
 // columns are Task / Account / Type / Status / Start / Due. Default scope is
@@ -429,6 +430,12 @@ function quoteHref(t: TaskView): string {
 }
 
 function TaskDetail({ t }: { t: TaskView }) {
+  // Gate "Create quote" on an actual signal (dev-feedback #11 Part B) instead
+  // of always showing it: only when the task's own type classification (or
+  // Jordan's manual override, both already resolved onto t.type) says this
+  // is pricing/quote work. The matched keyword becomes the WHY line.
+  const quoteReasonKeyword =
+    t.type === "Pricing/Quote" ? matchedTaskTypeKeyword(t.title, t.description) : null;
   return (
     <div className="grid gap-2 text-sm">
       {t.description ? (
@@ -436,15 +443,23 @@ function TaskDetail({ t }: { t: TaskView }) {
       ) : (
         <p className="text-muted">No additional detail captured for this task.</p>
       )}
-      <div className="pt-1">
-        <Link
-          href={quoteHref(t)}
-          className="btn-outline inline-flex items-center gap-1.5 text-xs"
-          style={t.type === "Pricing/Quote" ? { borderColor: TYPE_HUE["Pricing/Quote"], color: TYPE_HUE["Pricing/Quote"] } : undefined}
-        >
-          Create quote →
-        </Link>
-      </div>
+      {t.type === "Pricing/Quote" && (
+        <div className="pt-1">
+          <Link
+            href={quoteHref(t)}
+            className="btn-outline inline-flex items-center gap-1.5 text-xs"
+            style={{ borderColor: TYPE_HUE["Pricing/Quote"], color: TYPE_HUE["Pricing/Quote"] }}
+          >
+            Create quote →
+          </Link>
+          <p className="mt-1 text-2xs text-muted">
+            {quoteReasonKeyword
+              ? `Suggested because this task mentions "${quoteReasonKeyword.toLowerCase()}".`
+              : "Suggested because this task is typed as Pricing/Quote."}
+          </p>
+        </div>
+      )}
+      <TaskLinkedEmails sourceFile={t.sourceFile} sourceLine={t.sourceLine} />
       {t.notes && (
         <p className="whitespace-pre-wrap text-xs text-muted">
           <span className="font-semibold text-fg/70">Notes: </span>

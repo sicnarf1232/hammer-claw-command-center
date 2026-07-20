@@ -142,6 +142,12 @@ const STATEMENTS: string[] = [
      created_at timestamptz not null default now()
    )`,
   `create unique index if not exists task_emails_pk on task_emails (task_id, email_id)`,
+
+  // Provenance for confirmed task<->email links (dev-feedback #11): every row
+  // is Jordan-confirmed, aiGenerated just records whether the link came from
+  // the AI matcher's suggestion vs a direct manual action.
+  `alter table task_emails add column if not exists ai_generated boolean not null default false`,
+  `alter table task_emails add column if not exists confirmed_by text`,
 ];
 
 let ensured: Promise<void> | null = null;

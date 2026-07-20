@@ -454,6 +454,15 @@ export const taskEmails = pgTable(
   {
     taskId: integer("task_id").notNull().references(() => tasks.id),
     emailId: integer("email_id").notNull().references(() => emails.id),
+    // Provenance (dev-feedback #11, smart task<->email linkage). Every row
+    // here is a CONFIRMED link (Jordan approved it, directly or via the
+    // suggestion flow); nothing writes here unconfirmed. aiGenerated records
+    // whether the link originated from the AI matcher (lib/taskEmailMatch.ts)
+    // vs a direct manual action ("Create task from thread"), mirroring the
+    // ai_generated pattern in email_triage. confirmedBy names who approved it
+    // (single-user app: always "jordan" once set).
+    aiGenerated: boolean("ai_generated").notNull().default(false),
+    confirmedBy: text("confirmed_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({ pk: uniqueIndex("task_emails_pk").on(t.taskId, t.emailId) }),
