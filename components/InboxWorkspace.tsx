@@ -4,6 +4,7 @@ import Link from "next/link";
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { customerHue, initials } from "@/lib/customerHues";
+import { formatDateMDY, formatDateShort, todayISO } from "@/lib/dates";
 import ThreadDetail from "@/components/ThreadDetail";
 import HoverPopout from "@/components/HoverPopout";
 import { ChevronLeftIcon } from "@/components/icons";
@@ -903,9 +904,9 @@ function Row({
   );
 }
 
+// Linked-task due date, shown as the house short badge (MMM DD).
 function shortDate(iso: string): string {
-  const d = new Date(iso + "T12:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return formatDateShort(iso);
 }
 
 // Swipe-to-triage. A one-finger horizontal slide on a Magic Mouse or
@@ -1206,7 +1207,9 @@ function rel(iso: string | null): string {
   if (hrs < 24) return `${hrs}h`;
   const days = Math.round(hrs / 24);
   if (days < 7) return d.toLocaleDateString("en-US", { weekday: "short" });
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  // Older than a week: fall back to an absolute date (general timestamp, not
+  // a due/start date), in the house MM/DD/YYYY form.
+  return formatDateMDY(todayISO(d));
 }
 
 function SearchIcon({ className }: { className?: string }) {

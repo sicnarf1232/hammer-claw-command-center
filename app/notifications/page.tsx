@@ -3,8 +3,20 @@ import { dbConfigured } from "@/lib/db";
 import { recentNotifications } from "@/lib/notify";
 import { notifyConfigured } from "@/lib/notify";
 import { notificationHref } from "@/lib/notifyLink";
+import { formatDateMDY } from "@/lib/dates";
 import SetupNotice from "@/components/SetupNotice";
 import { ActivityIcon } from "@/components/icons";
+
+// The notification's created-at date, reformatted to the house MM/DD/YYYY
+// display while leaving the time-of-day portion untouched.
+function createdAtLabel(createdAt: unknown): string {
+  if (!createdAt) return "";
+  const d = new Date(createdAt as string | number | Date);
+  if (Number.isNaN(d.getTime())) return "";
+  const dateStr = formatDateMDY(d.toLocaleDateString("en-CA"));
+  const timeStr = d.toLocaleTimeString();
+  return dateStr ? `${dateStr}, ${timeStr}` : timeStr;
+}
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -87,7 +99,7 @@ export default async function NotificationsPage() {
                       <div className="mt-1 text-sm text-muted">{n.body}</div>
                     )}
                     <div className="mt-1 font-mono text-xs tabular-nums text-muted">
-                      {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}
+                      {createdAtLabel(n.createdAt)}
                       {n.sentAt
                         ? " · delivered"
                         : external

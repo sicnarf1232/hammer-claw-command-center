@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { MeetingEdit, EditableActionItem } from "@/lib/meetingEdit";
-import { needsDueDate } from "@/lib/dates";
+import { needsDueDate, formatDateShort } from "@/lib/dates";
 
 // Phase C: in-app editor for a meeting note. Edits write back to the vault as a
 // single commit via /api/meetings/note (markdown stays the source of truth).
@@ -123,7 +123,7 @@ export default function MeetingEditor({
     <article className="panel texture mx-auto max-w-3xl overflow-hidden p-6 sm:p-9">
       <div className="flex items-center justify-between">
         <span className="eyebrow text-muted">Editing meeting note</span>
-        {date && <span className="text-sm tabular-nums text-ink2">{date}</span>}
+        {date && <span className="text-sm tabular-nums text-ink2">{formatDateShort(date)}</span>}
       </div>
 
       <Field label="Title">

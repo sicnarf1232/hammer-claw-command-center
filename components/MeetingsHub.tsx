@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { customerHue, initials, isInternalBucket } from "@/lib/customerHues";
+import { formatDateShort } from "@/lib/dates";
 import SuggestedSeries, { type HubCandidate } from "@/components/SuggestedSeries";
 import NewSeriesForm from "@/components/NewSeriesForm";
 import NewMeetingForm from "@/components/NewMeetingForm";
@@ -32,9 +33,9 @@ const VIEWS: { key: View; label: string }[] = [
 
 const normName = (s: string) => s.trim().toLowerCase();
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const monthDay = (d: string) => `${MONTHS[Number(d.slice(5, 7)) - 1] ?? ""} ${Number(d.slice(8, 10))}`;
+// Meeting/series occurrence date badges use the house short form (MMM DD).
+const monthDay = (d: string) => formatDateShort(d);
 const year = (d: string) => d.slice(0, 4);
 const monthLabel = (ym: string) => `${MONTHS_LONG[Number(ym.slice(5, 7)) - 1] ?? ym} ${ym.slice(0, 4)}`;
 

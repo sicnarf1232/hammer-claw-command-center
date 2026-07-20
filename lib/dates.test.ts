@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { needsDueDate, localParts, isLocalRunTime } from "./dates";
+import {
+  needsDueDate,
+  localParts,
+  isLocalRunTime,
+  formatDateMDY,
+  formatDateShort,
+} from "./dates";
 
 describe("needsDueDate", () => {
   it("flags missing, TBD, and vague/non-ISO dues", () => {
@@ -65,5 +71,66 @@ describe("isLocalRunTime", () => {
     // Same local hour, but a Thursday.
     const thursday = new Date("2026-07-23T22:00:00Z");
     expect(isLocalRunTime(16, { weekday: 5 }, thursday)).toBe(false);
+  });
+});
+
+describe("formatDateMDY", () => {
+  it("formats a plain ISO date as MM/DD/YYYY", () => {
+    expect(formatDateMDY("2026-07-26")).toBe("07/26/2026");
+  });
+
+  it("keeps zero-padded single-digit month and day", () => {
+    expect(formatDateMDY("2026-01-05")).toBe("01/05/2026");
+  });
+
+  it("reads only the leading date off a full ISO timestamp", () => {
+    expect(formatDateMDY("2026-12-31T23:59:00.000Z")).toBe("12/31/2026");
+  });
+
+  it("handles year boundaries", () => {
+    expect(formatDateMDY("1999-12-31")).toBe("12/31/1999");
+    expect(formatDateMDY("2000-01-01")).toBe("01/01/2000");
+  });
+
+  it("returns an empty string for invalid or empty input", () => {
+    expect(formatDateMDY("")).toBe("");
+    expect(formatDateMDY("TBD")).toBe("");
+    expect(formatDateMDY("2026-13-01")).toBe(""); // month out of range
+    expect(formatDateMDY("2026-06-00")).toBe(""); // day out of range
+    expect(formatDateMDY(undefined as unknown as string)).toBe("");
+    expect(formatDateMDY(null as unknown as string)).toBe("");
+  });
+});
+
+describe("formatDateShort", () => {
+  it("formats a plain ISO date as uppercase MMM DD", () => {
+    expect(formatDateShort("2026-07-26")).toBe("JUL 26");
+  });
+
+  it("zero-pads a single-digit day", () => {
+    expect(formatDateShort("2026-07-05")).toBe("JUL 05");
+  });
+
+  it("covers every month abbreviation", () => {
+    expect(formatDateShort("2026-01-15")).toBe("JAN 15");
+    expect(formatDateShort("2026-02-15")).toBe("FEB 15");
+    expect(formatDateShort("2026-12-15")).toBe("DEC 15");
+  });
+
+  it("reads only the leading date off a full ISO timestamp", () => {
+    expect(formatDateShort("2026-03-09T08:00:00.000Z")).toBe("MAR 09");
+  });
+
+  it("handles year boundaries without leaking the year into the label", () => {
+    expect(formatDateShort("1999-12-31")).toBe("DEC 31");
+    expect(formatDateShort("2000-01-01")).toBe("JAN 01");
+  });
+
+  it("returns an empty string for invalid or empty input", () => {
+    expect(formatDateShort("")).toBe("");
+    expect(formatDateShort("TBD")).toBe("");
+    expect(formatDateShort("not-a-date")).toBe("");
+    expect(formatDateShort("2026-00-10")).toBe(""); // month out of range
+    expect(formatDateShort(undefined as unknown as string)).toBe("");
   });
 });

@@ -32,7 +32,7 @@ import { listAccounts } from "@/lib/accounts";
 import MeetingEditor from "@/components/MeetingEditor";
 import MeetingShareButtons from "@/components/MeetingShareButtons";
 import SyncContactsButton from "@/components/SyncContactsButton";
-import { todayISO } from "@/lib/dates";
+import { todayISO, formatDateMDY } from "@/lib/dates";
 import TaskRow from "@/components/TaskRow";
 import { workstreamFromPath } from "@/lib/taskView";
 import { resolveBrandKit, brandToCssVars } from "@/lib/branding";
@@ -476,7 +476,7 @@ async function SeriesDetail({ path }: { path: string }) {
 // Human-readable preview of a staged series update for the review queue.
 function seriesPreview(p: SeriesUpdatePayload): string {
   return [
-    `Log entry for ${p.meetingTitle} (${p.date}):`,
+    `Log entry for ${p.meetingTitle} (${formatDateMDY(p.date)}):`,
     ...p.logBullets.map((b) => `- ${b}`),
     "",
     "New Current State:",

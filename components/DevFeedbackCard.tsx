@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatDateMDY, todayISO } from "@/lib/dates";
 
 // The dev feedback bucket: notes Jordan drops from anywhere via the brain's
 // /devfeedback command. Listed here so nothing gets lost; items get marked
@@ -72,7 +73,7 @@ export default function DevFeedbackCard() {
                 <div className="mt-0.5 text-2xs text-muted">
                   {i.page ?? ""}
                   {i.createdAtISO
-                    ? ` · ${new Date(i.createdAtISO).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                    ? ` · ${formatDateMDY(todayISO(new Date(i.createdAtISO)))}`
                     : ""}
                 </div>
               </div>

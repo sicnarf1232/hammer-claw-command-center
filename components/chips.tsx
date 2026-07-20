@@ -1,5 +1,6 @@
 import type { Priority, Workstream } from "@/lib/vault/types";
 import { WORKSTREAMS } from "@/lib/workstreams";
+import { formatDateShort } from "@/lib/dates";
 import { AlertIcon, ClockIcon } from "./icons";
 
 const WS_STYLES: Record<Workstream, string> = {
@@ -44,7 +45,11 @@ export function DueChip({ due, today }: { due?: string; today: string }) {
     : isToday
       ? "border-warning/30 bg-warning/10 text-warning"
       : "border-border bg-surface2 text-muted";
-  const label = overdue ? `overdue ${due}` : isToday ? "due today" : `due ${due}`;
+  const label = overdue
+    ? `overdue ${formatDateShort(due)}`
+    : isToday
+      ? "due today"
+      : `due ${formatDateShort(due)}`;
   return (
     <span className={`chip ${style}`}>
       {overdue && <AlertIcon className="h-3 w-3" />}

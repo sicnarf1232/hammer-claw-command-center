@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { AccountHub } from "@/lib/accounts";
 import { accountToEditable, type EditableContact } from "@/lib/accountEdit";
 import { customerHue, initials } from "@/lib/customerHues";
+import { formatDateShort } from "@/lib/dates";
 import { SearchIcon } from "./icons";
 import AccountNumberEditor from "./AccountNumberEditor";
 import DocumentLibrary from "./DocumentLibrary";
@@ -329,7 +330,7 @@ function TasksTab({ a, today }: { a: AccountHub; today: string }) {
               {t.due && (
                 <div className="mt-1 text-2xs tabular-nums" style={{ color: overdue ? "var(--due)" : "var(--ink-3)" }}>
                   {overdue ? "overdue " : "due "}
-                  {t.due}
+                  {formatDateShort(t.due)}
                 </div>
               )}
             </div>
@@ -378,7 +379,7 @@ function Overview({ a, today }: { a: AccountHub; today: string }) {
                           }
                         >
                           {t.overdue ? "overdue " : "due "}
-                          {t.due}
+                          {formatDateShort(t.due)}
                         </span>
                       )}
                       {t.priority && (
@@ -921,7 +922,7 @@ function MeetingRows({ a, limit }: { a: AccountHub; limit: number }) {
               className="flex-none rounded-md px-2 py-1 text-2xs font-bold tabular-nums"
               style={{ background: soft, color: hue }}
             >
-              {m.date}
+              {formatDateShort(m.date)}
             </span>
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{m.title}</span>
             {m.notePath && <span className="text-xs font-semibold text-ink3">Open →</span>}

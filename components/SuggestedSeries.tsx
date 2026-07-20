@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { initials } from "@/lib/customerHues";
+import { formatDateShort } from "@/lib/dates";
 
 export interface HubCandidateMeeting {
   date: string;
@@ -25,8 +26,8 @@ export interface HubCandidate {
   meetings: HubCandidateMeeting[];
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const monthDay = (d: string) => `${MONTHS[Number(d.slice(5, 7)) - 1] ?? ""} ${Number(d.slice(8, 10))}`;
+// Meeting/series occurrence date badges use the house short form (MMM DD).
+const monthDay = (d: string) => formatDateShort(d);
 const DENY_KEY = "deniedSeries";
 
 export default function SuggestedSeries({

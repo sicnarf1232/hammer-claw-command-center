@@ -8,7 +8,7 @@ import {
 import { personNameMatches } from "@/lib/vault/people";
 import { listAccounts } from "@/lib/accounts";
 import { buildAccountLookup, toTaskView } from "@/lib/taskView";
-import { todayISO } from "@/lib/dates";
+import { todayISO, formatDateShort } from "@/lib/dates";
 import { initials } from "@/lib/customerHues";
 import TaskRow from "@/components/TaskRow";
 import PersonClassifier from "@/components/PersonClassifier";
@@ -141,7 +141,7 @@ export default async function PersonPage({
                   >
                     <span className="font-medium text-fg">{m.title}</span>
                     <span className="ml-1 text-muted">
-                      {m.date ? `· ${m.date}` : ""}
+                      {m.date ? `· ${formatDateShort(m.date)}` : ""}
                     </span>
                   </Link>
                 ))}
@@ -174,7 +174,7 @@ function ItemRow({
             {item.text}
             {item.due && (
               <span className="ml-2 chip tabular-nums" style={{ background: "var(--due-soft)", color: "var(--due-ink)", borderColor: "transparent" }}>
-                due {item.due}
+                due {formatDateShort(item.due)}
               </span>
             )}
           </div>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDateShort } from "@/lib/dates";
 
 const CADENCES = ["Weekly", "Biweekly", "Monthly", "Ad hoc"];
 
@@ -206,7 +207,7 @@ export default function NewSeriesForm({
                         onChange={() => toggle(m.path)}
                         disabled={busy || suggesting}
                       />
-                      <span className="tabular-nums text-muted">{m.date}</span>
+                      <span className="tabular-nums text-muted">{formatDateShort(m.date)}</span>
                       <span className="truncate">{m.title}</span>
                     </label>
                   ))

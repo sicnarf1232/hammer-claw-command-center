@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDashboardData } from "@/lib/dashboard";
 import { notificationHref } from "@/lib/notifyLink";
 import { customerHue, initials } from "@/lib/customerHues";
+import { formatDateShort } from "@/lib/dates";
 import TaskRow from "@/components/TaskRow";
 import AskBar from "@/components/AskBar";
 import { InboxIcon, MeetingsIcon, ActivityIcon, AlertIcon, ClockIcon } from "@/components/icons";
@@ -40,8 +41,7 @@ function longDate(): string {
 
 function meetingDay(iso: string | null): string {
   if (!iso) return "";
-  const d = new Date(iso + "T12:00:00");
-  return new Intl.DateTimeFormat("en-US", { timeZone: DENVER, weekday: "short", month: "short", day: "numeric" }).format(d);
+  return formatDateShort(iso);
 }
 
 export default async function DashboardPage() {
