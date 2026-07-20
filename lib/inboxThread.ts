@@ -9,6 +9,7 @@ import { suggestTasksForThread, type TaskSuggestion } from "@/lib/firehose/sugge
 import { suggestDocsForThread } from "@/lib/firehose/docSuggest";
 import { suggestAccountForEmail, listDbAccounts } from "@/lib/firehose/senderSuggest";
 import { isInternal, isSelfAddress } from "@/lib/firehose/map";
+import { appTimezone } from "@/lib/dates";
 import { aiConfigured } from "@/lib/ai";
 import { formatEmailBody } from "@/lib/emailFormat";
 
@@ -405,14 +406,14 @@ function dedupe(arr: string[]): string[] {
 
 function fmt(d: Date | null): string {
   if (!d) return "";
-  // Render in Mountain Time (the vault's timezone); server runs in UTC, so
-  // without this an email shows 6 hours ahead of when it actually arrived.
+  // Render in the app timezone; the server runs in UTC, so without this an
+  // email shows hours ahead of when it actually arrived.
   return new Date(d).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "America/Denver",
+    timeZone: appTimezone(),
   });
 }

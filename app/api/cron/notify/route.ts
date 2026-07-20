@@ -4,6 +4,7 @@ import { dbConfigured } from "@/lib/db";
 import { vaultConfigured } from "@/lib/vault";
 import { getTodayTasks } from "@/lib/today";
 import { createNotification, deliverPending } from "@/lib/notify";
+import { appTimezone, isLocalRunTime, localParts } from "@/lib/dates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,19 @@ export async function GET(req: NextRequest) {
       { error: "Database not configured." },
       { status: 503 },
     );
+  }
+
+  // Runs hourly (Vercel cron is UTC-only); gate the daily digest on 7am local.
+  // `?force=1` bypasses for manual triggers.
+  const force = req.nextUrl.searchParams.get("force") === "1";
+  if (!force && !isLocalRunTime(7)) {
+    const p = localParts();
+    return NextResponse.json({
+      ok: true,
+      skipped: "Not the scheduled local time for the daily notification.",
+      localTime: `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`,
+      timezone: appTimezone(),
+    });
   }
 
   let dueCreated = false;

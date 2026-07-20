@@ -1,15 +1,11 @@
 # PUNCHLIST — things that still need Jordan
 
-Reconciled 2026-07-06 during Phase 1 (stabilize). Only genuinely-open items.
+Reconciled 2026-07-20. Only genuinely-open items.
 History lives in `docs/CHANGELOG.md` and `docs/HANDOFF-2026-07.md`.
 
 ## Needs Jordan, in priority order
 
-1. **Set `CRON_SECRET` in Vercel** (any random string; Vercel sends it as the
-   Bearer token on cron calls). Verified 2026-07-06: it is NOT set, and
-   `isAuthorizedCron` fails closed, so the two scheduled crons (morning-brief,
-   notify) have never run. One env var turns them on.
-2. **Build the "HC Calendar Push" Power Automate flow** (blocks the Build Your
+1. **Build the "HC Calendar Push" Power Automate flow** (blocks the Build Your
    Day calendar timeline). Trigger = recurrence (e.g. every 30 min) or Outlook
    event trigger. Action = Graph `GET /me/calendarView` for today's range,
    Select into `[{id,title,startISO,endISO,location}]`, HTTP POST to
@@ -17,22 +13,13 @@ History lives in `docs/CHANGELOG.md` and `docs/HANDOFF-2026-07.md`.
    header `x-hc-signature: <HC_WEBHOOK_SECRET>` and body
    `{"date":"YYYY-MM-DD","events":[...]}`. The webhook + `GET
    /api/calendar/today` are built and cache under settings `calendar:<date>`.
-3. **Pick a notification push channel.** `NOTIFY_WEBHOOK_URL` is unset, so
+2. **Pick a notification push channel.** `NOTIFY_WEBHOOK_URL` is unset, so
    notifications are in-app only (`/notifications`). Provide a Power Automate
    "push"/email-to-self flow URL to also push them out.
-4. **Vercel plan decision for sub-daily crons.** Hobby = once daily.
-   `vercel.cron-pro.json` holds the full schedule (10-min vault sync, EOD
-   recap, weekly review, Granola pull every 4h; the Granola pull is now
-   staging-only, so running it on cron is safe). Copy its `crons` array into
-   `vercel.json` after upgrading to Pro. Note: Phase 2 retires the vault sync.
-5. **Sloan sending address.** Unknown, so the app refuses to send as `sloan`
+3. **Sloan sending address.** Unknown, so the app refuses to send as `sloan`
    (`canDraftAs`). Provide the from-address to enable it. Merit sending is
    live.
-6. **Retire the Cowork granola-triage step.** The app now stages Granola
-   meetings as proposals you approve on /meetings; once you confirm that flow
-   works end to end, turn off Cowork's granola triage so two systems do not
-   both write meeting notes / index / rolling docs (one-writer rule).
-7. **Run the Phase 0 verification** (`docs/VERIFY-LIVE.md`): open
+4. **Run the Phase 0 verification** (`docs/VERIFY-LIVE.md`): open
    `/api/debug/schema`, paste the JSON back, and do the 5-minute visual pass.
    Needed before Phase 2 (DB cutover) starts.
 
@@ -46,6 +33,16 @@ History lives in `docs/CHANGELOG.md` and `docs/HANDOFF-2026-07.md`.
   the function is too big; report which you get).
 
 ## Resolved / superseded (for the record)
+
+- ~~Set `CRON_SECRET` in Vercel~~ — set 2026-07-07; verified present in
+  Production 2026-07-20.
+- ~~Vercel plan decision for sub-daily crons~~ — on Pro as of 2026-07-20. The
+  full five-job schedule is in `vercel.json` and `vercel.cron-pro.json` is
+  deleted. Schedules are now timezone-gated in-handler, not hardcoded UTC
+  offsets; see the 2026-07-20 CHANGELOG entry.
+- ~~Retire the Cowork granola-triage step~~ — Jordan paused the Cowork granola
+  artifact 2026-07-20. The app is the only Granola writer, so the 4-hourly
+  `granola-pull` cron is live.
 
 - ~~`documents.spec` manual ALTER~~ — self-provisioned by `lib/documents.ts`
   as of Phase 1 (plus `/api/debug/schema` reports it).

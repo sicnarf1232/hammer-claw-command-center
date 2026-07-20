@@ -6,7 +6,10 @@
     "app/api/quote/save/route.ts": { "memory": 1536, "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/cron/morning-brief", "schedule": "30 12 * * *" },
-    { "path": "/api/cron/notify", "schedule": "0 13 * * *" }
+    { "path": "/api/cron/morning-brief", "schedule": "30 * * * *" },
+    { "path": "/api/cron/notify", "schedule": "0 * * * *" },
+    { "path": "/api/cron/eod-recap", "schedule": "30 * * * *" },
+    { "path": "/api/cron/weekly-review", "schedule": "0 * * * *" },
+    { "path": "/api/cron/granola-pull", "schedule": "0 */4 * * *" }
   ]
 }

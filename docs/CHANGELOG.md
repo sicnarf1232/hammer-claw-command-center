@@ -2,6 +2,31 @@
 
 One line per phase boundary: what shipped and any decisions made.
 
+## Pro cron schedule + timezone-driven scheduling (2026-07-20)
+
+- **Full cron schedule is live.** The project is on Vercel Pro, so the five
+  jobs from `vercel.cron-pro.json` moved into `vercel.json`: morning-brief,
+  notify, eod-recap, weekly-review, granola-pull. `sync-vault` stays retired
+  (the Phase 2 cutover made the tasks table authoritative, so there is no
+  snapshot to refresh). `vercel.cron-pro.json` is deleted, its job is done.
+- **Schedules follow the app timezone, not a hardcoded UTC offset.** Vercel
+  cron is UTC-only with no timezone field, so the jobs now run hourly and each
+  handler gates itself on local wall-clock time via `isLocalRunTime()` in
+  `lib/dates.ts`. Because the gate resolves an IANA zone (`APP_TIMEZONE`,
+  default `America/Denver`) rather than a fixed offset, DST is handled
+  automatically and nothing drifts an hour in November. Changing
+  `APP_TIMEZONE` relocates every job. Local times: morning-brief 6:30,
+  notify 7:00, eod-recap 17:30, weekly-review Friday 16:00, granola-pull
+  every 4 hours (interval-based, ungated). Each gated route accepts
+  `?force=1` to run off-schedule for testing; the cron secret is still
+  required.
+- **Removed the last hardcoded timezone**, `lib/inboxThread.ts` now formats
+  message times with `appTimezone()` instead of a literal `America/Denver`.
+- Six new unit tests in `lib/dates.test.ts` cover the gate, including the
+  summer/winter pair that proves the DST bug is fixed. 320 tests pass.
+- Decision: granola-pull is safe to run on cron. Jordan paused the Cowork
+  granola artifact, so the app is the only writer (PUNCHLIST item 6 closed).
+
 ## Inbox hardening day (2026-07-08)
 
 - **Flow B actually sends now.** All three branches (new, forward, reply)
