@@ -1,5 +1,5 @@
 import type { Task, Priority, Account } from "@/lib/vault/types";
-import { classifyTaskType, type TaskType } from "@/lib/taskType";
+import { classifyTaskType, TASK_TYPES, type TaskType } from "@/lib/taskType";
 
 // A serializable, client-safe projection of a Task with its account resolved.
 export interface TaskView {
@@ -52,6 +52,18 @@ export function buildAccountLookup(
   return map;
 }
 
+// The task type is normally derived from the title/description (no such field
+// in the vault contract), but the /tasks inline editor lets Jordan override it
+// per task. The override rides in the existing `fields` jsonb bag under the
+// "type" key so no schema change is needed; it wins over the derived guess.
+function resolveTaskType(t: Task): TaskType {
+  const override = t.fields?.type;
+  if (override && (TASK_TYPES as readonly string[]).includes(override)) {
+    return override as TaskType;
+  }
+  return classifyTaskType(t.title, t.description);
+}
+
 export function toTaskView(
   t: Task,
   lookup?: Map<string, { slug: string; name: string }>,
@@ -71,7 +83,7 @@ export function toTaskView(
       t.sourceFile,
       typeof t.workstream === "string" ? t.workstream : undefined,
     ),
-    type: classifyTaskType(t.title, t.description),
+    type: resolveTaskType(t),
     customer: t.customer === "internal" ? "internal" : account?.name ?? customerName,
     accountSlug: account?.slug,
     description: t.description || undefined,

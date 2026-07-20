@@ -53,7 +53,7 @@ export default async function TasksPage() {
       ) : (
         <>
           {canQuickAdd ? <QuickAddTask accounts={accountNames} /> : null}
-          <TasksBoard tasks={views} today={today} meta={meta} />
+          <TasksBoard tasks={views} today={today} meta={meta} accounts={accountNames} canEdit={canQuickAdd} />
         </>
       )}
     </Page>

@@ -100,6 +100,67 @@ export async function dbCompleteTask(
   return { commitSha: "", path: sourceFile };
 }
 
+export interface UpdateTaskFieldInput {
+  sourceFile: string;
+  sourceLine: number;
+  field: "account" | "type" | "status" | "due";
+  value: string | null; // already validated/normalized by lib/taskUpdate.ts
+}
+
+// Inline edit from /tasks (dev-feedback #8): write one field straight to the
+// task row. Mirrors dbCompleteTask's origin/updatedAt handling; no vault
+// write, ever, the export renders the current DB state on demand.
+export async function dbUpdateTaskField(input: UpdateTaskFieldInput): Promise<void> {
+  const row = await findRow(input.sourceFile, input.sourceLine);
+  if (!row) {
+    throw new Error(`Task not found in DB: ${input.sourceFile}:${input.sourceLine}`);
+  }
+  const db = getDb();
+
+  if (input.field === "account") {
+    let accountId: number | null = null;
+    if (input.value) {
+      const [acc] = await db
+        .select({ id: accountsT.id })
+        .from(accountsT)
+        .where(sql`lower(${accountsT.name}) = ${input.value.toLowerCase()}`)
+        .limit(1);
+      if (!acc) throw new Error(`Unknown account: ${input.value}`);
+      accountId = acc.id;
+    }
+    await db
+      .update(tasksT)
+      .set({ customer: input.value, accountId, ...APP_EDIT, updatedAt: new Date() })
+      .where(eq(tasksT.id, row.id));
+    return;
+  }
+
+  if (input.field === "type") {
+    const fields = { ...(row.fields ?? {}) };
+    if (input.value) fields.type = input.value;
+    else delete fields.type;
+    await db
+      .update(tasksT)
+      .set({ fields, ...APP_EDIT, updatedAt: new Date() })
+      .where(eq(tasksT.id, row.id));
+    return;
+  }
+
+  if (input.field === "status") {
+    await db
+      .update(tasksT)
+      .set({ status: input.value, ...APP_EDIT, updatedAt: new Date() })
+      .where(eq(tasksT.id, row.id));
+    return;
+  }
+
+  // field === "due"
+  await db
+    .update(tasksT)
+    .set({ due: input.value, ...APP_EDIT, updatedAt: new Date() })
+    .where(eq(tasksT.id, row.id));
+}
+
 export interface CreateTaskInput {
   title: string;
   due?: string;

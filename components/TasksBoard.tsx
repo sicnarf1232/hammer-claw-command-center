@@ -12,10 +12,17 @@ export default function TasksBoard({
   tasks,
   today,
   meta = {},
+  accounts = [],
+  canEdit = false,
 }: {
   tasks: TaskView[];
   today: string;
   meta?: Record<string, TaskMeta>;
+  accounts?: string[];
+  // Inline account/type/status/due edits write straight to the DB (dev-feedback
+  // #8), so they only work once the cutover has been seeded. Same gate as
+  // QuickAddTask.
+  canEdit?: boolean;
 }) {
   const [view, setView] = useState<"grouped" | "table">("grouped");
 
@@ -43,9 +50,9 @@ export default function TasksBoard({
       </div>
 
       {view === "grouped" ? (
-        <TasksGrouped tasks={tasks} today={today} meta={meta} />
+        <TasksGrouped tasks={tasks} today={today} meta={meta} accounts={accounts} canEdit={canEdit} />
       ) : (
-        <TasksTable tasks={tasks} today={today} />
+        <TasksTable tasks={tasks} today={today} accounts={accounts} canEdit={canEdit} />
       )}
     </div>
   );

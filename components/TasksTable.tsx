@@ -4,6 +4,12 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { TaskView } from "@/lib/taskView";
 import { TASK_TYPES, type TaskType } from "@/lib/taskType";
+import {
+  TASK_STATUSES,
+  applyTaskFieldUpdate,
+  type TaskUpdateField,
+} from "@/lib/taskUpdate";
+import { formatDateShort } from "@/lib/dates";
 import { SearchIcon } from "./icons";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
@@ -38,12 +44,17 @@ function statusLabel(t: TaskView): string {
 export default function TasksTable({
   tasks,
   today,
+  accounts: allAccounts = [],
+  canEdit = false,
 }: {
   tasks: TaskView[];
   today: string;
+  accounts?: string[];
+  canEdit?: boolean;
 }) {
   const [rows, setRows] = useState(tasks);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [q, setQ] = useState("");
   const [ws, setWs] = useState("merit");
   const [account, setAccount] = useState("all");
@@ -108,6 +119,33 @@ export default function TasksTable({
       if (!res.ok) setRows((prev) => [t, ...prev]); // revert
     } catch {
       setRows((prev) => [t, ...prev]);
+    }
+  }
+
+  // Inline edit (dev-feedback #8): update one field on a task row directly in
+  // the DB. Optimistic with rollback on failure, mirroring complete() above.
+  async function updateField(t: TaskView, field: TaskUpdateField, value: string) {
+    const errKey = `${t.id}:${field}`;
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[errKey];
+      return next;
+    });
+    setRows((prev) => prev.map((r) => (r.id === t.id ? applyTaskFieldUpdate(r, field, value || null) : r)));
+    try {
+      const res = await fetch("/api/tasks/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceFile: t.sourceFile, sourceLine: t.sourceLine, field, value }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setRows((prev) => prev.map((r) => (r.id === t.id ? t : r))); // revert
+        setFieldErrors((prev) => ({ ...prev, [errKey]: data.error ?? "Could not update the task." }));
+      }
+    } catch {
+      setRows((prev) => prev.map((r) => (r.id === t.id ? t : r)));
+      setFieldErrors((prev) => ({ ...prev, [errKey]: "Network error." }));
     }
   }
 
@@ -184,6 +222,10 @@ export default function TasksTable({
                   expanded={expanded === t.id}
                   onToggle={() => setExpanded((id) => (id === t.id ? null : t.id))}
                   onComplete={() => complete(t)}
+                  canEdit={canEdit}
+                  accounts={allAccounts}
+                  onFieldUpdate={(field, value) => updateField(t, field, value)}
+                  fieldErrors={fieldErrors}
                 />
               ))
             )}
@@ -200,16 +242,28 @@ function Row({
   expanded,
   onToggle,
   onComplete,
+  canEdit,
+  accounts,
+  onFieldUpdate,
+  fieldErrors,
 }: {
   t: TaskView;
   today: string;
   expanded: boolean;
   onToggle: () => void;
   onComplete: () => void;
+  canEdit: boolean;
+  accounts: string[];
+  onFieldUpdate: (field: TaskUpdateField, value: string) => void;
+  fieldErrors: Record<string, string>;
 }) {
   const overdue = !!t.due && t.due < today;
   const dueToday = t.due === today;
   const stop = (e: React.MouseEvent) => e.stopPropagation();
+  const accountErr = fieldErrors[`${t.id}:account`];
+  const typeErr = fieldErrors[`${t.id}:type`];
+  const statusErr = fieldErrors[`${t.id}:status`];
+  const dueErr = fieldErrors[`${t.id}:due`];
   return (
     <>
       <tr
@@ -245,8 +299,25 @@ function Row({
             <div className="mt-0.5 truncate pl-4 text-2xs text-muted">{t.description}</div>
           )}
         </td>
-        <td className="py-2.5 pr-3">
-          {t.customer && t.customer !== "internal" ? (
+        <td className="py-2.5 pr-3" onClick={canEdit ? stop : undefined}>
+          {canEdit ? (
+            <>
+              <select
+                aria-label="Account"
+                value={t.customer && t.customer !== "internal" ? t.customer : ""}
+                onChange={(e) => onFieldUpdate("account", e.target.value)}
+                className="input py-1 text-xs"
+              >
+                <option value="">No account</option>
+                {accounts.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+              {accountErr && <p className="mt-0.5 text-2xs text-danger">{accountErr}</p>}
+            </>
+          ) : t.customer && t.customer !== "internal" ? (
             t.accountSlug ? (
               <Link
                 href={`/accounts?a=${t.accountSlug}`}
@@ -263,20 +334,71 @@ function Row({
             <span className="text-muted">—</span>
           )}
         </td>
-        <td className="py-2.5 pr-3">
-          <span
-            className="chip whitespace-nowrap"
-            style={{ background: `${TYPE_HUE[t.type]}1a`, color: TYPE_HUE[t.type], borderColor: "transparent" }}
-          >
-            {t.type}
-          </span>
+        <td className="py-2.5 pr-3" onClick={canEdit ? stop : undefined}>
+          {canEdit ? (
+            <>
+              <select
+                aria-label="Type"
+                value={t.type}
+                onChange={(e) => onFieldUpdate("type", e.target.value)}
+                className="input py-1 text-xs"
+                style={{ color: TYPE_HUE[t.type] }}
+              >
+                {TASK_TYPES.map((ty) => (
+                  <option key={ty} value={ty}>
+                    {ty}
+                  </option>
+                ))}
+              </select>
+              {typeErr && <p className="mt-0.5 text-2xs text-danger">{typeErr}</p>}
+            </>
+          ) : (
+            <span
+              className="chip whitespace-nowrap"
+              style={{ background: `${TYPE_HUE[t.type]}1a`, color: TYPE_HUE[t.type], borderColor: "transparent" }}
+            >
+              {t.type}
+            </span>
+          )}
         </td>
-        <td className="py-2.5 pr-3 text-fg/80">{statusLabel(t)}</td>
-        <td className="py-2.5 pr-3 tabular-nums text-muted">{t.start ?? "—"}</td>
-        <td className="py-2.5 pr-3 tabular-nums">
-          {t.due ? (
+        <td className="py-2.5 pr-3 text-fg/80" onClick={canEdit ? stop : undefined}>
+          {canEdit ? (
+            <>
+              <select
+                aria-label="Status"
+                value={(t.taskStatus ?? "open").toLowerCase()}
+                onChange={(e) => onFieldUpdate("status", e.target.value)}
+                className="input py-1 text-xs"
+              >
+                {TASK_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s[0].toUpperCase() + s.slice(1)}
+                  </option>
+                ))}
+              </select>
+              {statusErr && <p className="mt-0.5 text-2xs text-danger">{statusErr}</p>}
+            </>
+          ) : (
+            statusLabel(t)
+          )}
+        </td>
+        <td className="py-2.5 pr-3 tabular-nums text-muted">{t.start ? formatDateShort(t.start) : "—"}</td>
+        <td className="py-2.5 pr-3 tabular-nums" onClick={canEdit ? stop : undefined}>
+          {canEdit ? (
+            <>
+              <input
+                type="date"
+                aria-label="Due date"
+                value={t.due ?? ""}
+                onChange={(e) => onFieldUpdate("due", e.target.value)}
+                className="input py-1 text-xs"
+                style={{ color: overdue ? "var(--due)" : dueToday ? "var(--warm)" : undefined }}
+              />
+              {dueErr && <p className="mt-0.5 text-2xs text-danger">{dueErr}</p>}
+            </>
+          ) : t.due ? (
             <span style={{ color: overdue ? "var(--due)" : dueToday ? "var(--warm)" : "var(--ink-2)" }}>
-              {t.due}
+              {formatDateShort(t.due)}
             </span>
           ) : (
             <span className="text-muted">—</span>

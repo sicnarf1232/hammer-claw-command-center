@@ -4,6 +4,13 @@ import { useMemo, useState } from "react";
 import type { TaskView } from "@/lib/taskView";
 import type { TaskMeta, ChecklistStep } from "@/lib/taskMeta";
 import { customerHue, initials } from "@/lib/customerHues";
+import { formatDateMDY, formatDateShort, todayISO } from "@/lib/dates";
+import { TASK_TYPES } from "@/lib/taskType";
+import {
+  TASK_STATUSES,
+  applyTaskFieldUpdate,
+  type TaskUpdateField,
+} from "@/lib/taskUpdate";
 import { SearchIcon, ChevronDownIcon } from "./icons";
 
 // Grouped-by-account task view (the enhanced Tasks default). Each account group
@@ -27,7 +34,7 @@ function urgency(due: string | undefined, today: string): { color: string | null
   if (d < 0) return { color: "var(--due)", label: `${-d}d overdue` };
   if (d <= 2) return { color: "var(--warm)", label: d === 0 ? "Due today" : `${d}d left` };
   if (d <= 7) return { color: "var(--accent)", label: `${d}d left` };
-  return { color: null, label: due ?? "" };
+  return { color: null, label: due ? formatDateShort(due) : "" };
 }
 
 interface Group {
@@ -42,15 +49,20 @@ export default function TasksGrouped({
   tasks,
   today,
   meta = {},
+  accounts = [],
+  canEdit = false,
 }: {
   tasks: TaskView[];
   today: string;
   meta?: Record<string, TaskMeta>;
+  accounts?: string[];
+  canEdit?: boolean;
 }) {
   const [rows, setRows] = useState(tasks);
   const [q, setQ] = useState("");
   const [ws, setWs] = useState("merit");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const workstreams = useMemo(
     () => Array.from(new Set(rows.map((r) => r.workstream).filter(Boolean))).sort() as string[],
@@ -89,6 +101,35 @@ export default function TasksGrouped({
       if (!res.ok) setRows((prev) => [t, ...prev]);
     } catch {
       setRows((prev) => [t, ...prev]);
+    }
+  }
+
+  // Inline edit (dev-feedback #8): update one field on a task directly in the
+  // DB. Optimistic with rollback on failure, mirroring complete() above. Note
+  // reassigning the account moves the card to a different group on the next
+  // render, since groups are derived from rows.
+  async function updateField(t: TaskView, field: TaskUpdateField, value: string) {
+    const errKey = `${t.id}:${field}`;
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[errKey];
+      return next;
+    });
+    setRows((prev) => prev.map((r) => (r.id === t.id ? applyTaskFieldUpdate(r, field, value || null) : r)));
+    try {
+      const res = await fetch("/api/tasks/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceFile: t.sourceFile, sourceLine: t.sourceLine, field, value }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setRows((prev) => prev.map((r) => (r.id === t.id ? t : r)));
+        setFieldErrors((prev) => ({ ...prev, [errKey]: data.error ?? "Could not update the task." }));
+      }
+    } catch {
+      setRows((prev) => prev.map((r) => (r.id === t.id ? t : r)));
+      setFieldErrors((prev) => ({ ...prev, [errKey]: "Network error." }));
     }
   }
 
@@ -158,6 +199,10 @@ export default function TasksGrouped({
                         meta={meta[t.id]}
                         onComplete={() => complete(t)}
                         showAccount={!g.slug}
+                        canEdit={canEdit}
+                        accounts={accounts}
+                        onFieldUpdate={(field, value) => updateField(t, field, value)}
+                        fieldErrors={fieldErrors}
                       />
                     ))}
                   </div>
@@ -181,7 +226,9 @@ function isSameDay(iso: string | null, today: string): boolean {
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "Never";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Denver" });
+  // Last-customer-update is a full timestamp; convert to the app's local
+  // calendar date before handing it to the general MM/DD/YYYY formatter.
+  return formatDateMDY(todayISO(new Date(iso)));
 }
 
 function TaskCard({
@@ -190,12 +237,20 @@ function TaskCard({
   meta,
   onComplete,
   showAccount,
+  canEdit,
+  accounts,
+  onFieldUpdate,
+  fieldErrors,
 }: {
   t: TaskView;
   today: string;
   meta?: TaskMeta;
   onComplete: () => void;
   showAccount: boolean;
+  canEdit: boolean;
+  accounts: string[];
+  onFieldUpdate: (field: TaskUpdateField, value: string) => void;
+  fieldErrors: Record<string, string>;
 }) {
   const u = urgency(t.due, today);
   const hasAccount = !!t.customer && t.customer !== "internal";
@@ -354,6 +409,66 @@ function TaskCard({
 
       {open ? (
         <div className="grid gap-3 border-t border-border px-3 py-3 md:grid-cols-2">
+          {canEdit ? (
+            <div className="md:col-span-2">
+              <div className="eyebrow mb-1.5 text-[10px] text-muted">Task fields</div>
+              <div className="flex flex-wrap items-start gap-2">
+                <EditField label="Account" error={fieldErrors[`${t.id}:account`]}>
+                  <select
+                    aria-label="Account"
+                    value={t.customer && t.customer !== "internal" ? t.customer : ""}
+                    onChange={(e) => onFieldUpdate("account", e.target.value)}
+                    className="input py-1 text-xs"
+                  >
+                    <option value="">No account</option>
+                    {accounts.map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
+                  </select>
+                </EditField>
+                <EditField label="Type" error={fieldErrors[`${t.id}:type`]}>
+                  <select
+                    aria-label="Type"
+                    value={t.type}
+                    onChange={(e) => onFieldUpdate("type", e.target.value)}
+                    className="input py-1 text-xs"
+                  >
+                    {TASK_TYPES.map((ty) => (
+                      <option key={ty} value={ty}>
+                        {ty}
+                      </option>
+                    ))}
+                  </select>
+                </EditField>
+                <EditField label="Status" error={fieldErrors[`${t.id}:status`]}>
+                  <select
+                    aria-label="Status"
+                    value={(t.taskStatus ?? "open").toLowerCase()}
+                    onChange={(e) => onFieldUpdate("status", e.target.value)}
+                    className="input py-1 text-xs"
+                  >
+                    {TASK_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s[0].toUpperCase() + s.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </EditField>
+                <EditField label="Due" error={fieldErrors[`${t.id}:due`]}>
+                  <input
+                    type="date"
+                    aria-label="Due date"
+                    value={t.due ?? ""}
+                    onChange={(e) => onFieldUpdate("due", e.target.value)}
+                    className="input py-1 text-xs"
+                  />
+                </EditField>
+              </div>
+            </div>
+          ) : null}
+
           {/* Internal progress */}
           <div>
             <div className="eyebrow mb-1.5 text-[10px] text-muted">Internal progress</div>
@@ -476,6 +591,24 @@ function TaskCard({
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function EditField({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-2xs text-muted">{label}</span>
+      {children}
+      {error && <p className="text-2xs text-danger">{error}</p>}
     </div>
   );
 }
