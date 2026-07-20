@@ -311,6 +311,22 @@
   text-decoration: underline;
 }
 
+/* Ask Brain floating launcher: a slow, soft glow so the corner icon reads as
+   "the chat lives here" without pulling focus off the page. Colors use the
+   accent channel var so it tracks light/dark automatically. */
+@keyframes brain-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--c-accent) / 0.32), 0 8px 20px rgb(var(--c-accent) / 0.16);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgb(var(--c-accent) / 0), 0 8px 26px rgb(var(--c-accent) / 0.3);
+  }
+}
+.brain-launcher-pulse {
+  animation: brain-glow 3.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

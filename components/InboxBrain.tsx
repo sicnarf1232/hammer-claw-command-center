@@ -52,6 +52,31 @@ const THREAD_EVENT = "hc-thread-open";
 const SCOPE_EVENT = "hc-thread-scope";
 export const INSERT_REPLY_EVENT = "hc-insert-reply";
 
+// Main St. brand mark, theme-swapped like the nav wordmark: the ivory mark on
+// dark backgrounds, the navy mark on light ones. Used as the launcher glyph
+// so the floating button reads as "this is the Main St. chat," not a mystery
+// icon.
+function BrainMark({ className }: { className?: string }) {
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/logos/mainst-mark-light.png"
+        alt=""
+        aria-hidden
+        className={`hidden object-contain dark:block ${className ?? ""}`}
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/logos/mainst-mark-dark.png"
+        alt=""
+        aria-hidden
+        className={`block object-contain dark:hidden ${className ?? ""}`}
+      />
+    </>
+  );
+}
+
 function loadState(): BrainState {
   try {
     const raw = localStorage.getItem(STORE_KEY);
@@ -84,14 +109,17 @@ export default function InboxBrain({
   collapsible = false,
 }: {
   onUseAsReply?: (text: string) => void;
-  // The layout panel collapses to a 44px icon strip; other mounts stay fixed.
+  // The layout mount collapses to a floating bottom-right launcher icon;
+  // other mounts (e.g. an embedded panel) stay fixed open.
   collapsible?: boolean;
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [scopeAccount, setScopeAccount] = useState<string | null>(null);
   const [scopeCleared, setScopeCleared] = useState(false);
   const [state, setState] = useState<BrainState>({ history: [], context: [] });
-  const [open, setOpen] = useState(true);
+  // Closed by default: the launcher icon is the entry point, the panel opens
+  // on click or Cmd+K, not on every page load.
+  const [open, setOpen] = useState(!collapsible);
   const [input, setInput] = useState("");
   const [modelChoice, setModelChoice] = useState<"smart" | "fast">("smart");
   const [busy, setBusy] = useState(false);
@@ -108,7 +136,7 @@ export default function InboxBrain({
       setState(loadState());
       if (collapsible) {
         try {
-          setOpen(localStorage.getItem(OPEN_KEY) !== "false");
+          setOpen(localStorage.getItem(OPEN_KEY) === "true");
         } catch {}
       }
     };
@@ -135,23 +163,6 @@ export default function InboxBrain({
       window.removeEventListener(THREAD_EVENT, onThread);
       window.removeEventListener(SCOPE_EVENT, onScope);
     };
-  }, [collapsible]);
-
-  // Below 1100px the panel gives the inbox its room back automatically.
-  useEffect(() => {
-    if (!collapsible) return;
-    const check = () => {
-      if (window.innerWidth < 1100) {
-        setOpen(false);
-      } else {
-        try {
-          setOpen(localStorage.getItem(OPEN_KEY) !== "false");
-        } catch {}
-      }
-    };
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
   }, [collapsible]);
 
   // Cmd+K / Ctrl+K: open the panel and focus the ask box from anywhere.
@@ -381,38 +392,38 @@ export default function InboxBrain({
     return (
       <button
         type="button"
-        onClick={() => setOpenState(true)}
+        onClick={() => {
+          setOpenState(true);
+          setTimeout(() => inputRef.current?.focus(), 60);
+        }}
         title="Open Ask Brain"
-        aria-label="Open Ask Brain"
-        className="flex h-full min-h-0 flex-col items-center rounded-2xl border border-border bg-surface py-2.5 transition-colors hover:border-accent/40"
-        style={{ width: 44, transition: "width .22s ease" }}
+        aria-label="Open Ask Brain, the Main St. chat assistant"
+        className="brain-launcher-pulse fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-surface transition-transform hover:scale-105 active:scale-95 sm:right-6 md:bottom-6"
       >
-        <span className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-accentSoft text-accent">
-          <SparkIcon className="h-4 w-4" />
-          {state.history.length > 0 ? (
-            <span
-              className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full"
-              style={{ background: "var(--accent)" }}
-            />
-          ) : null}
-        </span>
-        <span
-          className="mt-3 text-[10px] font-bold uppercase tracking-[0.13em] text-muted"
-          style={{ writingMode: "vertical-rl" }}
-        >
-          Brain
-        </span>
-        <span className="mt-auto text-muted">
-          <ChevronLeftIcon className="h-4 w-4" />
-        </span>
+        <BrainMark className="h-8 w-8" />
+        {state.history.length > 0 ? (
+          <span
+            className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full border-2"
+            style={{ background: "var(--accent)", borderColor: "var(--surface)" }}
+            aria-hidden
+          />
+        ) : null}
       </button>
     );
   }
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col rounded-2xl border border-border bg-surface"
-      style={collapsible ? { width: 320, transition: "width .22s ease" } : undefined}
+      className={`flex min-h-0 flex-col rounded-2xl border border-border bg-surface ${
+        collapsible
+          ? "animate-fade-in fixed bottom-20 right-4 z-40 shadow-elevated sm:right-6 md:bottom-6"
+          : "h-full"
+      }`}
+      style={
+        collapsible
+          ? { width: "min(320px, calc(100vw - 2rem))", maxHeight: "min(70vh, 640px)" }
+          : undefined
+      }
     >
       <div className="shrink-0 border-b border-border px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
