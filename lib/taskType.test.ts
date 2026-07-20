@@ -25,12 +25,23 @@ describe("classifyTaskType", () => {
 });
 
 describe("matchedTaskTypeKeyword", () => {
-  it("returns the literal snippet that drove the classification", () => {
-    expect(matchedTaskTypeKeyword("Build a quote for MSS031")).toBe("quote");
-    expect(matchedTaskTypeKeyword("Approve the PO and contract terms")).toBe("PO");
+  it("returns the literal snippet for the given type", () => {
+    expect(matchedTaskTypeKeyword("Build a quote for MSS031", undefined, "Pricing/Quote")).toBe(
+      "quote",
+    );
+    expect(
+      matchedTaskTypeKeyword("Approve the PO and contract terms", undefined, "Pricing/Quote"),
+    ).toBe("PO");
   });
 
-  it("returns null for Admin/Other (nothing matched)", () => {
-    expect(matchedTaskTypeKeyword("Update my notes")).toBeNull();
+  it("returns null when the given type's rule does not match, even if another type's does", () => {
+    // Text matches PCN's rule (precedence winner) but not Pricing/Quote's.
+    expect(
+      matchedTaskTypeKeyword("Submit PCN for Dash catheter", undefined, "Pricing/Quote"),
+    ).toBeNull();
+  });
+
+  it("returns null for a type with no rule (Admin/Other)", () => {
+    expect(matchedTaskTypeKeyword("Update my notes", undefined, "Admin/Other")).toBeNull();
   });
 });

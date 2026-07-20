@@ -50,16 +50,23 @@ export function classifyTaskType(
   return "Admin/Other";
 }
 
-// Which literal snippet drove the classification (dev-feedback #11 Part B:
+// Which literal snippet justifies a SPECIFIC type (dev-feedback #11 Part B:
 // gate "Create quote" and similar suggested actions on an actual signal, and
-// show a short WHY next to them). Re-runs the same RULES list so the keyword
-// set has exactly one source of truth; returns null for Admin/Other (nothing
-// matched).
-export function matchedTaskTypeKeyword(title: string, description?: string): string | null {
+// show a short WHY next to them). Matches only that type's own rule, not
+// whichever rule wins overall precedence, so the WHY line never names a
+// keyword from a different category, e.g. a task manually retyped to
+// Pricing/Quote whose text still contains an earlier-precedence PCN or
+// Quality keyword. Returns null when this type's rule does not match (the
+// type came from a manual override with no textual signal, or the type is
+// Admin/Other, which has no rule).
+export function matchedTaskTypeKeyword(
+  title: string,
+  description: string | undefined,
+  type: TaskType,
+): string | null {
+  const rule = RULES.find((r) => r.type === type);
+  if (!rule) return null;
   const hay = `${title} ${description ?? ""}`;
-  for (const r of RULES) {
-    const m = hay.match(r.re);
-    if (m) return m[0];
-  }
-  return null;
+  const m = hay.match(rule.re);
+  return m ? m[0] : null;
 }

@@ -435,7 +435,9 @@ function TaskDetail({ t }: { t: TaskView }) {
   // Jordan's manual override, both already resolved onto t.type) says this
   // is pricing/quote work. The matched keyword becomes the WHY line.
   const quoteReasonKeyword =
-    t.type === "Pricing/Quote" ? matchedTaskTypeKeyword(t.title, t.description) : null;
+    t.type === "Pricing/Quote"
+      ? matchedTaskTypeKeyword(t.title, t.description, "Pricing/Quote")
+      : null;
   return (
     <div className="grid gap-2 text-sm">
       {t.description ? (
