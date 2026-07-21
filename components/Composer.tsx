@@ -263,11 +263,15 @@ export default function Composer({
         >
           📎 Attach files
         </button>
+        {/* sr-only, not hidden: a display:none file input does not reliably
+            open the picker when triggered by a programmatic .click() in Safari
+            on Mac. sr-only keeps it in the render tree (clipped, off-screen),
+            which clicks reliably. */}
         <input
           ref={fileRef}
           type="file"
           multiple
-          hidden
+          className="sr-only"
           onChange={(e) => onFiles(e.target.files)}
         />
         {files.length ? (

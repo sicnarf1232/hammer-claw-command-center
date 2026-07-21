@@ -696,12 +696,14 @@ export default function InboxBrain({
             placeholder={dragOver ? "Drop files to attach…" : "Ask the brain…"}
             className="input min-h-[3rem] flex-1 resize-none px-2.5 py-1.5 text-xs"
           />
+          {/* sr-only, not hidden: a display:none file input does not reliably
+              open the picker via a programmatic .click() in Safari on Mac. */}
           <input
             ref={fileRef}
             type="file"
             multiple
             accept={ATTACHMENT_ACCEPT}
-            className="hidden"
+            className="sr-only"
             onChange={(e) => {
               addFiles(e.target.files);
               e.target.value = "";

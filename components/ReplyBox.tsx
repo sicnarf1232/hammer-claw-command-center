@@ -290,7 +290,11 @@ export default function ReplyBox({
         <button type="button" onClick={() => fileRef.current?.click()} className="rounded-full border border-dashed border-line2 px-2 py-0.5 text-2xs text-muted hover:text-fg">
           + Attach file
         </button>
-        <input ref={fileRef} type="file" multiple hidden onChange={(e) => onPickFiles(e.target.files)} />
+        {/* sr-only, not hidden: a display:none file input does not reliably
+            open the picker when triggered by a programmatic .click() in Safari
+            on Mac. sr-only keeps it in the render tree (clipped, off-screen),
+            which clicks reliably. */}
+        <input ref={fileRef} type="file" multiple className="sr-only" onChange={(e) => onPickFiles(e.target.files)} />
       </div>
 
       {suggestedDocs.length ? (
