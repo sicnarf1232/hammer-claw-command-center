@@ -112,6 +112,47 @@ export async function dbSetPersonClassification(
   return { commitSha: "" };
 }
 
+// dev-feedback #17: correct a person's display name by email, with no
+// account/classification required. This is the ONLY write path for
+// people.fullName that doesn't go through account-contact creation, meant
+// for fixing a raw mailbox alias (e.g. "Mvanega3") an unmapped external
+// sender surfaced as their name. Upserts by lowercased email: updates the
+// existing row's fullName if one matches, otherwise inserts a fresh
+// "unknown"-classification row so classification/account stay editable
+// separately via PersonClassifier. personCardsForEmails matches on this same
+// email column, so every thread view picks the corrected name up on next
+// load with no change to any stored emails row.
+export async function dbSetPersonName(
+  email: string,
+  fullName: string,
+): Promise<{ id: number }> {
+  const db = getDb();
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = fullName.trim();
+  const [existing] = await db
+    .select({ id: peopleT.id })
+    .from(peopleT)
+    .where(sql`lower(${peopleT.email}) = ${cleanEmail}`)
+    .limit(1);
+  if (existing) {
+    await db
+      .update(peopleT)
+      .set({ fullName: cleanName, ...APP_EDIT, updatedAt: new Date() })
+      .where(eq(peopleT.id, existing.id));
+    return { id: existing.id };
+  }
+  const [inserted] = await db
+    .insert(peopleT)
+    .values({
+      fullName: cleanName,
+      email: cleanEmail,
+      classification: "unknown",
+      ...APP_EDIT,
+    })
+    .returning({ id: peopleT.id });
+  return { id: inserted.id };
+}
+
 export interface ReviewPerson {
   id: number;
   fullName: string;

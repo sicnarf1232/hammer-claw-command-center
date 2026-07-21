@@ -19,6 +19,7 @@ import {
 } from "@/lib/taskEmailLinks";
 import type { TaskEmailMatch } from "@/lib/taskEmailMatch";
 import { ensureEmailExtraction } from "@/lib/emailExtraction";
+import { looksLikeMailboxAlias } from "@/lib/peopleName";
 
 const JORDAN = "jordan.francis@merit.com";
 
@@ -316,9 +317,19 @@ function personRef(
 ): PersonRef {
   const card = cards.get(email);
   const fallback = fallbackName?.trim();
+  // dev-feedback #17 part 4: with no people-row card, a captured fromName
+  // that's obviously a raw mailbox alias (e.g. "Mvanega3") shouldn't win over
+  // a prettified local part just because it's non-empty. A real name (any
+  // classification, any language) is never touched: the check only fires
+  // for single-token, digit-or-alias-shaped strings. Once Jordan corrects
+  // the name via the thread's "fix name" affordance, the card branch above
+  // wins on every later load and this fallback never runs again for them.
+  const fallbackIsAlias = Boolean(fallback) && looksLikeMailboxAlias(fallback!);
   const name =
     card?.fullName ??
-    (fallback && !fallback.includes("@") ? fallback : prettyLocalPart(email));
+    (fallback && !fallback.includes("@") && !fallbackIsAlias
+      ? fallback
+      : prettyLocalPart(email));
   return {
     email,
     name,

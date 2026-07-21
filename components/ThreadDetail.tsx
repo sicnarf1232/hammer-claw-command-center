@@ -705,6 +705,7 @@ export default function ThreadDetail({
               isReplyTarget={replyTarget?.id === m.id}
               onReply={() => openComposer(m.id)}
               defaultExpanded={i === 0}
+              onNameSaved={load}
             />
           </div>
         ))}
@@ -805,9 +806,54 @@ function ParticipantStrip({
   );
 }
 
-// Name-first person chip with a hover contact card.
-function PersonChip({ p, muted = false }: { p: PersonRef; muted?: boolean }) {
+// Name-first person chip with a hover contact card. Any address (mapped to a
+// known person or not) can have its display name corrected from here
+// (dev-feedback #17): the wrong name usually shows up on an unmapped
+// external sender, so this can't require an account or a known person first.
+function PersonChip({
+  p,
+  muted = false,
+  onNameSaved,
+}: {
+  p: PersonRef;
+  muted?: boolean;
+  onNameSaved?: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [nameInput, setNameInput] = useState(p.name);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const canEdit = p.email.includes("@");
+
+  function startEdit() {
+    setNameInput(p.name);
+    setErr(null);
+    setEditing(true);
+  }
+
+  async function saveName() {
+    const fullName = nameInput.trim();
+    if (!fullName || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/people/set-name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: p.email, fullName }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error || `Failed (${res.status}).`);
+      setEditing(false);
+      onNameSaved?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <span className="group/person relative inline-block" onMouseLeave={() => setOpen(false)}>
       <button
@@ -820,29 +866,79 @@ function PersonChip({ p, muted = false }: { p: PersonRef; muted?: boolean }) {
         {p.name}
       </button>
       <span
-        className={`absolute left-0 top-full z-30 mt-1 w-60 rounded-xl border border-border bg-surface p-3 shadow-elevated ${
+        className={`absolute left-0 top-full z-30 mt-1 w-64 rounded-xl border border-border bg-surface p-3 shadow-elevated ${
           open ? "block" : "hidden group-hover/person:block"
         }`}
       >
-        <span className="block text-sm font-semibold text-fg">{p.name}</span>
-        {p.title ? <span className="mt-0.5 block text-xs text-muted">{p.title}</span> : null}
-        <span className="mt-1 block break-all font-mono text-2xs text-fg/70">{p.email}</span>
-        <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span
-            className={`rounded-full px-1.5 py-0.5 text-2xs font-semibold ${
-              p.internal ? "bg-accentSoft text-accent2" : "text-warm"
-            }`}
-            style={p.internal ? undefined : { background: "var(--warm-soft, var(--surface-2))" }}
-          >
-            {p.internal ? "Merit" : p.accountName ?? "External"}
+        {editing ? (
+          <span className="block">
+            <span className="block text-2xs font-semibold text-muted">Correct display name</span>
+            <input
+              autoFocus
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveName();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              disabled={busy}
+              className="input mt-1 w-full py-1 text-xs"
+            />
+            <span className="mt-1.5 flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={saveName}
+                disabled={busy || !nameInput.trim()}
+                className="btn btn-primary px-2.5 py-1 text-2xs"
+              >
+                {busy ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                disabled={busy}
+                className="btn btn-ghost px-2.5 py-1 text-2xs"
+              >
+                Cancel
+              </button>
+            </span>
+            {err && <span className="mt-1 block text-2xs text-danger">{err}</span>}
           </span>
-          <a
-            href={`/people/${encodeURIComponent(p.name)}`}
-            className="text-2xs text-accent hover:underline"
-          >
-            View profile →
-          </a>
-        </span>
+        ) : (
+          <>
+            <span className="flex items-start justify-between gap-2">
+              <span className="block text-sm font-semibold text-fg">{p.name}</span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={startEdit}
+                  title="Not the right name? Fix it."
+                  className="shrink-0 text-2xs text-accent hover:underline"
+                >
+                  fix name
+                </button>
+              ) : null}
+            </span>
+            {p.title ? <span className="mt-0.5 block text-xs text-muted">{p.title}</span> : null}
+            <span className="mt-1 block break-all font-mono text-2xs text-fg/70">{p.email}</span>
+            <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-2xs font-semibold ${
+                  p.internal ? "bg-accentSoft text-accent2" : "text-warm"
+                }`}
+                style={p.internal ? undefined : { background: "var(--warm-soft, var(--surface-2))" }}
+              >
+                {p.internal ? "Merit" : p.accountName ?? "External"}
+              </span>
+              <a
+                href={`/people/${encodeURIComponent(p.name)}`}
+                className="text-2xs text-accent hover:underline"
+              >
+                View profile →
+              </a>
+            </span>
+          </>
+        )}
       </span>
     </span>
   );
@@ -1111,11 +1207,13 @@ function DetailMessageCard({
   isReplyTarget,
   onReply,
   defaultExpanded = false,
+  onNameSaved,
 }: {
   m: ThreadMsg;
   isReplyTarget: boolean;
   onReply: () => void;
   defaultExpanded?: boolean;
+  onNameSaved?: () => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [showQuoted, setShowQuoted] = useState(false);
@@ -1134,7 +1232,7 @@ function DetailMessageCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <PersonChip p={m.from} />
+            <PersonChip p={m.from} onNameSaved={onNameSaved} />
             <span
               className={`shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold ${
                 m.internal ? "bg-accentSoft text-accent2" : "text-warm"
@@ -1155,7 +1253,7 @@ function DetailMessageCard({
               <span>to</span>
               {shownRecipients.map((r, i) => (
                 <span key={r.email} className="inline-flex items-center">
-                  <PersonChip p={r} muted />
+                  <PersonChip p={r} muted onNameSaved={onNameSaved} />
                   {i < shownRecipients.length - 1 ? <span>,</span> : null}
                 </span>
               ))}
