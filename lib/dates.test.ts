@@ -5,6 +5,7 @@ import {
   isLocalRunTime,
   formatDateMDY,
   formatDateShort,
+  formatRelativeTime,
 } from "./dates";
 
 describe("needsDueDate", () => {
@@ -132,5 +133,39 @@ describe("formatDateShort", () => {
     expect(formatDateShort("not-a-date")).toBe("");
     expect(formatDateShort("2026-00-10")).toBe(""); // month out of range
     expect(formatDateShort(undefined as unknown as string)).toBe("");
+  });
+});
+
+describe("formatRelativeTime", () => {
+  const now = new Date("2026-07-20T12:00:00Z");
+
+  it("reads under a minute as just now", () => {
+    expect(formatRelativeTime(new Date("2026-07-20T11:59:45Z"), now)).toBe("just now");
+  });
+
+  it("reads minutes ago", () => {
+    expect(formatRelativeTime(new Date("2026-07-20T11:45:00Z"), now)).toBe("15m ago");
+  });
+
+  it("reads hours ago", () => {
+    expect(formatRelativeTime(new Date("2026-07-20T08:00:00Z"), now)).toBe("4h ago");
+  });
+
+  it("reads exactly one day as yesterday", () => {
+    expect(formatRelativeTime(new Date("2026-07-19T12:00:00Z"), now)).toBe("yesterday");
+  });
+
+  it("reads several days ago", () => {
+    expect(formatRelativeTime(new Date("2026-07-15T12:00:00Z"), now)).toBe("5d ago");
+  });
+
+  it("falls back to MM/DD/YYYY beyond about a month", () => {
+    expect(formatRelativeTime(new Date("2026-05-01T12:00:00Z"), now)).toBe("05/01/2026");
+  });
+
+  it("returns an empty string for invalid or missing input", () => {
+    expect(formatRelativeTime(null, now)).toBe("");
+    expect(formatRelativeTime(undefined, now)).toBe("");
+    expect(formatRelativeTime("not-a-date", now)).toBe("");
   });
 });

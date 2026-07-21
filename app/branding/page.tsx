@@ -15,7 +15,7 @@ export const revalidate = 0;
 export default async function BrandingPage() {
   if (!dbConfigured()) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-5xl">
         <h1 className="mb-3 display-title text-2xl text-fg">Branding</h1>
         <SetupNotice missing={["POSTGRES_URL"]} />
         <p className="mt-3 text-sm text-muted">
@@ -40,7 +40,7 @@ export default async function BrandingPage() {
 
   if (tableMissing) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-5xl">
         <h1 className="mb-3 display-title text-2xl text-fg">Branding</h1>
         <div
           className="card p-5 text-sm"

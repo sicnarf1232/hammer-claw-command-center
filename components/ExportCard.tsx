@@ -39,7 +39,7 @@ export default function ExportCard() {
   }
 
   return (
-    <div className="card mt-6 p-4">
+    <div className="card p-4">
       <div className="eyebrow text-muted">Vault export</div>
       <p className="mt-1 text-sm text-muted">
         Render the app database back into vault markdown and commit the

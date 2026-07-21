@@ -216,15 +216,11 @@ export default async function DashboardPage() {
           <div id="brief">
             <RailHeader title="Latest brief" icon={<ClockIcon className="h-3.5 w-3.5" />} />
             {data.brief ? (
-              <details className="rounded-xl border border-border bg-surface px-3 py-2">
-                <summary className="cursor-pointer list-none text-sm font-semibold text-fg">
-                  {data.brief.title}
-                  <span className="ml-1.5 text-2xs font-normal text-muted">expand</span>
-                </summary>
-                <div className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap border-t border-border pt-2 text-xs leading-relaxed text-fg/80">
-                  {data.brief.body || "This brief has no body."}
-                </div>
-              </details>
+              <BriefCard
+                title={data.brief.title}
+                structured={parseStructuredBrief(data.brief.meta)}
+                fallbackBody={data.brief.body}
+              />
             ) : (
               <p className="px-1 text-xs text-muted">
                 No brief yet. The morning cron writes one here each day.
@@ -288,4 +284,83 @@ function StatTile({ label, value, tone, href }: { label: string; value: number; 
 
 function EmptyCard({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl border border-border bg-surface px-4 py-6 text-center text-sm text-muted">{children}</div>;
+}
+
+interface ParsedBriefSection {
+  heading: string;
+  items: string[];
+}
+
+// Read the structured brief off the notification's jsonb meta (dev-feedback
+// #20 Part A). Returns null for anything malformed or absent, e.g. a brief
+// notification written before this shipped, so the card can fall back to the
+// old plain-body rendering for those without erroring.
+function parseStructuredBrief(meta: unknown): { headline: string; sections: ParsedBriefSection[] } | null {
+  if (!meta || typeof meta !== "object") return null;
+  const structured = (meta as Record<string, unknown>).structured;
+  if (!structured || typeof structured !== "object") return null;
+  const s = structured as Record<string, unknown>;
+  const sections: ParsedBriefSection[] = Array.isArray(s.sections)
+    ? s.sections
+        .map((sec) => {
+          const o = (sec && typeof sec === "object" ? sec : {}) as Record<string, unknown>;
+          const heading = typeof o.heading === "string" ? o.heading : "";
+          const items = Array.isArray(o.items)
+            ? o.items.filter((i): i is string => typeof i === "string" && i.length > 0)
+            : [];
+          return { heading, items };
+        })
+        .filter((sec) => sec.heading && sec.items.length > 0)
+    : [];
+  if (sections.length === 0) return null;
+  return { headline: typeof s.headline === "string" ? s.headline : "", sections };
+}
+
+// The morning/EOD/weekly brief, now rendered as real headings and lists
+// (dev-feedback #20 Part A) instead of a markdown string dumped into a
+// whitespace-pre-wrap <div>. Falls back to the plain body for any brief
+// notification written before the structured format shipped.
+function BriefCard({
+  title,
+  structured,
+  fallbackBody,
+}: {
+  title: string;
+  structured: { headline: string; sections: ParsedBriefSection[] } | null;
+  fallbackBody: string | null;
+}) {
+  return (
+    <details className="rounded-xl border border-border bg-surface px-3 py-2.5">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold text-fg">
+        <span className="truncate">{title}</span>
+        <span className="shrink-0 text-2xs font-normal text-muted">expand</span>
+      </summary>
+      <div className="mt-2.5 max-h-96 space-y-3 overflow-y-auto border-t border-border pt-2.5">
+        {structured ? (
+          <>
+            {structured.headline ? (
+              <p className="text-xs font-semibold text-fg/90">{structured.headline}</p>
+            ) : null}
+            {structured.sections.map((s) => (
+              <div key={s.heading}>
+                <div className="text-2xs font-bold uppercase tracking-wide text-accent">{s.heading}</div>
+                <ul className="mt-1 space-y-1">
+                  {s.items.map((item, i) => (
+                    <li key={i} className="flex gap-1.5 text-xs leading-relaxed text-fg/80">
+                      <span className="text-muted">-</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </>
+        ) : (
+          <div className="whitespace-pre-wrap text-xs leading-relaxed text-fg/80">
+            {fallbackBody || "This brief has no body."}
+          </div>
+        )}
+      </div>
+    </details>
+  );
 }

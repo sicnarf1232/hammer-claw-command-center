@@ -1385,3 +1385,87 @@ export async function draftTaskFromEmail(
     modelUsed: res.model,
   };
 }
+
+// ---- Structured brief generation (dev-feedback #20 Part A). The morning/EOD/
+// weekly briefs used to come back from generateBrief() above as one markdown
+// string, which the dashboard then dumped into a <div> as raw text (the "looks
+// like the Obsidian vault" complaint). This is the same job, but the output is
+// clean structured JSON, a one-line headline plus a handful of short sections,
+// so the UI can render real headings/chips/lists instead of a wall of prose.
+// Added as a new export rather than changing generateBrief itself, since other
+// concurrent work may also be touching this file.
+
+export interface StructuredBriefSection {
+  heading: string;
+  items: string[];
+}
+
+export interface StructuredBrief {
+  headline: string;
+  sections: StructuredBriefSection[];
+  modelUsed: string;
+}
+
+export async function generateStructuredBrief(args: {
+  kind: "morning" | "eod" | "weekly";
+  context: string;
+}): Promise<StructuredBrief> {
+  const labels = {
+    morning: "morning brief",
+    eod: "end-of-day recap",
+    weekly: "weekly review",
+  } as const;
+
+  const system = [
+    `You write Jordan's ${labels[args.kind]} as structured JSON, not prose.`,
+    "House style: never use an em dash (use commas, colons, or periods). Be concise, scannable, and action-oriented.",
+    "Do not invent tasks, meetings, emails, or facts. Work only from the context provided below. If a section would be empty, leave it out rather than padding it.",
+    "Output ONLY JSON, no markdown, no commentary. Schema:",
+    '{"headline":"3 due today, 1 flagged email, 2 meetings","sections":[{"heading":"Due today","items":["Send drawing for PN 1234 to Stryker (due today)"]}]}',
+    "Field rules:",
+    "- headline: one short sentence, a same-day count summary (what is due, what needs attention, what meetings), grounded only in the context's own counts. Never invent a count.",
+    "- sections: 2 to 5 sections, each a short heading (2 to 4 words, e.g. 'Due today', 'Coming up', 'Meetings today', 'Worth knowing') with 1 to 6 short items (under 20 words each, plain text, no markdown bullets or bold).",
+    "- Order sections by urgency: overdue or due-today work first, then anything else time-sensitive, then meetings, then anything else worth knowing.",
+  ].join("\n");
+
+  const res = await client().messages.create({
+    model: model(),
+    max_tokens: 1200,
+    system,
+    messages: [
+      {
+        role: "user",
+        content: `Here is today's context from the vault:\n\n${args.context}\n\nReturn the ${labels[args.kind]} as JSON now.`,
+      },
+    ],
+  });
+
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+
+  const raw = parseJsonObject(text);
+  const sectionsRaw = Array.isArray(raw.sections) ? raw.sections : [];
+  const sections: StructuredBriefSection[] = sectionsRaw
+    .map((s: unknown) => {
+      const o = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
+      const heading = noEmDash(String(o.heading ?? "").trim()).slice(0, 60);
+      const items = Array.isArray(o.items)
+        ? o.items
+            .map((i) => noEmDash(typeof i === "string" ? i.trim() : ""))
+            .filter((i): i is string => i.length > 0)
+            .slice(0, 8)
+        : [];
+      return { heading, items };
+    })
+    .filter((s) => s.heading && s.items.length > 0)
+    .slice(0, 6);
+
+  return {
+    headline: noEmDash(String(raw.headline ?? "").trim()).slice(0, 200),
+    sections,
+    modelUsed: res.model,
+  };
+}

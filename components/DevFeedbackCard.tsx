@@ -46,7 +46,7 @@ export default function DevFeedbackCard() {
   const done = items.filter((i) => i.status === "done");
 
   return (
-    <section className="card mt-6 p-4">
+    <section className="card p-4">
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="eyebrow text-muted">Dev feedback bucket</div>

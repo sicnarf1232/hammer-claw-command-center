@@ -10,8 +10,10 @@ export const revalidate = 0;
 export default async function SettingsPage() {
   const profile = (await getVoiceProfile()) ?? EMPTY_VOICE;
 
+  const exportEnabled = await cutoverActive().catch(() => false);
+
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-5xl">
       <header className="mb-5">
         <span className="eyebrow text-accent">Settings</span>
         <h1 className="display-title mt-1 text-2xl">Your email voice</h1>
@@ -19,9 +21,15 @@ export default async function SettingsPage() {
           Teach the app how you sound. Every AI draft, reply, compose, and forward uses this.
         </p>
       </header>
-      <VoiceSettings initial={profile} />
-      {(await cutoverActive().catch(() => false)) ? <ExportCard /> : null}
-      <DevFeedbackCard />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div>
+          <VoiceSettings initial={profile} />
+        </div>
+        <div className="space-y-6">
+          {exportEnabled ? <ExportCard /> : null}
+          <DevFeedbackCard />
+        </div>
+      </div>
     </div>
   );
 }

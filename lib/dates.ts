@@ -126,3 +126,29 @@ export function formatDateShort(iso: string): string {
   const month = SHORT_MONTHS[p.monthNum - 1];
   return `${month} ${p.day}`;
 }
+
+// Relative timestamp for compact feeds (notification bell dropdown, activity
+// rows): "just now" / "5m ago" / "3h ago" / "yesterday" / "5d ago". Beyond
+// about a month it falls back to the house MM/DD/YYYY format rather than
+// reading "47d ago" forever. Pure: takes a Date/instant, never touches the
+// clock except via the optional `now` (defaults to real now for callers,
+// injectable for tests).
+export function formatRelativeTime(
+  input: string | number | Date | null | undefined,
+  now: Date = new Date(),
+): string {
+  if (input == null) return "";
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return "";
+  const ms = now.getTime() - d.getTime();
+  if (ms < 0) return formatDateMDY(d.toLocaleDateString("en-CA"));
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days}d ago`;
+  return formatDateMDY(d.toLocaleDateString("en-CA"));
+}
