@@ -12,10 +12,15 @@ import {
 import { formatDateShort } from "@/lib/dates";
 import { SearchIcon } from "./icons";
 import { TaskLinkedEmails, TaskLinkedMeetings } from "./TaskEmailLink";
+import TaskUpdateLog from "./TaskUpdateLog";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
 // columns are Task / Account / Type / Status / Start / Due. Default scope is
 // Merit OEM (others behind the workstream filter). Replaces the old grouped list.
+//
+// dev-feedback #16 Part B: visual pass on the row/complete interaction and a
+// full "task page" treatment for the expanded detail (Part A's update log
+// lives there, as the centerpiece).
 
 type SortKey = "title" | "account" | "type" | "status" | "start" | "due";
 type SortDir = "asc" | "desc";
@@ -42,6 +47,10 @@ function statusLabel(t: TaskView): string {
   return "Open";
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function TasksTable({
   tasks,
   today,
@@ -56,6 +65,12 @@ export default function TasksTable({
   const [rows, setRows] = useState(tasks);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Completion is a two-beat transition, not an instant filter: the row
+  // shows its checkmark + strikethrough first (checkingIds), then fades and
+  // collapses out (fadingIds), so finishing a task reads as a small reward
+  // instead of the row just vanishing. Pure CSS transitions, no new deps.
+  const [checkingIds, setCheckingIds] = useState<Set<string>>(new Set());
+  const [fadingIds, setFadingIds] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
   const [ws, setWs] = useState("merit");
   const [account, setAccount] = useState("all");
@@ -110,17 +125,32 @@ export default function TasksTable({
   }
 
   async function complete(t: TaskView) {
-    setRows((prev) => prev.filter((x) => x.id !== t.id)); // optimistic
-    try {
-      const res = await fetch("/api/tasks/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceFile: t.sourceFile, sourceLine: t.sourceLine, done: true }),
-      });
-      if (!res.ok) setRows((prev) => [t, ...prev]); // revert
-    } catch {
-      setRows((prev) => [t, ...prev]);
-    }
+    setCheckingIds((prev) => new Set(prev).add(t.id));
+    const req = fetch("/api/tasks/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceFile: t.sourceFile, sourceLine: t.sourceLine, done: true }),
+    }).catch(() => null);
+
+    await sleep(200); // let the checkmark + strikethrough register first
+    setFadingIds((prev) => new Set(prev).add(t.id));
+    await sleep(300); // then fade/collapse before it actually leaves the list
+
+    setRows((prev) => prev.filter((x) => x.id !== t.id));
+    if (expanded === t.id) setExpanded(null);
+    setCheckingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(t.id);
+      return next;
+    });
+    setFadingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(t.id);
+      return next;
+    });
+
+    const res = await req;
+    if (!res || !res.ok) setRows((prev) => [t, ...prev]); // revert
   }
 
   // Inline edit (dev-feedback #8): update one field on a task row directly in
@@ -223,6 +253,8 @@ export default function TasksTable({
                   expanded={expanded === t.id}
                   onToggle={() => setExpanded((id) => (id === t.id ? null : t.id))}
                   onComplete={() => complete(t)}
+                  checking={checkingIds.has(t.id)}
+                  fading={fadingIds.has(t.id)}
                   canEdit={canEdit}
                   accounts={allAccounts}
                   onFieldUpdate={(field, value) => updateField(t, field, value)}
@@ -243,6 +275,8 @@ function Row({
   expanded,
   onToggle,
   onComplete,
+  checking,
+  fading,
   canEdit,
   accounts,
   onFieldUpdate,
@@ -253,6 +287,8 @@ function Row({
   expanded: boolean;
   onToggle: () => void;
   onComplete: () => void;
+  checking: boolean;
+  fading: boolean;
   canEdit: boolean;
   accounts: string[];
   onFieldUpdate: (field: TaskUpdateField, value: string) => void;
@@ -265,42 +301,50 @@ function Row({
   const typeErr = fieldErrors[`${t.id}:type`];
   const statusErr = fieldErrors[`${t.id}:status`];
   const dueErr = fieldErrors[`${t.id}:due`];
+  const settling = checking || fading;
   return (
     <>
       <tr
-        onClick={onToggle}
-        className="cursor-pointer border-b align-top transition-colors hover:bg-surface2"
+        onClick={settling ? undefined : onToggle}
+        className={`${settling ? "" : "cursor-pointer"} border-b align-top transition-[opacity,transform] duration-300 ease-out hover:bg-surface2 ${fading ? "-translate-y-1 opacity-0" : "opacity-100"}`}
         style={{ borderColor: "var(--line)" }}
       >
-        <td className="py-2.5 pl-3 pr-1">
+        <td className="py-3 pl-3 pr-1">
           <button
             type="button"
             onClick={(e) => {
               stop(e);
-              onComplete();
+              if (!settling) onComplete();
             }}
             aria-label="Complete task"
-            className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-fg/35 text-transparent transition-colors hover:border-success hover:text-success"
+            disabled={settling}
+            className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 text-[10px] transition-colors duration-200 ${
+              checking
+                ? "border-success bg-success text-white"
+                : "border-fg/35 text-transparent hover:border-success hover:text-success"
+            }`}
             title="Mark done"
           >
             ✓
           </button>
         </td>
-        <td className="max-w-[420px] py-2.5 pr-3">
+        <td className="max-w-[420px] py-3 pr-3">
           <div className="flex items-center gap-1.5 text-fg">
             <span
-              className="text-ink3 transition-transform"
+              className="text-muted transition-transform"
               style={{ transform: expanded ? "rotate(90deg)" : "none" }}
             >
               ›
             </span>
-            <span>{cleanTitle(t.title)}</span>
+            <span className={`transition-colors duration-200 ${checking ? "text-muted line-through" : ""}`}>
+              {cleanTitle(t.title)}
+            </span>
           </div>
           {!expanded && t.description && (
             <div className="mt-0.5 truncate pl-4 text-2xs text-muted">{t.description}</div>
           )}
         </td>
-        <td className="py-2.5 pr-3" onClick={canEdit ? stop : undefined}>
+        <td className="py-3 pr-3" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
             <>
               <select
@@ -335,7 +379,7 @@ function Row({
             <span className="text-muted">—</span>
           )}
         </td>
-        <td className="py-2.5 pr-3" onClick={canEdit ? stop : undefined}>
+        <td className="py-3 pr-3" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
             <>
               <select
@@ -362,7 +406,7 @@ function Row({
             </span>
           )}
         </td>
-        <td className="py-2.5 pr-3 text-fg/80" onClick={canEdit ? stop : undefined}>
+        <td className="py-3 pr-3 text-fg/80" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
             <>
               <select
@@ -383,8 +427,8 @@ function Row({
             statusLabel(t)
           )}
         </td>
-        <td className="py-2.5 pr-3 tabular-nums text-muted">{t.start ? formatDateShort(t.start) : "—"}</td>
-        <td className="py-2.5 pr-3 tabular-nums" onClick={canEdit ? stop : undefined}>
+        <td className="py-3 pr-3 tabular-nums text-muted">{t.start ? formatDateShort(t.start) : "—"}</td>
+        <td className="py-3 pr-3 tabular-nums" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
             <>
               <input
@@ -409,7 +453,7 @@ function Row({
       {expanded && (
         <tr className="border-b" style={{ borderColor: "var(--line)", background: "var(--surface-2)" }}>
           <td />
-          <td colSpan={6} className="py-3 pr-4">
+          <td colSpan={6} className="px-3 py-4">
             <TaskDetail t={t} />
           </td>
         </tr>
@@ -429,7 +473,15 @@ function quoteHref(t: TaskView): string {
   return `/quote?${params.toString()}`;
 }
 
+// The expanded row: a proper "task page," not a cramped popover
+// (dev-feedback #16 Part B). A left accent bar in the task's own type color
+// carries the type identity through from the collapsed chip; two columns
+// separate "what this is" from "what's happening on it," with the update
+// log (Part A) as the visual centerpiece of the right column.
 function TaskDetail({ t }: { t: TaskView }) {
+  const [refreshToken, setRefreshToken] = useState(0);
+  const bumpRefresh = () => setRefreshToken((x) => x + 1);
+
   // Gate "Create quote" on an actual signal (dev-feedback #11 Part B) instead
   // of always showing it: only when the task's own type classification (or
   // Jordan's manual override, both already resolved onto t.type) says this
@@ -438,50 +490,72 @@ function TaskDetail({ t }: { t: TaskView }) {
     t.type === "Pricing/Quote"
       ? matchedTaskTypeKeyword(t.title, t.description, "Pricing/Quote")
       : null;
+  const hue = TYPE_HUE[t.type];
+
   return (
-    <div className="grid gap-2 text-sm">
-      {t.description ? (
-        <p className="whitespace-pre-wrap text-fg/90">{t.description}</p>
-      ) : (
-        <p className="text-muted">No additional detail captured for this task.</p>
-      )}
-      {t.type === "Pricing/Quote" && (
-        <div className="pt-1">
-          <Link
-            href={quoteHref(t)}
-            className="btn-outline inline-flex items-center gap-1.5 text-xs"
-            style={{ borderColor: TYPE_HUE["Pricing/Quote"], color: TYPE_HUE["Pricing/Quote"] }}
-          >
-            Create quote →
-          </Link>
-          <p className="mt-1 text-2xs text-muted">
-            {quoteReasonKeyword
-              ? `Suggested because this task mentions "${quoteReasonKeyword.toLowerCase()}".`
-              : "Suggested because this task is typed as Pricing/Quote."}
-          </p>
+    <div
+      className="overflow-hidden rounded-2xl border bg-surface animate-fade-in"
+      style={{ borderColor: "var(--line)", borderLeft: `3px solid ${hue}` }}
+    >
+      <div className="grid gap-6 p-4 sm:p-5 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        {/* Left: what this task is */}
+        <div className="min-w-0">
+          <div className="eyebrow text-muted">Description</div>
+          {t.description ? (
+            <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-fg/90">{t.description}</p>
+          ) : (
+            <p className="mt-1.5 text-sm text-muted">No additional detail captured for this task.</p>
+          )}
+          {t.notes && (
+            <p className="mt-2.5 whitespace-pre-wrap text-xs leading-relaxed text-muted">
+              <span className="font-semibold text-fg/70">Notes: </span>
+              {t.notes}
+            </p>
+          )}
+
+          {t.type === "Pricing/Quote" && (
+            <div className="mt-3.5">
+              <Link
+                href={quoteHref(t)}
+                className="btn-outline inline-flex items-center gap-1.5 text-xs"
+                style={{ borderColor: hue, color: hue }}
+              >
+                Create quote →
+              </Link>
+              <p className="mt-1 text-2xs text-muted">
+                {quoteReasonKeyword
+                  ? `Suggested because this task mentions "${quoteReasonKeyword.toLowerCase()}".`
+                  : "Suggested because this task is typed as Pricing/Quote."}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-line2 pt-3.5">
+            {t.priority && (
+              <span className="chip" style={{ borderColor: "var(--line-2)" }}>priority: {t.priority}</span>
+            )}
+            {t.workstream && (
+              <span className="chip" style={{ borderColor: "var(--line-2)" }}>{t.workstream}</span>
+            )}
+            {t.thread && (
+              <span className="chip" style={{ borderColor: "var(--line-2)" }}>thread: {t.thread}</span>
+            )}
+            <span className="chip font-mono text-2xs" style={{ borderColor: "var(--line-2)" }}>
+              {t.sourceFile.split("/").pop()}
+            </span>
+          </div>
         </div>
-      )}
-      <TaskLinkedEmails sourceFile={t.sourceFile} sourceLine={t.sourceLine} />
-      <TaskLinkedMeetings sourceFile={t.sourceFile} sourceLine={t.sourceLine} />
-      {t.notes && (
-        <p className="whitespace-pre-wrap text-xs text-muted">
-          <span className="font-semibold text-fg/70">Notes: </span>
-          {t.notes}
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-        {t.priority && (
-          <span className="chip" style={{ borderColor: "var(--line-2)" }}>priority: {t.priority}</span>
-        )}
-        {t.workstream && (
-          <span className="chip" style={{ borderColor: "var(--line-2)" }}>{t.workstream}</span>
-        )}
-        {t.thread && (
-          <span className="chip" style={{ borderColor: "var(--line-2)" }}>thread: {t.thread}</span>
-        )}
-        <span className="chip font-mono text-2xs" style={{ borderColor: "var(--line-2)" }}>
-          {t.sourceFile.split("/").pop()}
-        </span>
+
+        {/* Right: what's happening on it (the update log is the centerpiece) */}
+        <div className="min-w-0 border-t border-line2 pt-4 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+          <div className="eyebrow mb-2 text-muted">Update log</div>
+          <TaskUpdateLog sourceFile={t.sourceFile} sourceLine={t.sourceLine} refreshToken={refreshToken} />
+
+          <div className="mt-4 grid gap-2.5 border-t border-line2 pt-3.5">
+            <TaskLinkedEmails sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
+            <TaskLinkedMeetings sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
+          </div>
+        </div>
       </div>
     </div>
   );

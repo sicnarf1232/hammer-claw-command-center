@@ -14,6 +14,7 @@ import {
   type EmailMatch,
 } from "@/lib/taskEmailMatch";
 import { getCachedEmailExtractions } from "@/lib/emailExtraction";
+import { addTaskUpdateForTaskId, formatEmailLinkedText } from "@/lib/taskUpdates";
 
 export const DB_TASK_FILE = "db:tasks";
 
@@ -95,6 +96,32 @@ export async function confirmTaskEmailLinks(
         target: [taskEmailsT.taskId, taskEmailsT.emailId],
         set: { aiGenerated: input.aiGenerated, confirmedBy: "jordan" },
       });
+    // Task update log (dev-feedback #16 Part A): a confirmed link becomes a
+    // visible, timestamped entry in the task's own story, not just a chip.
+    // Best-effort so a task_updates hiccup never undoes the link that just
+    // succeeded above.
+    try {
+      const emailRows = await db
+        .select({
+          id: emailsT.id,
+          subject: emailsT.subject,
+          fromName: emailsT.fromName,
+          fromEmail: emailsT.fromEmail,
+          threadId: emailsT.threadId,
+        })
+        .from(emailsT)
+        .where(inArray(emailsT.id, ids));
+      for (const e of emailRows) {
+        await addTaskUpdateForTaskId(
+          rowId,
+          "email-linked",
+          formatEmailLinkedText(e.subject, e.fromName, e.fromEmail),
+          e.threadId ? `t:${e.threadId}` : `m:${e.id}`,
+        );
+      }
+    } catch {
+      /* logging the link is best-effort; the link itself is already written */
+    }
   }
   return { taskDbId: rowId };
 }

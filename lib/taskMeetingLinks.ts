@@ -20,6 +20,7 @@ import {
 } from "@/lib/taskMeetingMatch";
 import type { MatchableTask } from "@/lib/taskEmailMatch";
 import { DB_TASK_FILE } from "@/lib/taskEmailLinks";
+import { addTaskUpdateForTaskId, formatMeetingLinkedText } from "@/lib/taskUpdates";
 
 // DB-backed reads/writes for the task<->meeting link (dev-feedback #14 Part
 // 3). Mirrors lib/taskEmailLinks.ts exactly: every write here is a CONFIRMED
@@ -108,6 +109,25 @@ export async function confirmTaskMeetingLinks(
         target: [taskMeetingsT.taskId, taskMeetingsT.meetingId],
         set: { aiGenerated: input.aiGenerated, confirmedBy: "jordan" },
       });
+    // Task update log (dev-feedback #16 Part A): "meeting notes linked to it
+    // give updates" — a confirmed link becomes a visible, timestamped entry
+    // in the task's own story. Best-effort, mirrors taskEmailLinks.ts.
+    try {
+      const meetingRows = await db
+        .select({ id: meetingsT.id, title: meetingsT.title, date: meetingsT.date, sourcePath: meetingsT.sourcePath })
+        .from(meetingsT)
+        .where(inArray(meetingsT.id, ids));
+      for (const m of meetingRows) {
+        await addTaskUpdateForTaskId(
+          rowId,
+          "meeting-linked",
+          formatMeetingLinkedText(m.title, m.date),
+          m.sourcePath ?? null,
+        );
+      }
+    } catch {
+      /* logging the link is best-effort; the link itself is already written */
+    }
   }
   return { taskDbId: rowId };
 }

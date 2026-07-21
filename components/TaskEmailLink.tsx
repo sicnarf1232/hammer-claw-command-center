@@ -181,9 +181,14 @@ interface EmailSuggestionRow {
 export function TaskLinkedEmails({
   sourceFile,
   sourceLine,
+  onLinked,
 }: {
   sourceFile: string;
   sourceLine: number;
+  // Called after a suggested email is confirmed, so a sibling update-log
+  // view can refetch and pick up the automatic "Linked to email..." entry
+  // (dev-feedback #16 Part A) without this component knowing that exists.
+  onLinked?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -222,7 +227,10 @@ export function TaskLinkedEmails({
           aiGenerated: true,
         }),
       });
-      if (res.ok) setConfirmedKeys((prev) => new Set(prev).add(s.emailKey));
+      if (res.ok) {
+        setConfirmedKeys((prev) => new Set(prev).add(s.emailKey));
+        onLinked?.();
+      }
     } finally {
       setBusyKey(null);
     }
@@ -326,9 +334,12 @@ interface MeetingSuggestionRow {
 export function TaskLinkedMeetings({
   sourceFile,
   sourceLine,
+  onLinked,
 }: {
   sourceFile: string;
   sourceLine: number;
+  // See TaskLinkedEmails' onLinked above: same purpose, meeting side.
+  onLinked?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -367,7 +378,10 @@ export function TaskLinkedMeetings({
           aiGenerated: true,
         }),
       });
-      if (res.ok) setConfirmedIds((prev) => new Set(prev).add(s.meetingId));
+      if (res.ok) {
+        setConfirmedIds((prev) => new Set(prev).add(s.meetingId));
+        onLinked?.();
+      }
     } finally {
       setBusyId(null);
     }

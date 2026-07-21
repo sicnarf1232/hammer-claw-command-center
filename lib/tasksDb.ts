@@ -7,6 +7,7 @@ import {
 } from "@/lib/db";
 import { cutoverActive } from "@/lib/dbSource";
 import { todayISO } from "@/lib/dates";
+import { addTaskUpdateForTaskId, formatStatusChangeText } from "@/lib/taskUpdates";
 import type { Priority, Task } from "@/lib/vault/types";
 
 // DB-backed tasks (Phase 2 cutover). Identity rule: seeded rows keep their
@@ -107,6 +108,26 @@ export interface UpdateTaskFieldInput {
   value: string | null; // already validated/normalized by lib/taskUpdate.ts
 }
 
+// Task update log entry (dev-feedback #16 Part A, nice-to-have): note an
+// inline-edit field change in the task's story, but only when the value
+// actually moved and never more than once per call, so a select/date picker
+// commit reads as one terse line, not one entry per keystroke. Best-effort:
+// a logging hiccup must never fail the field write it is describing, which
+// has already committed by the time this runs.
+async function logFieldChange(
+  taskId: number,
+  field: UpdateTaskFieldInput["field"],
+  oldValue: string | null,
+  newValue: string | null,
+): Promise<void> {
+  if ((oldValue ?? null) === (newValue ?? null)) return;
+  try {
+    await addTaskUpdateForTaskId(taskId, "status-change", formatStatusChangeText(field, newValue));
+  } catch {
+    /* logging is best-effort */
+  }
+}
+
 // Inline edit from /tasks (dev-feedback #8): write one field straight to the
 // task row. Mirrors dbCompleteTask's origin/updatedAt handling; no vault
 // write, ever, the export renders the current DB state on demand.
@@ -132,17 +153,20 @@ export async function dbUpdateTaskField(input: UpdateTaskFieldInput): Promise<vo
       .update(tasksT)
       .set({ customer: input.value, accountId, ...APP_EDIT, updatedAt: new Date() })
       .where(eq(tasksT.id, row.id));
+    await logFieldChange(row.id, "account", row.customer ?? null, input.value);
     return;
   }
 
   if (input.field === "type") {
     const fields = { ...(row.fields ?? {}) };
+    const oldType = fields.type ?? null;
     if (input.value) fields.type = input.value;
     else delete fields.type;
     await db
       .update(tasksT)
       .set({ fields, ...APP_EDIT, updatedAt: new Date() })
       .where(eq(tasksT.id, row.id));
+    await logFieldChange(row.id, "type", oldType, input.value);
     return;
   }
 
@@ -151,6 +175,7 @@ export async function dbUpdateTaskField(input: UpdateTaskFieldInput): Promise<vo
       .update(tasksT)
       .set({ status: input.value, ...APP_EDIT, updatedAt: new Date() })
       .where(eq(tasksT.id, row.id));
+    await logFieldChange(row.id, "status", row.status ?? null, input.value);
     return;
   }
 
@@ -159,6 +184,7 @@ export async function dbUpdateTaskField(input: UpdateTaskFieldInput): Promise<vo
     .update(tasksT)
     .set({ due: input.value, ...APP_EDIT, updatedAt: new Date() })
     .where(eq(tasksT.id, row.id));
+  await logFieldChange(row.id, "due", row.due ?? null, input.value);
 }
 
 export interface CreateTaskInput {
