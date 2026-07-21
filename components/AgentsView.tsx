@@ -11,11 +11,22 @@ import {
   type AgentLevel,
 } from "@/lib/agents/registry";
 import type { AgentsData, AgentStats, ReviewItem, Verdict } from "@/lib/agents/metrics";
+import type { WorkflowRow } from "@/lib/workflows";
+import WorkflowsPanel from "@/components/WorkflowsPanel";
 
 // The /agents oversight view (docs/AGENTIC-TRIAGE.md, Figma 2026-07-08):
 // Roster (cards + switches + model choice), Review (grade agent work,
 // keyboard-driven), Scorecard (trust ladder + gates + per-model A/B),
-// Ledger (everything they did, with provenance).
+// Ledger (everything they did, with provenance), plus Workflows (Main St.
+// AI, dev-feedback #20): Jordan's recurring processes as editable objects.
+//
+// Navigation is an inbox-style LEFT sub-nav rail (Jordan's explicit ask),
+// visually mirroring InboxWorkspace's FolderSidebar in its expanded form. The
+// inbox's auto-collapse-to-icons machinery is deliberately NOT carried over:
+// it exists there to make room for an open thread detail, and /agents has no
+// equivalent selection state, so a simple always-labeled rail fits better.
+// On small screens the rail folds into horizontal chips above the content,
+// matching the inbox's mobile folder chips.
 
 const PATHWAYS: Array<{ key: string; label: string; color: string }> = [
   { key: "needs-reply", label: "Needs reply", color: "var(--due)" },
@@ -51,10 +62,35 @@ function rel(isoDate: string | null): string {
   return days === 1 ? "yesterday" : `${days} days ago`;
 }
 
-export default function AgentsView({ data }: { data: AgentsData }) {
+type SectionKey = "roster" | "review" | "scorecard" | "ledger" | "workflows";
+
+const SECTIONS: Array<[SectionKey, string]> = [
+  ["roster", "Roster"],
+  ["review", "Review"],
+  ["scorecard", "Scorecard"],
+  ["ledger", "Ledger"],
+  ["workflows", "Workflows"],
+];
+
+export default function AgentsView({
+  data,
+  workflows,
+}: {
+  data: AgentsData;
+  workflows: WorkflowRow[];
+}) {
   const router = useRouter();
-  const [tab, setTab] = useState<"roster" | "review" | "scorecard" | "ledger">("roster");
+  const [tab, setTab] = useState<SectionKey>("roster");
   const pendingCount = data.review.filter((i) => !gradedIds.has(i.id)).length;
+
+  function switchTo(key: SectionKey) {
+    setTab(key);
+    router.refresh();
+  }
+
+  const suggestedCount = workflows.filter((w) => w.status === "suggested").length;
+  const badgeFor = (key: SectionKey): number =>
+    key === "review" ? pendingCount : key === "workflows" ? suggestedCount : 0;
 
   return (
     <div>
@@ -73,42 +109,73 @@ export default function AgentsView({ data }: { data: AgentsData }) {
         </div>
       </header>
 
-      <nav className="mb-5 flex items-center gap-5 border-b border-border">
-        {(
-          [
-            ["roster", "Roster"],
-            ["review", "Review"],
-            ["scorecard", "Scorecard"],
-            ["ledger", "Ledger"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => {
-              setTab(key);
-              router.refresh();
-            }}
-            className={`flex items-center gap-1.5 border-b-2 pb-2 text-sm font-semibold transition-colors ${
-              tab === key
-                ? "border-[var(--accent)] text-accent"
-                : "border-transparent text-fg/60 hover:text-fg"
-            }`}
-          >
-            {label}
-            {key === "review" && pendingCount > 0 ? (
-              <span className="rounded-full bg-accentSoft px-1.5 text-2xs font-bold tabular-nums text-accent">
-                {pendingCount}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </nav>
+      <div className="flex gap-5">
+        {/* Left sub-nav rail (desktop), mirroring the inbox folder rail. */}
+        <aside className="hidden w-40 shrink-0 md:block">
+          <nav className="space-y-0.5">
+            {SECTIONS.map(([key, label]) => {
+              const badge = badgeFor(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => switchTo(key)}
+                  className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-sm transition-colors ${
+                    tab === key
+                      ? "bg-accentSoft font-semibold text-accent"
+                      : "text-fg/75 hover:bg-surface2"
+                  }`}
+                >
+                  <span className="truncate">{label}</span>
+                  {badge > 0 ? (
+                    <span
+                      className={`shrink-0 text-2xs font-bold tabular-nums ${
+                        tab === key ? "text-accent" : "text-muted"
+                      }`}
+                    >
+                      {badge}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-      {tab === "roster" ? <Roster agents={data.agents} /> : null}
-      {tab === "review" ? <Review items={data.review} /> : null}
-      {tab === "scorecard" ? <Scorecard agents={data.agents} /> : null}
-      {tab === "ledger" ? <Ledger rows={data.ledger} /> : null}
+        <div className="min-w-0 flex-1">
+          {/* Mobile section chips, matching the inbox's mobile folder chips. */}
+          <nav className="mb-4 flex gap-1.5 overflow-x-auto md:hidden">
+            {SECTIONS.map(([key, label]) => {
+              const badge = badgeFor(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => switchTo(key)}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                    tab === key
+                      ? "border-accent bg-accentSoft text-accent"
+                      : "border-border text-fg/70"
+                  }`}
+                >
+                  {label}
+                  {badge > 0 ? (
+                    <span className={tab === key ? "text-accent" : "text-muted"}>
+                      {badge}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </nav>
+
+          {tab === "roster" ? <Roster agents={data.agents} /> : null}
+          {tab === "review" ? <Review items={data.review} /> : null}
+          {tab === "scorecard" ? <Scorecard agents={data.agents} /> : null}
+          {tab === "ledger" ? <Ledger rows={data.ledger} /> : null}
+          {tab === "workflows" ? <WorkflowsPanel initial={workflows} /> : null}
+        </div>
+      </div>
     </div>
   );
 }
