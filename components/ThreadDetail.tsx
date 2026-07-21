@@ -865,11 +865,44 @@ function CreateTaskInline({
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // dev-feedback #16 Part B: "Draft with AI" fills title/description/due from
+  // the thread's latest inbound email (via lib/ai.ts's draftTaskFromEmail),
+  // the same review-before-create discipline as the email composer's "Draft
+  // with AI" (components/Composer.tsx). Never auto-submits; Jordan can still
+  // just type a task by hand instead.
+  const [drafting, setDrafting] = useState(false);
+  const [draftErr, setDraftErr] = useState<string | null>(null);
+
+  async function draftWithAi() {
+    if (drafting) return;
+    setDrafting(true);
+    setDraftErr(null);
+    try {
+      const res = await fetch("/api/tasks/draft-from-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadKey, accountName: accountName ?? undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDraftErr(data.error ?? "Could not draft a task from this thread.");
+      } else {
+        if (data.title) setTitle(data.title);
+        if (data.description) setDescription(data.description);
+        if (data.suggestedDue) setDue(data.suggestedDue);
+      }
+    } catch {
+      setDraftErr("Network error.");
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   async function create() {
     const t = title.trim();
@@ -882,6 +915,7 @@ function CreateTaskInline({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: t,
+          description: description.trim() || undefined,
           due: due || undefined,
           priority: priority || undefined,
           customer: accountName ?? undefined,
@@ -894,6 +928,7 @@ function CreateTaskInline({
       } else {
         setDone(t);
         setTitle("");
+        setDescription("");
         setDue("");
         setPriority("");
         setOpen(false);
@@ -956,6 +991,24 @@ function CreateTaskInline({
           autoFocus
           className="input min-w-[200px] flex-1 px-2.5 py-1.5 text-xs"
         />
+        <button
+          type="button"
+          onClick={draftWithAi}
+          disabled={drafting}
+          className="btn-ghost whitespace-nowrap text-xs disabled:opacity-60"
+          title="Draft a title, description, and due date from this thread's email"
+        >
+          {drafting ? "Drafting…" : "✨ Draft with AI"}
+        </button>
+      </div>
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Description (optional; what Jordan needs to do and why)"
+        rows={2}
+        className="input mt-2 w-full px-2.5 py-1.5 text-xs"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <input
           type="date"
           value={due}
@@ -988,6 +1041,7 @@ function CreateTaskInline({
           Cancel
         </button>
       </div>
+      {draftErr ? <p className="mt-1.5 text-xs text-danger">{draftErr}</p> : null}
       {err ? <p className="mt-1.5 text-xs text-danger">{err}</p> : null}
     </div>
   );
