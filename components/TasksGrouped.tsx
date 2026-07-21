@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import type { TaskView } from "@/lib/taskView";
+import { cleanTaskTitle as cleanTitle } from "@/lib/taskView";
 import type { TaskMeta, ChecklistStep } from "@/lib/taskMeta";
 import { customerHue, initials } from "@/lib/customerHues";
 import { formatDateMDY, formatDateShort, todayISO } from "@/lib/dates";
-import { TASK_TYPES } from "@/lib/taskType";
+import { TASK_TYPES, TASK_TYPE_HUE, type TaskType } from "@/lib/taskType";
 import {
   TASK_STATUSES,
   applyTaskFieldUpdate,
@@ -13,15 +14,25 @@ import {
   taskStatusColorClass,
   type TaskUpdateField,
 } from "@/lib/taskUpdate";
-import { SearchIcon, ChevronDownIcon } from "./icons";
+import { SearchIcon, ChevronDownIcon, ActivityIcon } from "./icons";
 import DelegatePicker, { type DelegateCandidate } from "./DelegatePicker";
+import TaskFieldEditor from "./TaskFieldEditor";
+import TaskMetaChips from "./TaskMetaChips";
+import TaskSuggestedAction from "./TaskSuggestedAction";
+import { TaskLinkedEmails, TaskLinkedMeetings, TaskEmailAction } from "./TaskEmailLink";
+import TaskUpdateLog from "./TaskUpdateLog";
 
 // Grouped-by-account task view (the enhanced Tasks default). Each account group
 // shows an urgency-bordered card per task; the header carries the overdue count.
-
-function cleanTitle(s: string): string {
-  return s.replace(/\[[A-Za-z][\w-]*::[^\]]*\]/g, "").replace(/\s+/g, " ").trim();
-}
+//
+// dev-feedback #21 parity pass: TaskCard below used to lag TasksTable.tsx's
+// TaskDetail badly (raw always-open <select>s instead of the settled-chip
+// TaskFieldEditor pattern, no status color/label treatment, no linked
+// emails/meetings, no Activity log). It now renders the same set of
+// capabilities via the same shared components (TaskFieldEditor,
+// TaskMetaChips, TaskSuggestedAction, TaskLinkedEmails/Meetings,
+// TaskEmailAction, TaskUpdateLog), just arranged for a narrower card instead
+// of the table's two-column detail.
 
 function daysUntil(due: string | undefined, today: string): number | null {
   if (!due) return null;
@@ -319,6 +330,11 @@ function TaskCard({
   const [sending, setSending] = useState(false);
   const [sendNote, setSendNote] = useState<string | null>(null);
   const linkedThreadKey = meta?.linkedThreadKey ?? null;
+  // dev-feedback #21 parity pass: bump this after a linked email/meeting is
+  // confirmed so TaskUpdateLog's Activity feed picks up the automatic log
+  // entry, the same pattern TaskDetail (TasksTable.tsx) already uses.
+  const [refreshToken, setRefreshToken] = useState(0);
+  const bumpRefresh = () => setRefreshToken((x) => x + 1);
 
   const updatedToday = isSameDay(lastUpdate, today);
   const blockedInternally =
@@ -473,93 +489,146 @@ function TaskCard({
 
       {open ? (
         <div className="grid gap-3 border-t border-border px-3 py-3 md:grid-cols-2">
+          {/* dev-feedback #21 parity pass: the same settled-chip,
+              click-to-edit TaskFieldEditor pattern TasksTable.tsx's Row
+              already uses, in place of the raw always-open <select>s this
+              panel had before. Same chip styles, same "+ Add X" empty state. */}
+          <div className="md:col-span-2">
+            <TaskMetaChips t={t} />
+          </div>
+
           {canEdit ? (
             <div className="md:col-span-2">
               <div className="eyebrow mb-1.5 text-[10px] text-muted">Task fields</div>
               <div className="flex flex-wrap items-start gap-2">
-                <EditField label="Account" error={fieldErrors[`${t.id}:account`]}>
-                  <select
-                    aria-label="Account"
-                    value={t.customer && t.customer !== "internal" ? t.customer : ""}
-                    onChange={(e) => onFieldUpdate("account", e.target.value)}
-                    className="input py-1 text-xs"
-                  >
-                    <option value="">No account</option>
-                    {accounts.map((a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    ))}
-                  </select>
-                </EditField>
-                <EditField label="Type" error={fieldErrors[`${t.id}:type`]}>
-                  <select
-                    aria-label="Type"
-                    value={t.type}
-                    onChange={(e) => onFieldUpdate("type", e.target.value)}
-                    className="input py-1 text-xs"
-                  >
-                    {TASK_TYPES.map((ty) => (
-                      <option key={ty} value={ty}>
-                        {ty}
-                      </option>
-                    ))}
-                  </select>
-                </EditField>
-                <EditField label="Status" error={fieldErrors[`${t.id}:status`]}>
-                  <select
-                    aria-label="Status"
-                    value={(t.taskStatus ?? "open").toLowerCase()}
-                    onChange={(e) => onFieldUpdate("status", e.target.value)}
-                    className="input py-1 text-xs"
-                  >
-                    {TASK_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s[0].toUpperCase() + s.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </EditField>
-                <EditField label="Due" error={fieldErrors[`${t.id}:due`]}>
-                  <input
-                    type="date"
-                    aria-label="Due date"
-                    value={t.due ?? ""}
-                    onChange={(e) => onFieldUpdate("due", e.target.value)}
-                    className="input py-1 text-xs"
-                  />
-                </EditField>
-                {/* dev-feedback #20 item 1: this panel is already the "edit
-                    mode" for the card (only rendered when expanded), so the
-                    picker commits as soon as Jordan picks a real person.
-                    DelegatePicker's onChange also fires with null while
-                    typing (to invalidate a stale selection); that must not
-                    itself clear a saved delegate, so only a non-null pick
-                    commits here, and clearing gets its own explicit button. */}
-                <EditField label="Delegate" error={fieldErrors[`${t.id}:delegate`]}>
-                  <div className="flex items-center gap-1.5">
-                    <DelegatePicker
-                      value={
-                        t.delegatedTo
-                          ? { id: t.delegatedTo.personId, name: t.delegatedTo.name, email: t.delegatedTo.email ?? null }
-                          : null
-                      }
-                      onChange={(person) => {
-                        if (person) onDelegateSave(person);
+                <TaskFieldEditor
+                  chip={
+                    hasAccount ? (
+                      <span className="chip whitespace-nowrap border-border bg-surface2 text-fg/80">
+                        {t.customer}
+                      </span>
+                    ) : null
+                  }
+                  emptyLabel="Add account"
+                  initialValue={hasAccount ? t.customer! : ""}
+                  onSave={(value) => onFieldUpdate("account", value)}
+                  error={fieldErrors[`${t.id}:account`]}
+                  renderControl={(value, setValue) => (
+                    <select
+                      aria-label="Account"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      className="input py-1 text-xs"
+                      autoFocus
+                    >
+                      <option value="">No account</option>
+                      {accounts.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                />
+                <TaskFieldEditor
+                  chip={
+                    <span
+                      className="chip whitespace-nowrap"
+                      style={{
+                        background: `${TASK_TYPE_HUE[t.type]}1a`,
+                        color: TASK_TYPE_HUE[t.type],
+                        borderColor: "transparent",
                       }}
+                    >
+                      {t.type}
+                    </span>
+                  }
+                  emptyLabel="Add type"
+                  initialValue={t.type}
+                  onSave={(value) => onFieldUpdate("type", value)}
+                  error={fieldErrors[`${t.id}:type`]}
+                  renderControl={(value, setValue) => (
+                    <select
+                      aria-label="Type"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value as TaskType)}
+                      className="input py-1 text-xs"
+                      style={{ color: TASK_TYPE_HUE[value as TaskType] }}
+                      autoFocus
+                    >
+                      {TASK_TYPES.map((ty) => (
+                        <option key={ty} value={ty}>
+                          {ty}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                />
+                <TaskFieldEditor
+                  chip={
+                    <span className={`chip whitespace-nowrap ${taskStatusColorClass(t.taskStatus)}`}>
+                      {taskStatusLabel(t.taskStatus, t.delegatedTo?.name)}
+                    </span>
+                  }
+                  emptyLabel="Add status"
+                  initialValue={(t.taskStatus ?? "open").toLowerCase()}
+                  onSave={(value) => onFieldUpdate("status", value)}
+                  error={fieldErrors[`${t.id}:status`]}
+                  renderControl={(value, setValue) => (
+                    <select
+                      aria-label="Status"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      className="input py-1 text-xs"
+                      autoFocus
+                    >
+                      {TASK_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s[0].toUpperCase() + s.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                />
+                <TaskFieldEditor
+                  chip={
+                    t.due ? (
+                      <span className="chip whitespace-nowrap">{formatDateShort(t.due)}</span>
+                    ) : null
+                  }
+                  emptyLabel="Add due date"
+                  initialValue={t.due ?? ""}
+                  onSave={(value) => onFieldUpdate("due", value)}
+                  error={fieldErrors[`${t.id}:due`]}
+                  renderControl={(value, setValue) => (
+                    <input
+                      type="date"
+                      aria-label="Due date"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      className="input py-1 text-xs"
+                      autoFocus
                     />
-                    {t.delegatedTo ? (
-                      <button
-                        type="button"
-                        onClick={() => onDelegateSave(null)}
-                        className="shrink-0 text-2xs text-muted hover:text-danger"
-                        title="Clear delegate"
-                      >
-                        Clear
-                      </button>
-                    ) : null}
-                  </div>
-                </EditField>
+                  )}
+                />
+                <TaskFieldEditor<DelegateCandidate | null>
+                  chip={
+                    t.delegatedTo ? (
+                      <span className="chip whitespace-nowrap border-accent2/30 bg-accentSoft text-accent2">
+                        {t.delegatedTo.name}
+                      </span>
+                    ) : null
+                  }
+                  emptyLabel="Add delegate"
+                  initialValue={
+                    t.delegatedTo
+                      ? { id: t.delegatedTo.personId, name: t.delegatedTo.name, email: t.delegatedTo.email ?? null }
+                      : null
+                  }
+                  onSave={(person) => onDelegateSave(person)}
+                  error={fieldErrors[`${t.id}:delegate`]}
+                  renderControl={(value, setValue) => <DelegatePicker value={value} onChange={setValue} />}
+                />
               </div>
             </div>
           ) : null}
@@ -684,26 +753,41 @@ function TaskCard({
           {t.description ? (
             <p className="whitespace-pre-wrap text-xs text-muted md:col-span-2">{t.description}</p>
           ) : null}
+
+          {/* dev-feedback #21: a real judgment call about what Jordan needs
+              to do next (draft an email to a named person, or build a
+              quote), shared with TaskDetail (TasksTable.tsx) so both views
+              always agree. Renders nothing when there is no clear action. */}
+          <div className="md:col-span-2">
+            <TaskSuggestedAction t={t} />
+          </div>
+
+          {/* dev-feedback #21 parity pass: Activity log + linked emails/
+              meetings, entirely absent from this card before. Same
+              components TaskDetail uses, so "unable to link emails or
+              meetings from the task view" is fixed the same way in both
+              views, not just the table. */}
+          <div className="md:col-span-2 border-t border-border pt-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="eyebrow flex items-center gap-1.5 text-muted">
+                <ActivityIcon className="h-3.5 w-3.5" />
+                Activity
+              </div>
+              <TaskEmailAction
+                sourceFile={t.sourceFile}
+                sourceLine={t.sourceLine}
+                accountSlug={t.accountSlug}
+                subject={cleanTitle(t.title)}
+              />
+            </div>
+            <TaskUpdateLog sourceFile={t.sourceFile} sourceLine={t.sourceLine} refreshToken={refreshToken} />
+            <div className="mt-3 grid gap-2 border-t border-line2 pt-2.5 sm:grid-cols-2">
+              <TaskLinkedEmails sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
+              <TaskLinkedMeetings sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
+            </div>
+          </div>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function EditField({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-2xs text-muted">{label}</span>
-      {children}
-      {error && <p className="text-2xs text-danger">{error}</p>}
     </div>
   );
 }

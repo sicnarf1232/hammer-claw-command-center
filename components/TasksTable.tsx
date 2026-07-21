@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { TaskView } from "@/lib/taskView";
+import { cleanTaskTitle as cleanTitle } from "@/lib/taskView";
 import type { TaskMeta, ChecklistStep } from "@/lib/taskMeta";
 import { checklistProgress, formatChecklistProgress } from "@/lib/checklistProgress";
-import { TASK_TYPES, matchedTaskTypeKeyword, type TaskType } from "@/lib/taskType";
+import { TASK_TYPES, TASK_TYPE_HUE as TYPE_HUE, type TaskType } from "@/lib/taskType";
 import {
   TASK_STATUSES,
   applyTaskFieldUpdate,
@@ -19,6 +20,8 @@ import { TaskLinkedEmails, TaskLinkedMeetings, TaskEmailAction } from "./TaskEma
 import TaskUpdateLog from "./TaskUpdateLog";
 import TaskFieldEditor from "./TaskFieldEditor";
 import DelegatePicker, { type DelegateCandidate } from "./DelegatePicker";
+import TaskMetaChips from "./TaskMetaChips";
+import TaskSuggestedAction from "./TaskSuggestedAction";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
 // columns are Task / Account / Type / Status / Start / Due. Default scope is
@@ -30,20 +33,6 @@ import DelegatePicker, { type DelegateCandidate } from "./DelegatePicker";
 
 type SortKey = "title" | "account" | "type" | "status" | "start" | "due";
 type SortDir = "asc" | "desc";
-
-const TYPE_HUE: Record<TaskType, string> = {
-  PCN: "#5145E6",
-  "Quality & Reg": "#0E9F8E",
-  "Pricing/Quote": "#D98A0B",
-  "Samples/Dev": "#B852CC",
-  "Supply/Logistics": "#2E7DD1",
-  Commercial: "#C2456E",
-  "Admin/Other": "#6B7280",
-};
-
-function cleanTitle(s: string): string {
-  return s.replace(/\[[A-Za-z][\w-]*::[^\]]*\]/g, "").replace(/\s+/g, " ").trim();
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -673,17 +662,6 @@ function Row({
   );
 }
 
-function quoteHref(t: TaskView): string {
-  const params = new URLSearchParams();
-  if (t.customer && t.customer !== "internal") params.set("customer", t.customer);
-  params.set("desc", cleanTitle(t.title));
-  const parseText = [cleanTitle(t.title), t.description, t.notes]
-    .filter(Boolean)
-    .join("\n");
-  if (parseText) params.set("parse", parseText);
-  return `/quote?${params.toString()}`;
-}
-
 // The expanded row: a proper "task page," not a cramped popover
 // (dev-feedback #16 Part B). A left accent bar in the task's own type color
 // carries the type identity through from the collapsed chip; two columns
@@ -700,15 +678,6 @@ function TaskDetail({
 }) {
   const [refreshToken, setRefreshToken] = useState(0);
   const bumpRefresh = () => setRefreshToken((x) => x + 1);
-
-  // Gate "Create quote" on an actual signal (dev-feedback #11 Part B) instead
-  // of always showing it: only when the task's own type classification (or
-  // Jordan's manual override, both already resolved onto t.type) says this
-  // is pricing/quote work. The matched keyword becomes the WHY line.
-  const quoteReasonKeyword =
-    t.type === "Pricing/Quote"
-      ? matchedTaskTypeKeyword(t.title, t.description, "Pricing/Quote")
-      : null;
   const hue = TYPE_HUE[t.type];
 
   return (
@@ -732,48 +701,18 @@ function TaskDetail({
             </p>
           )}
 
-          {t.type === "Pricing/Quote" && (
-            <div className="mt-3.5">
-              <Link
-                href={quoteHref(t)}
-                className="btn-outline inline-flex items-center gap-1.5 text-xs"
-                style={{ borderColor: hue, color: hue }}
-              >
-                Create quote →
-              </Link>
-              <p className="mt-1 text-2xs text-muted">
-                {quoteReasonKeyword
-                  ? `Suggested because this task mentions "${quoteReasonKeyword.toLowerCase()}".`
-                  : "Suggested because this task is typed as Pricing/Quote."}
-              </p>
-            </div>
-          )}
+          {/* dev-feedback #21: a real judgment call about what Jordan needs
+              to do next (draft an email to a named person, or build a
+              quote), not a fixed gate on the task's type classification.
+              Renders nothing when there is no clear single action. */}
+          <TaskSuggestedAction t={t} />
 
-          <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-line2 pt-3.5">
+          <div className="mt-4 border-t border-line2 pt-3.5">
             {/* dev-feedback #20 item 2: the status chip belongs in the detail
                 view too, not just the collapsed row, so the "waiting on
                 someone" state is unmistakable however Jordan is looking at
                 the task. */}
-            <span className={`chip whitespace-nowrap ${taskStatusColorClass(t.taskStatus)}`}>
-              {taskStatusLabel(t.taskStatus, t.delegatedTo?.name)}
-            </span>
-            {t.delegatedTo && (
-              <span className="chip whitespace-nowrap border-accent2/30 bg-accentSoft text-accent2">
-                delegated to {t.delegatedTo.name}
-              </span>
-            )}
-            {t.priority && (
-              <span className="chip" style={{ borderColor: "var(--line-2)" }}>priority: {t.priority}</span>
-            )}
-            {t.workstream && (
-              <span className="chip" style={{ borderColor: "var(--line-2)" }}>{t.workstream}</span>
-            )}
-            {t.thread && (
-              <span className="chip" style={{ borderColor: "var(--line-2)" }}>thread: {t.thread}</span>
-            )}
-            <span className="chip font-mono text-2xs" style={{ borderColor: "var(--line-2)" }}>
-              {t.sourceFile.split("/").pop()}
-            </span>
+            <TaskMetaChips t={t} />
           </div>
 
           <TaskSubitems checklist={checklist} onChange={onChecklistChange} />
