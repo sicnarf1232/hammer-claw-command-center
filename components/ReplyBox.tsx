@@ -65,13 +65,32 @@ export default function ReplyBox({
     setAttachments((prev) => prev.filter((a) => a.key !== key));
   }
   async function onPickFiles(files: FileList | null) {
-    if (!files) return;
-    for (const file of Array.from(files)) {
-      const base64 = await new Promise<string>((resolve) => {
+    // Reset the input immediately so re-picking the same file still fires
+    // onChange, and so a hung/slow read below can never leave the picker in
+    // a state where the next click does nothing.
+    const list = files ? Array.from(files) : [];
+    if (fileRef.current) fileRef.current.value = "";
+    if (!list.length) return;
+
+    for (const file of list) {
+      // onerror/onabort MUST resolve too: without them a failed or cancelled
+      // read leaves this await pending forever, which reads as the attach
+      // button stalling. A bad file resolves to null and is skipped.
+      const base64 = await new Promise<string | null>((resolve) => {
         const r = new FileReader();
         r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
-        r.readAsDataURL(file);
+        r.onerror = () => resolve(null);
+        r.onabort = () => resolve(null);
+        try {
+          r.readAsDataURL(file);
+        } catch {
+          resolve(null);
+        }
       });
+      if (base64 == null) {
+        setError(`Could not read ${file.name}. Try that attachment again.`);
+        continue;
+      }
       const key = `up:${file.name}:${file.size}`;
       setAttachments((prev) =>
         prev.some((a) => a.key === key)
@@ -79,7 +98,6 @@ export default function ReplyBox({
           : [...prev, { key, label: file.name, ref: { kind: "upload", name: file.name, contentType: file.type || undefined, base64 } }],
       );
     }
-    if (fileRef.current) fileRef.current.value = "";
   }
 
   // Recipients are editable (dev-feedback #18): reply-all/reply-to-sender
