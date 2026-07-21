@@ -29,13 +29,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Could not read the file." }, { status: 502 });
     }
     const disposition = req.nextUrl.searchParams.get("download") ? "attachment" : "inline";
+    // Content-Length when known: a stream with no declared length makes some
+    // download managers (Safari especially) treat the save as indeterminate
+    // and occasionally mishandle it. filename* carries the exact original
+    // name (RFC 5987) alongside the ASCII-safe fallback.
+    const name = safeName(att.fileName);
+    const headers: Record<string, string> = {
+      "Content-Type": att.contentType || "application/octet-stream",
+      "Content-Disposition": `${disposition}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(att.fileName ?? name)}`,
+      "Cache-Control": "private, max-age=60",
+    };
+    if (att.sizeBytes && att.sizeBytes > 0) headers["Content-Length"] = String(att.sizeBytes);
     return new NextResponse(res.stream as unknown as ReadableStream, {
       status: 200,
-      headers: {
-        "Content-Type": att.contentType || "application/octet-stream",
-        "Content-Disposition": `${disposition}; filename="${safeName(att.fileName)}"`,
-        "Cache-Control": "private, max-age=60",
-      },
+      headers,
     });
   } catch (err) {
     console.error("[email-attachments/file] stream failed:", err);

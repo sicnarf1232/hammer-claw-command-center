@@ -1361,22 +1361,57 @@ function DetailMessageCard({
 
       {m.attachments.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
-          {m.attachments.map((a) => (
-            <a
-              key={a.id}
-              href={`/api/email-attachments/file?id=${a.id}${a.isImage || a.isPdf ? "" : "&download=1"}`}
-              target="_blank"
-              rel="noreferrer"
-              className={`chip border-border ${
-                a.hasBlob ? "text-fg/75 hover:text-accent" : "cursor-default text-fg/40"
-              }`}
-              title={a.hasBlob ? "Open attachment" : "Not retained"}
-            >
-              {a.isImage ? "🖼 " : "📎 "}
-              {a.fileName || "attachment"}
-              {a.sizeBytes ? ` · ${kb(a.sizeBytes)}` : ""}
-            </a>
-          ))}
+          {m.attachments.map((a) => {
+            const label = (
+              <>
+                {a.isImage ? "🖼 " : "📎 "}
+                {a.fileName || "attachment"}
+                {a.sizeBytes ? ` · ${kb(a.sizeBytes)}` : ""}
+              </>
+            );
+            // Not retained (too large, or stored before the Blob store):
+            // render an honest non-link instead of an href to a JSON 404.
+            if (!a.hasBlob) {
+              return (
+                <span
+                  key={a.id}
+                  className="chip cursor-default border-border text-fg/40"
+                  title="Not retained: this file was too large to keep, open the email in Outlook for it"
+                >
+                  {label}
+                </span>
+              );
+            }
+            const viewable = a.isImage || a.isPdf;
+            return (
+              <span key={a.id} className="inline-flex items-stretch">
+                <a
+                  href={`/api/email-attachments/file?id=${a.id}${viewable ? "" : "&download=1"}`}
+                  // Viewable files open in a tab; anything else is a plain
+                  // same-tab download (a target=_blank download tab flashes
+                  // open and self-closes, which popup blockers sometimes eat).
+                  {...(viewable
+                    ? { target: "_blank", rel: "noreferrer" }
+                    : { download: a.fileName || "attachment" })}
+                  className={`chip border-border text-fg/75 hover:text-accent ${viewable ? "rounded-r-none" : ""}`}
+                  title={viewable ? "Open attachment" : "Download attachment"}
+                >
+                  {label}
+                </a>
+                {viewable ? (
+                  <a
+                    href={`/api/email-attachments/file?id=${a.id}&download=1`}
+                    download={a.fileName || "attachment"}
+                    className="chip -ml-px rounded-l-none border-border px-2 text-fg/60 hover:text-accent"
+                    title="Download file"
+                    aria-label={`Download ${a.fileName || "attachment"}`}
+                  >
+                    ⬇
+                  </a>
+                ) : null}
+              </span>
+            );
+          })}
         </div>
       ) : null}
     </article>
