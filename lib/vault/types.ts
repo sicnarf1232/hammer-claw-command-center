@@ -60,6 +60,12 @@ export interface Task {
   thread?: string;
   taskStatus?: string; // waiting | blocked | someday
   completed?: string;
+  // Who Jordan delegated this task to (dev-feedback #20): resolved from
+  // tasks.ownerPersonId, seeded from the vault's "Owner: <Name>" field at
+  // cutover and settable in-app. Jordan is not a platform user himself here;
+  // this is "I'm accountable, I asked someone else to do it," not an
+  // assignee in the multi-user sense.
+  delegate?: { personId: number; name: string; email?: string | null };
   // Write-back coordinates.
   sourceFile: string;
   sourceLine: number; // 0-based line index of the checkbox line

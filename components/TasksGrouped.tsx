@@ -9,9 +9,12 @@ import { TASK_TYPES } from "@/lib/taskType";
 import {
   TASK_STATUSES,
   applyTaskFieldUpdate,
+  taskStatusLabel,
+  taskStatusColorClass,
   type TaskUpdateField,
 } from "@/lib/taskUpdate";
 import { SearchIcon, ChevronDownIcon } from "./icons";
+import DelegatePicker, { type DelegateCandidate } from "./DelegatePicker";
 
 // Grouped-by-account task view (the enhanced Tasks default). Each account group
 // shows an urgency-bordered card per task; the header carries the overdue count.
@@ -133,6 +136,52 @@ export default function TasksGrouped({
     }
   }
 
+  // Delegate edit (dev-feedback #20 item 1): same reasoning as
+  // TasksTable.tsx's updateDelegate, kept separate from updateField above
+  // because the picker hands back a full { id, name, email } shape, not a
+  // plain wire-format string.
+  async function updateDelegate(t: TaskView, person: DelegateCandidate | null): Promise<boolean> {
+    const errKey = `${t.id}:delegate`;
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[errKey];
+      return next;
+    });
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === t.id
+          ? {
+              ...r,
+              delegatedTo: person ? { personId: person.id, name: person.name, email: person.email } : undefined,
+            }
+          : r,
+      ),
+    );
+    try {
+      const res = await fetch("/api/tasks/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceFile: t.sourceFile,
+          sourceLine: t.sourceLine,
+          field: "delegate",
+          value: person ? String(person.id) : "",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setRows((prev) => prev.map((r) => (r.id === t.id ? t : r)));
+        setFieldErrors((prev) => ({ ...prev, [errKey]: data.error ?? "Could not update the task." }));
+        return false;
+      }
+      return true;
+    } catch {
+      setRows((prev) => prev.map((r) => (r.id === t.id ? t : r)));
+      setFieldErrors((prev) => ({ ...prev, [errKey]: "Network error." }));
+      return false;
+    }
+  }
+
   return (
     <div>
       {urgentCount > 0 ? (
@@ -202,6 +251,7 @@ export default function TasksGrouped({
                         canEdit={canEdit}
                         accounts={accounts}
                         onFieldUpdate={(field, value) => updateField(t, field, value)}
+                        onDelegateSave={(person) => updateDelegate(t, person)}
                         fieldErrors={fieldErrors}
                       />
                     ))}
@@ -240,6 +290,7 @@ function TaskCard({
   canEdit,
   accounts,
   onFieldUpdate,
+  onDelegateSave,
   fieldErrors,
 }: {
   t: TaskView;
@@ -250,6 +301,7 @@ function TaskCard({
   canEdit: boolean;
   accounts: string[];
   onFieldUpdate: (field: TaskUpdateField, value: string) => void;
+  onDelegateSave: (person: DelegateCandidate | null) => Promise<boolean>;
   fieldErrors: Record<string, string>;
 }) {
   const u = urgency(t.due, today);
@@ -388,6 +440,18 @@ function TaskCard({
             {showAccount && hasAccount ? <span className="font-medium text-fg/70">{t.customer}</span> : null}
             {t.type ? <span>{t.type}</span> : null}
             {checklist.length ? <span>{doneSteps}/{checklist.length} steps</span> : null}
+            {/* dev-feedback #20 item 2: "waiting"/"blocked" get the same
+                distinct chip color as the table view, so a task never reads
+                as just-not-started-yet when it's actually in motion
+                elsewhere. Same taskStatusLabel/taskStatusColorClass helpers
+                as TasksTable.tsx, so the two views never disagree. */}
+            {(t.taskStatus ?? "").toLowerCase() === "waiting" || (t.taskStatus ?? "").toLowerCase() === "blocked" ? (
+              <span className={`chip whitespace-nowrap ${taskStatusColorClass(t.taskStatus)}`}>
+                {taskStatusLabel(t.taskStatus, t.delegatedTo?.name)}
+              </span>
+            ) : t.delegatedTo ? (
+              <span className="text-accent2">→ {t.delegatedTo.name}</span>
+            ) : null}
             {blockedInternally ? <span className="font-semibold text-warm">blocked internally</span> : null}
           </div>
         </button>
@@ -464,6 +528,37 @@ function TaskCard({
                     onChange={(e) => onFieldUpdate("due", e.target.value)}
                     className="input py-1 text-xs"
                   />
+                </EditField>
+                {/* dev-feedback #20 item 1: this panel is already the "edit
+                    mode" for the card (only rendered when expanded), so the
+                    picker commits as soon as Jordan picks a real person.
+                    DelegatePicker's onChange also fires with null while
+                    typing (to invalidate a stale selection); that must not
+                    itself clear a saved delegate, so only a non-null pick
+                    commits here, and clearing gets its own explicit button. */}
+                <EditField label="Delegate" error={fieldErrors[`${t.id}:delegate`]}>
+                  <div className="flex items-center gap-1.5">
+                    <DelegatePicker
+                      value={
+                        t.delegatedTo
+                          ? { id: t.delegatedTo.personId, name: t.delegatedTo.name, email: t.delegatedTo.email ?? null }
+                          : null
+                      }
+                      onChange={(person) => {
+                        if (person) onDelegateSave(person);
+                      }}
+                    />
+                    {t.delegatedTo ? (
+                      <button
+                        type="button"
+                        onClick={() => onDelegateSave(null)}
+                        className="shrink-0 text-2xs text-muted hover:text-danger"
+                        title="Clear delegate"
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
                 </EditField>
               </div>
             </div>

@@ -17,6 +17,9 @@ export interface TaskView {
   description?: string;
   notes?: string;
   thread?: string;
+  // Who this task is delegated to (dev-feedback #20), carried straight
+  // through from Task.delegate. See lib/vault/types.ts for the rationale.
+  delegatedTo?: { personId: number; name: string; email?: string | null };
   sourceFile: string;
   sourceLine: number;
 }
@@ -89,6 +92,7 @@ export function toTaskView(
     description: t.description || undefined,
     notes: t.notes || undefined,
     thread: t.thread,
+    delegatedTo: t.delegate,
     sourceFile: t.sourceFile,
     sourceLine: t.sourceLine,
   };

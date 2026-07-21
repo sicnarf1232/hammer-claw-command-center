@@ -170,14 +170,20 @@ function cleanText(s: string): string {
   return s.replace(/\[[A-Za-z][\w-]*::[^\]]*\]/g, "").replace(/\s+/g, " ").trim();
 }
 
+// fromDelegate (dev-feedback #20 item 5, optional): true when this email's
+// sender is the exact person the task is delegated to, so "waiting for it to
+// come back" is visible in the task's own story, not just a generic linked
+// line. Defaults false so every existing call site/test is unaffected.
 export function formatEmailLinkedText(
   subject: string | null | undefined,
   fromName: string | null | undefined,
   fromEmail: string | null | undefined,
+  fromDelegate = false,
 ): string {
   const subj = cleanText(subject || "") || "(no subject)";
   const sender = (fromName && fromName.trim()) || (fromEmail && fromEmail.trim()) || "an unknown sender";
-  return `Linked to email: "${subj}" from ${sender}.`;
+  const tag = fromDelegate ? " (your delegate)" : "";
+  return `Linked to email: "${subj}" from ${sender}${tag}.`;
 }
 
 export function formatMeetingLinkedText(
@@ -204,4 +210,12 @@ export function formatStatusChangeText(field: StatusChangeField, value: string |
       return when ? `Due date set to ${when}.` : "Due date cleared.";
     }
   }
+}
+
+// Delegate field change (dev-feedback #20 item 1). Takes the resolved
+// display name (not the raw person id) since the log is prose, not data;
+// the DB lookup happens in lib/tasksDb.ts's dbUpdateTaskField before this
+// runs, keeping this helper pure and DB-free like its siblings above.
+export function formatDelegateChangeText(name: string | null): string {
+  return name ? `Delegated to ${name}.` : "Delegation cleared.";
 }

@@ -4,13 +4,15 @@ import { cutoverActive } from "@/lib/dbSource";
 import { listAccounts } from "@/lib/accounts";
 import { dbUpdateTaskField } from "@/lib/tasksDb";
 import { validateTaskUpdate, TaskUpdateError } from "@/lib/taskUpdate";
+import { listAllPersonIds } from "@/lib/peopleSearch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Inline edit from /tasks (dev-feedback #8): update one field (account, type,
-// status, due) on a task row directly in the DB. No vault write, ever, the
-// export renders the current DB state into markdown when Jordan runs it.
+// Inline edit from /tasks (dev-feedback #8, #20): update one field (account,
+// type, status, due, delegate) on a task row directly in the DB. No vault
+// write, ever, the export renders the current DB state into markdown when
+// Jordan runs it.
 // body: { sourceFile, sourceLine, field, value }
 export async function POST(req: NextRequest) {
   if (!dbConfigured() || !(await cutoverActive())) {
@@ -27,10 +29,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const accounts = await listAccounts();
+    const [accounts, personIds] = await Promise.all([listAccounts(), listAllPersonIds()]);
     const validated = validateTaskUpdate(
       { field: body?.field, value: body?.value },
       accounts.map((a) => a.name),
+      personIds,
     );
     await dbUpdateTaskField({ sourceFile, sourceLine, ...validated });
     return NextResponse.json({ ok: true });

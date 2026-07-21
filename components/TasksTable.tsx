@@ -3,10 +3,14 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { TaskView } from "@/lib/taskView";
+import type { TaskMeta, ChecklistStep } from "@/lib/taskMeta";
+import { checklistProgress, formatChecklistProgress } from "@/lib/checklistProgress";
 import { TASK_TYPES, matchedTaskTypeKeyword, type TaskType } from "@/lib/taskType";
 import {
   TASK_STATUSES,
   applyTaskFieldUpdate,
+  taskStatusLabel,
+  taskStatusColorClass,
   type TaskUpdateField,
 } from "@/lib/taskUpdate";
 import { formatDateShort } from "@/lib/dates";
@@ -14,6 +18,7 @@ import { SearchIcon, ActivityIcon } from "./icons";
 import { TaskLinkedEmails, TaskLinkedMeetings, TaskEmailAction } from "./TaskEmailLink";
 import TaskUpdateLog from "./TaskUpdateLog";
 import TaskFieldEditor from "./TaskFieldEditor";
+import DelegatePicker, { type DelegateCandidate } from "./DelegatePicker";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
 // columns are Task / Account / Type / Status / Start / Due. Default scope is
@@ -40,14 +45,6 @@ function cleanTitle(s: string): string {
   return s.replace(/\[[A-Za-z][\w-]*::[^\]]*\]/g, "").replace(/\s+/g, " ").trim();
 }
 
-function statusLabel(t: TaskView): string {
-  const s = (t.taskStatus ?? "").toLowerCase();
-  if (s === "waiting") return "Waiting";
-  if (s === "blocked") return "Blocked";
-  if (s === "someday") return "Someday";
-  return "Open";
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -57,11 +54,17 @@ export default function TasksTable({
   today,
   accounts: allAccounts = [],
   canEdit = false,
+  meta = {},
 }: {
   tasks: TaskView[];
   today: string;
   accounts?: string[];
   canEdit?: boolean;
+  // Checklist / sub-items progress (dev-feedback #20 item 3), keyed by
+  // TaskView id. Reuses the existing task_meta checklist that TasksGrouped's
+  // TaskCard already reads/writes, rather than a second, competing "sub-items"
+  // store (see the module comment on TaskDetail's checklist section below).
+  meta?: Record<string, TaskMeta>;
 }) {
   const [rows, setRows] = useState(tasks);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -95,7 +98,7 @@ export default function TasksTable({
       if (ws !== "all" && t.workstream !== ws) return false;
       if (account !== "all" && t.customer !== account) return false;
       if (type !== "all" && t.type !== type) return false;
-      if (status !== "all" && statusLabel(t).toLowerCase() !== status) return false;
+      if (status !== "all" && (t.taskStatus ?? "open").toLowerCase() !== status) return false;
       if (!needle) return true;
       return (
         cleanTitle(t.title).toLowerCase().includes(needle) ||
@@ -109,7 +112,7 @@ export default function TasksTable({
         case "title": return cleanTitle(t.title).toLowerCase();
         case "account": return (t.customer ?? "~").toLowerCase();
         case "type": return t.type;
-        case "status": return statusLabel(t);
+        case "status": return taskStatusLabel(t.taskStatus, t.delegatedTo?.name);
         case "start": return t.start ?? "9999";
         case "due": return t.due ?? "9999";
       }
@@ -181,6 +184,57 @@ export default function TasksTable({
     }
   }
 
+  // Delegate edit (dev-feedback #20 item 1): a dedicated path rather than
+  // routing through updateField above, because the picker already hands back
+  // the full { id, name, email } shape (not just a wire-format string), so
+  // the optimistic row update needs no round trip to resolve a display name.
+  // The network write still reuses the generic /api/tasks/update route with
+  // field: "delegate" (validated server-side against real people). Returns
+  // whether the write succeeded, so the row can offer the one-click "mark as
+  // waiting" nudge only after a real save.
+  async function updateDelegate(t: TaskView, person: DelegateCandidate | null): Promise<boolean> {
+    const errKey = `${t.id}:delegate`;
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[errKey];
+      return next;
+    });
+    const prevRow = t;
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === t.id
+          ? {
+              ...r,
+              delegatedTo: person ? { personId: person.id, name: person.name, email: person.email } : undefined,
+            }
+          : r,
+      ),
+    );
+    try {
+      const res = await fetch("/api/tasks/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceFile: t.sourceFile,
+          sourceLine: t.sourceLine,
+          field: "delegate",
+          value: person ? String(person.id) : "",
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setRows((prev) => prev.map((r) => (r.id === t.id ? prevRow : r)));
+        setFieldErrors((prev) => ({ ...prev, [errKey]: data.error ?? "Could not update the task." }));
+        return false;
+      }
+      return true;
+    } catch {
+      setRows((prev) => prev.map((r) => (r.id === t.id ? prevRow : r)));
+      setFieldErrors((prev) => ({ ...prev, [errKey]: "Network error." }));
+      return false;
+    }
+  }
+
   return (
     <div>
       {/* filter bar */}
@@ -234,6 +288,9 @@ export default function TasksTable({
               <Th onClick={() => sortBy("account")} active={sortKey === "account"} dir={sortDir}>Account</Th>
               <Th onClick={() => sortBy("type")} active={sortKey === "type"} dir={sortDir}>Type</Th>
               <Th onClick={() => sortBy("status")} active={sortKey === "status"} dir={sortDir}>Status</Th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-2xs font-bold uppercase tracking-wide text-muted">
+                Delegate
+              </th>
               <Th onClick={() => sortBy("start")} active={sortKey === "start"} dir={sortDir}>Start</Th>
               <Th onClick={() => sortBy("due")} active={sortKey === "due"} dir={sortDir}>Due</Th>
             </tr>
@@ -241,7 +298,7 @@ export default function TasksTable({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-muted">
+                <td colSpan={8} className="p-8 text-center text-muted">
                   No tasks match these filters.
                 </td>
               </tr>
@@ -259,7 +316,9 @@ export default function TasksTable({
                   canEdit={canEdit}
                   accounts={allAccounts}
                   onFieldUpdate={(field, value) => updateField(t, field, value)}
+                  onDelegateSave={(person) => updateDelegate(t, person)}
                   fieldErrors={fieldErrors}
+                  meta={meta[t.id]}
                 />
               ))
             )}
@@ -281,7 +340,9 @@ function Row({
   canEdit,
   accounts,
   onFieldUpdate,
+  onDelegateSave,
   fieldErrors,
+  meta,
 }: {
   t: TaskView;
   today: string;
@@ -293,7 +354,9 @@ function Row({
   canEdit: boolean;
   accounts: string[];
   onFieldUpdate: (field: TaskUpdateField, value: string) => void;
+  onDelegateSave: (person: DelegateCandidate | null) => Promise<boolean>;
   fieldErrors: Record<string, string>;
+  meta?: TaskMeta;
 }) {
   const overdue = !!t.due && t.due < today;
   const dueToday = t.due === today;
@@ -302,7 +365,44 @@ function Row({
   const typeErr = fieldErrors[`${t.id}:type`];
   const statusErr = fieldErrors[`${t.id}:status`];
   const dueErr = fieldErrors[`${t.id}:due`];
+  const delegateErr = fieldErrors[`${t.id}:delegate`];
   const settling = checking || fading;
+
+  // Sub-items checklist (dev-feedback #20 item 3), lifted up to Row (not just
+  // inside TaskDetail) so the "N of M" badge on the always-visible collapsed
+  // row reflects live edits even after the detail panel collapses, mirroring
+  // TasksGrouped's TaskCard (which never unmounts its own checklist state).
+  const [checklist, setChecklist] = useState<ChecklistStep[]>(meta?.checklist ?? []);
+  const checklistProgressLabel = formatChecklistProgress(checklist);
+
+  async function persistChecklist(next: ChecklistStep[]) {
+    setChecklist(next);
+    await fetch("/api/tasks/meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: t.id, checklist: next }),
+    }).catch(() => {});
+  }
+
+  // One-click "mark as waiting" nudge (dev-feedback #20 item 2), shown right
+  // after a delegate save when the task had no real status yet. Per this
+  // app's standing rule that state changes are proposed, not silently
+  // applied: this never sets status itself, it only offers a one-tap
+  // confirm that Jordan has to click.
+  const [waitingPrompt, setWaitingPrompt] = useState<string | null>(null);
+
+  async function handleDelegateSave(person: DelegateCandidate | null) {
+    const wasOpenish = !t.taskStatus || t.taskStatus.toLowerCase() === "open";
+    const ok = await onDelegateSave(person);
+    if (ok && person && wasOpenish) setWaitingPrompt(person.name);
+    else setWaitingPrompt(null);
+  }
+
+  function confirmWaiting() {
+    onFieldUpdate("status", "waiting");
+    setWaitingPrompt(null);
+  }
+
   return (
     <>
       <tr
@@ -340,6 +440,14 @@ function Row({
             <span className={`transition-colors duration-200 ${checking ? "text-muted line-through" : ""}`}>
               {cleanTitle(t.title)}
             </span>
+            {checklistProgressLabel ? (
+              <span
+                className="chip shrink-0 whitespace-nowrap border-border bg-surface2 text-2xs text-muted"
+                title="Sub-items done"
+              >
+                {checklistProgressLabel}
+              </span>
+            ) : null}
           </div>
           {!expanded && t.description && (
             <div className="mt-0.5 truncate pl-4 text-2xs text-muted">{t.description}</div>
@@ -434,12 +542,12 @@ function Row({
             </span>
           )}
         </td>
-        <td className="py-3 pr-3 text-fg/80" onClick={canEdit ? stop : undefined}>
+        <td className="py-3 pr-3" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
             <TaskFieldEditor
               chip={
-                <span className="chip whitespace-nowrap border-border bg-surface2 text-muted">
-                  {statusLabel(t)}
+                <span className={`chip whitespace-nowrap ${taskStatusColorClass(t.taskStatus)}`}>
+                  {taskStatusLabel(t.taskStatus, t.delegatedTo?.name)}
                 </span>
               }
               emptyLabel="Add status"
@@ -463,8 +571,57 @@ function Row({
               )}
             />
           ) : (
-            statusLabel(t)
+            <span className={`chip whitespace-nowrap ${taskStatusColorClass(t.taskStatus)}`}>
+              {taskStatusLabel(t.taskStatus, t.delegatedTo?.name)}
+            </span>
           )}
+        </td>
+        <td className="py-3 pr-3" onClick={canEdit ? stop : undefined}>
+          {canEdit ? (
+            <TaskFieldEditor<DelegateCandidate | null>
+              chip={
+                t.delegatedTo ? (
+                  <span className="chip whitespace-nowrap border-accent2/30 bg-accentSoft text-accent2">
+                    {t.delegatedTo.name}
+                  </span>
+                ) : null
+              }
+              emptyLabel="Add delegate"
+              initialValue={
+                t.delegatedTo
+                  ? { id: t.delegatedTo.personId, name: t.delegatedTo.name, email: t.delegatedTo.email ?? null }
+                  : null
+              }
+              onSave={handleDelegateSave}
+              error={delegateErr}
+              renderControl={(value, setValue) => <DelegatePicker value={value} onChange={setValue} />}
+            />
+          ) : t.delegatedTo ? (
+            <span className="chip whitespace-nowrap border-accent2/30 bg-accentSoft text-accent2">
+              {t.delegatedTo.name}
+            </span>
+          ) : (
+            <span className="text-muted">—</span>
+          )}
+          {waitingPrompt ? (
+            <div className="mt-1 flex flex-wrap items-center gap-1 text-2xs text-muted">
+              <span>Mark as waiting on {waitingPrompt}?</span>
+              <button
+                type="button"
+                onClick={confirmWaiting}
+                className="rounded-md border border-info/40 px-1.5 py-0.5 font-semibold text-info hover:bg-info/10"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setWaitingPrompt(null)}
+                className="text-muted hover:text-fg"
+              >
+                Not now
+              </button>
+            </div>
+          ) : null}
         </td>
         <td className="py-3 pr-3 tabular-nums text-muted">{t.start ? formatDateShort(t.start) : "—"}</td>
         <td className="py-3 pr-3 tabular-nums" onClick={canEdit ? stop : undefined}>
@@ -507,8 +664,8 @@ function Row({
       {expanded && (
         <tr className="border-b" style={{ borderColor: "var(--line)", background: "var(--surface-2)" }}>
           <td />
-          <td colSpan={6} className="px-3 py-4">
-            <TaskDetail t={t} />
+          <td colSpan={7} className="px-3 py-4">
+            <TaskDetail t={t} checklist={checklist} onChecklistChange={persistChecklist} />
           </td>
         </tr>
       )}
@@ -532,7 +689,15 @@ function quoteHref(t: TaskView): string {
 // carries the type identity through from the collapsed chip; two columns
 // separate "what this is" from "what's happening on it," with the update
 // log (Part A) as the visual centerpiece of the right column.
-function TaskDetail({ t }: { t: TaskView }) {
+function TaskDetail({
+  t,
+  checklist,
+  onChecklistChange,
+}: {
+  t: TaskView;
+  checklist: ChecklistStep[];
+  onChecklistChange: (next: ChecklistStep[]) => void;
+}) {
   const [refreshToken, setRefreshToken] = useState(0);
   const bumpRefresh = () => setRefreshToken((x) => x + 1);
 
@@ -585,6 +750,18 @@ function TaskDetail({ t }: { t: TaskView }) {
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-line2 pt-3.5">
+            {/* dev-feedback #20 item 2: the status chip belongs in the detail
+                view too, not just the collapsed row, so the "waiting on
+                someone" state is unmistakable however Jordan is looking at
+                the task. */}
+            <span className={`chip whitespace-nowrap ${taskStatusColorClass(t.taskStatus)}`}>
+              {taskStatusLabel(t.taskStatus, t.delegatedTo?.name)}
+            </span>
+            {t.delegatedTo && (
+              <span className="chip whitespace-nowrap border-accent2/30 bg-accentSoft text-accent2">
+                delegated to {t.delegatedTo.name}
+              </span>
+            )}
             {t.priority && (
               <span className="chip" style={{ borderColor: "var(--line-2)" }}>priority: {t.priority}</span>
             )}
@@ -598,6 +775,8 @@ function TaskDetail({ t }: { t: TaskView }) {
               {t.sourceFile.split("/").pop()}
             </span>
           </div>
+
+          <TaskSubitems checklist={checklist} onChange={onChecklistChange} />
         </div>
 
         {/* Right: what's happening on it (the update log is the centerpiece) */}
@@ -627,6 +806,95 @@ function TaskDetail({ t }: { t: TaskView }) {
             <TaskLinkedMeetings sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Sub-items checklist (dev-feedback #20 item 3): a genuinely lightweight
+// add/toggle list, the table view's counterpart to TasksGrouped's TaskCard
+// "Internal progress" section. Both read/write the same task_meta.checklist
+// (lib/taskMeta.ts) so a step checked off in one view is checked off in the
+// other, rather than two competing "sub-items" stores. Deliberately skips
+// TaskCard's "blocking" toggle here: Jordan asked for "sub-items, checked
+// off," not a second blocking mechanism, so this stays a plain checklist.
+function TaskSubitems({
+  checklist,
+  onChange,
+}: {
+  checklist: ChecklistStep[];
+  onChange: (next: ChecklistStep[]) => void;
+}) {
+  const [newStep, setNewStep] = useState("");
+  const progress = formatChecklistProgress(checklist);
+
+  function addStep() {
+    const text = newStep.trim();
+    if (!text) return;
+    onChange([...checklist, { id: `s${Date.now()}`, text, done: false }]);
+    setNewStep("");
+  }
+  function toggleStep(id: string) {
+    onChange(checklist.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
+  }
+  function removeStep(id: string) {
+    onChange(checklist.filter((s) => s.id !== id));
+  }
+
+  return (
+    <div className="mt-4 border-t border-line2 pt-3.5">
+      <div className="mb-1.5 flex items-center justify-between">
+        <div className="eyebrow text-muted">Sub-items</div>
+        {progress ? <span className="text-2xs text-muted">{progress} done</span> : null}
+      </div>
+      {checklist.length ? (
+        <div className="mb-2 h-1 w-full overflow-hidden rounded-full bg-surface2">
+          <div
+            className="h-full rounded-full bg-accent"
+            style={{ width: `${(checklistProgress(checklist).done / checklist.length) * 100}%` }}
+          />
+        </div>
+      ) : null}
+      <div className="space-y-1">
+        {checklist.map((s) => (
+          <div key={s.id} className="group flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => toggleStep(s.id)}
+              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] ${
+                s.done ? "border-accent bg-accent text-white" : "border-line2 text-transparent"
+              }`}
+            >
+              ✓
+            </button>
+            <span className={`flex-1 ${s.done ? "text-muted line-through" : "text-fg/85"}`}>{s.text}</span>
+            <button
+              type="button"
+              onClick={() => removeStep(s.id)}
+              className="shrink-0 text-2xs text-muted opacity-0 hover:text-danger group-hover:opacity-100"
+              aria-label="Remove sub-item"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        {!checklist.length ? <p className="text-2xs text-muted">No sub-items yet.</p> : null}
+      </div>
+      <div className="mt-1.5 flex gap-1.5">
+        <input
+          value={newStep}
+          onChange={(e) => setNewStep(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addStep()}
+          placeholder="Add sub-item…"
+          className="input flex-1 px-2 py-1 text-xs"
+        />
+        <button
+          type="button"
+          onClick={addStep}
+          className="rounded-lg border border-border px-2 py-1 text-xs text-fg/70 hover:text-fg"
+        >
+          Add
+        </button>
       </div>
     </div>
   );

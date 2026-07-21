@@ -5,6 +5,7 @@ import {
   formatEmailLinkedText,
   formatMeetingLinkedText,
   formatStatusChangeText,
+  formatDelegateChangeText,
 } from "./taskUpdates";
 
 describe("formatMonthDay", () => {
@@ -85,5 +86,27 @@ describe("formatStatusChangeText", () => {
   });
   it("describes a due date cleared", () => {
     expect(formatStatusChangeText("due", null)).toBe("Due date cleared.");
+  });
+});
+
+describe("formatDelegateChangeText", () => {
+  it("describes a delegate set", () => {
+    expect(formatDelegateChangeText("Scott Ridley")).toBe("Delegated to Scott Ridley.");
+  });
+  it("describes a delegate cleared", () => {
+    expect(formatDelegateChangeText(null)).toBe("Delegation cleared.");
+  });
+});
+
+describe("formatEmailLinkedText fromDelegate tag (dev-feedback #20 item 5)", () => {
+  it("tags the entry when the sender is the task's delegate", () => {
+    expect(formatEmailLinkedText("Re: PCN 1234", "Scott Ridley", "scott@merit.com", true)).toBe(
+      'Linked to email: "Re: PCN 1234" from Scott Ridley (your delegate).',
+    );
+  });
+  it("defaults to no tag, unchanged from the original behavior", () => {
+    expect(formatEmailLinkedText("Re: PCN 1234", "Scott Ridley", "scott@merit.com")).toBe(
+      'Linked to email: "Re: PCN 1234" from Scott Ridley.',
+    );
   });
 });

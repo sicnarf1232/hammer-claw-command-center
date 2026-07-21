@@ -52,7 +52,7 @@ export default function TasksBoard({
       {view === "grouped" ? (
         <TasksGrouped tasks={tasks} today={today} meta={meta} accounts={accounts} canEdit={canEdit} />
       ) : (
-        <TasksTable tasks={tasks} today={today} accounts={accounts} canEdit={canEdit} />
+        <TasksTable tasks={tasks} today={today} accounts={accounts} canEdit={canEdit} meta={meta} />
       )}
     </div>
   );

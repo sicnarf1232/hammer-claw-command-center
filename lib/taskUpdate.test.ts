@@ -2,11 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   validateTaskUpdate,
   applyTaskFieldUpdate,
+  taskStatusLabel,
+  taskStatusColorClass,
   TaskUpdateError,
 } from "./taskUpdate";
 import type { TaskView } from "./taskView";
 
 const ACCOUNTS = ["Boston Scientific", "Terumo Medical"];
+const PERSON_IDS = [7, 42];
 
 function view(overrides: Partial<TaskView> = {}): TaskView {
   return {
@@ -99,6 +102,64 @@ describe("validateTaskUpdate", () => {
       TaskUpdateError,
     );
   });
+
+  it("accepts a known delegate person id", () => {
+    expect(
+      validateTaskUpdate({ field: "delegate", value: "42" }, ACCOUNTS, PERSON_IDS),
+    ).toEqual({ field: "delegate", value: "42" });
+  });
+
+  it("clears the delegate on an empty value", () => {
+    expect(validateTaskUpdate({ field: "delegate", value: "" }, ACCOUNTS, PERSON_IDS)).toEqual({
+      field: "delegate",
+      value: null,
+    });
+  });
+
+  it("rejects a delegate id that is not a known person", () => {
+    expect(() =>
+      validateTaskUpdate({ field: "delegate", value: "999" }, ACCOUNTS, PERSON_IDS),
+    ).toThrow(TaskUpdateError);
+  });
+
+  it("rejects a non-numeric delegate value", () => {
+    expect(() =>
+      validateTaskUpdate({ field: "delegate", value: "scott" }, ACCOUNTS, PERSON_IDS),
+    ).toThrow(TaskUpdateError);
+  });
+});
+
+describe("taskStatusLabel", () => {
+  it("combines waiting with the delegate's name", () => {
+    expect(taskStatusLabel("waiting", "Scott Ridley")).toBe("Waiting on Scott Ridley");
+  });
+
+  it("falls back to plain 'Waiting' with no delegate", () => {
+    expect(taskStatusLabel("waiting", null)).toBe("Waiting");
+    expect(taskStatusLabel("waiting")).toBe("Waiting");
+  });
+
+  it("ignores the delegate name for non-waiting statuses", () => {
+    expect(taskStatusLabel("blocked", "Scott Ridley")).toBe("Blocked");
+    expect(taskStatusLabel("someday", "Scott Ridley")).toBe("Someday");
+  });
+
+  it("defaults to Open", () => {
+    expect(taskStatusLabel(undefined)).toBe("Open");
+    expect(taskStatusLabel(null)).toBe("Open");
+    expect(taskStatusLabel("open")).toBe("Open");
+  });
+});
+
+describe("taskStatusColorClass", () => {
+  it("gives waiting a distinct color from open", () => {
+    expect(taskStatusColorClass("waiting")).not.toBe(taskStatusColorClass("open"));
+    expect(taskStatusColorClass("waiting")).not.toBe(taskStatusColorClass(undefined));
+  });
+
+  it("gives blocked its own color", () => {
+    expect(taskStatusColorClass("blocked")).not.toBe(taskStatusColorClass("waiting"));
+  });
 });
 
 describe("applyTaskFieldUpdate", () => {
@@ -137,5 +198,11 @@ describe("applyTaskFieldUpdate", () => {
     const next = applyTaskFieldUpdate(t, "due", "2026-08-01");
     expect(next.sourceFile).toBe(t.sourceFile);
     expect(next.sourceLine).toBe(t.sourceLine);
+  });
+
+  it("delegate is a no-op here: callers apply it directly (see TasksTable/TasksGrouped)", () => {
+    const t = view({ delegatedTo: { personId: 1, name: "Scott Ridley" } });
+    const next = applyTaskFieldUpdate(t, "delegate", "1");
+    expect(next.delegatedTo).toEqual({ personId: 1, name: "Scott Ridley" });
   });
 });
