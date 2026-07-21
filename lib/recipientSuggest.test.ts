@@ -6,6 +6,7 @@ import {
   insertRecipientToken,
   currentToken,
   completedTokens,
+  parseRecipientList,
   type RecipientSuggestion,
 } from "./recipientSuggest";
 
@@ -96,5 +97,25 @@ describe("insertRecipientToken", () => {
     expect(insertRecipientToken("john@x.com, ", s("jane@y.com", null, "history"))).toBe(
       "john@x.com, jane@y.com, ",
     );
+  });
+});
+
+describe("parseRecipientList", () => {
+  it("splits on commas and trims whitespace", () => {
+    expect(parseRecipientList("a@x.com, b@y.com")).toEqual(["a@x.com", "b@y.com"]);
+  });
+
+  it("splits on semicolons too", () => {
+    expect(parseRecipientList("a@x.com; b@y.com")).toEqual(["a@x.com", "b@y.com"]);
+  });
+
+  it("drops empty tokens from trailing separators or blank input", () => {
+    expect(parseRecipientList("a@x.com, , b@y.com,")).toEqual(["a@x.com", "b@y.com"]);
+    expect(parseRecipientList("")).toEqual([]);
+    expect(parseRecipientList("   ")).toEqual([]);
+  });
+
+  it("includes the final token even with no trailing separator (unlike completedTokens)", () => {
+    expect(parseRecipientList("a@x.com, jane@y.com")).toEqual(["a@x.com", "jane@y.com"]);
   });
 });

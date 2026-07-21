@@ -11,7 +11,7 @@ import {
 } from "@/lib/taskUpdate";
 import { formatDateShort } from "@/lib/dates";
 import { SearchIcon } from "./icons";
-import { TaskLinkedEmails, TaskLinkedMeetings } from "./TaskEmailLink";
+import { TaskLinkedEmails, TaskLinkedMeetings, TaskEmailAction } from "./TaskEmailLink";
 import TaskUpdateLog from "./TaskUpdateLog";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
@@ -548,7 +548,17 @@ function TaskDetail({ t }: { t: TaskView }) {
 
         {/* Right: what's happening on it (the update log is the centerpiece) */}
         <div className="min-w-0 border-t border-line2 pt-4 md:border-l md:border-t-0 md:pl-6 md:pt-0">
-          <div className="eyebrow mb-2 text-muted">Update log</div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="eyebrow text-muted">Update log</div>
+            {/* dev-feedback #18: one click to either reply on a linked thread
+                or start a new email, without duplicating a reply composer here. */}
+            <TaskEmailAction
+              sourceFile={t.sourceFile}
+              sourceLine={t.sourceLine}
+              accountSlug={t.accountSlug}
+              subject={cleanTitle(t.title)}
+            />
+          </div>
           <TaskUpdateLog sourceFile={t.sourceFile} sourceLine={t.sourceLine} refreshToken={refreshToken} />
 
           <div className="mt-4 grid gap-2.5 border-t border-line2 pt-3.5">

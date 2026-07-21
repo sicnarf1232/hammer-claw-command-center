@@ -306,6 +306,110 @@ export function TaskLinkedEmails({
   );
 }
 
+// Task detail "Email" action (dev-feedback #18): "Reply to customer" reuses
+// the same GET this file's TaskLinkedEmails already calls, so a task with
+// one confirmed-linked email jumps straight to that thread's reply box via
+// the same /inbox?selected=<threadKey> pattern used by TaskLinkedEmails
+// above and lib/notifyLink.ts; more than one linked email opens a small
+// picker instead of guessing which thread Jordan means. "Create new email"
+// is always available and hands off to /compose, which does its own
+// account-contact prefill server-side.
+export function TaskEmailAction({
+  sourceFile,
+  sourceLine,
+  accountSlug,
+  subject,
+}: {
+  sourceFile: string;
+  sourceLine: number;
+  accountSlug?: string;
+  subject: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [linked, setLinked] = useState<LinkedEmailRow[]>([]);
+  const [picking, setPicking] = useState(false);
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    setLoading(true);
+    fetch(
+      `/api/tasks/linked-emails?sourceFile=${encodeURIComponent(sourceFile)}&sourceLine=${sourceLine}`,
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        setLinked(Array.isArray(data.linked) ? data.linked : []);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true))
+      .finally(() => setLoading(false));
+  }, [open, loaded, sourceFile, sourceLine]);
+
+  const composeHref = `/compose?subject=${encodeURIComponent(subject)}${
+    accountSlug ? `&account=${encodeURIComponent(accountSlug)}` : ""
+  }`;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="btn-outline text-2xs"
+      >
+        ✉️ Email {open ? "▾" : "▸"}
+      </button>
+      {open ? (
+        <div className="absolute right-0 z-20 mt-1 w-64 rounded-xl border border-border bg-surface p-2 text-xs shadow-elevated">
+          {loading ? (
+            <p className="px-1 py-1 text-2xs text-muted">Checking linked emails…</p>
+          ) : linked.length === 0 ? (
+            <p className="px-1 py-1 text-2xs text-muted">
+              {loaded ? "No linked email to reply to yet." : ""}
+            </p>
+          ) : linked.length === 1 ? (
+            <Link
+              href={`/inbox?selected=${encodeURIComponent(linked[0].threadKey)}`}
+              className="block rounded-lg px-1.5 py-1 font-medium text-accent2 hover:bg-surface2"
+            >
+              Reply to customer
+            </Link>
+          ) : (
+            <div>
+              <button
+                type="button"
+                onClick={() => setPicking((p) => !p)}
+                className="flex w-full items-center justify-between rounded-lg px-1.5 py-1 text-left font-medium text-accent2 hover:bg-surface2"
+              >
+                Reply to customer ({linked.length}) <span>{picking ? "▾" : "▸"}</span>
+              </button>
+              {picking ? (
+                <div className="mt-0.5 grid gap-0.5 border-t border-line2 pt-1">
+                  {linked.map((e) => (
+                    <Link
+                      key={e.emailId}
+                      href={`/inbox?selected=${encodeURIComponent(e.threadKey)}`}
+                      className="truncate rounded-lg px-1.5 py-1 text-2xs text-fg/80 hover:bg-surface2"
+                    >
+                      {e.subject || "(no subject)"} {e.fromName ? `· ${e.fromName}` : ""}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+          <Link
+            href={composeHref}
+            className="mt-1 block rounded-lg border-t border-line2 px-1.5 pt-1.5 font-medium text-fg/80 hover:bg-surface2"
+          >
+            Create new email
+          </Link>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 interface LinkedMeetingRow {
   meetingId: number;
   title: string | null;

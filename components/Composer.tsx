@@ -24,15 +24,20 @@ export default function Composer({
   forwardId,
   initialSubject,
   forwardFrom,
+  initialTo,
 }: {
   mode: "new" | "forward";
   forwardId?: number;
   initialSubject?: string;
   forwardFrom?: string | null;
+  // dev-feedback #18: landing here from a task with a known account seeds
+  // the To field with that account's contact; still a plain editable
+  // RecipientField underneath, so Jordan can change it freely.
+  initialTo?: string;
 }) {
   const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
-  const [to, setTo] = useState("");
+  const [to, setTo] = useState(initialTo ?? "");
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState(initialSubject ?? "");
   const [steer, setSteer] = useState("");

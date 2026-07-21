@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { identityFor } from "@/lib/workstreams";
 import { isWorkstream } from "@/lib/vault/types";
+import RecipientField from "@/components/RecipientField";
+import { parseRecipientList } from "@/lib/recipientSuggest";
 
 // Reply from a thread via Flow B (Power Automate). The body is a rich WYSIWYG
 // editor: "Draft with AI" fills it with formatted HTML in Jordan's voice, and the
@@ -80,10 +82,26 @@ export default function ReplyBox({
     if (fileRef.current) fileRef.current.value = "";
   }
 
+  // Recipients are editable (dev-feedback #18): reply-all/reply-to-sender
+  // still computes the default set exactly as before, but that default now
+  // only seeds a To/Cc text field Jordan can add to, remove from, or replace
+  // outright. Toggling "Reply all" re-seeds both fields from the newly
+  // computed default (see the effect below); after that, whatever is typed
+  // is what actually sends, not the original computed default.
   const primaryTo = toList[0] ?? to;
-  const recipients = replyAll
+  const defaultRecipients = replyAll
     ? { to: toList.length ? toList : [primaryTo], cc: ccList }
     : { to: [primaryTo], cc: [] as string[] };
+  const [toText, setToText] = useState(defaultRecipients.to.join(", "));
+  const [ccText, setCcText] = useState(defaultRecipients.cc.join(", "));
+
+  useEffect(() => {
+    setToText(defaultRecipients.to.join(", "));
+    setCcText(defaultRecipients.cc.join(", "));
+    // Re-seed only when the reply-all toggle changes, not on every keystroke
+    // in the fields it seeded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replyAll]);
 
   useEffect(() => {
     if (preset && editorRef.current) {
@@ -138,6 +156,12 @@ export default function ReplyBox({
       setError("Write a reply first (or draft one with AI).");
       return;
     }
+    const toAddrs = parseRecipientList(toText);
+    const ccAddrs = parseRecipientList(ccText);
+    if (!toAddrs.length) {
+      setError("Add at least one recipient.");
+      return;
+    }
     setBusy("send");
     setError(null);
     setNote(null);
@@ -151,8 +175,8 @@ export default function ReplyBox({
           workstream,
           bodyHtml: html,
           subject: `RE: ${subject}`,
-          to: recipients.to,
-          cc: recipients.cc,
+          to: toAddrs,
+          cc: ccAddrs,
           attachments: attachments.map((a) => a.ref),
         }),
       });
@@ -174,7 +198,7 @@ export default function ReplyBox({
     }
   }
 
-  const recipCount = recipients.to.length + recipients.cc.length;
+  const recipCount = parseRecipientList(toText).length + parseRecipientList(ccText).length;
 
   return (
     <div className="card mt-5 p-4">
@@ -195,9 +219,21 @@ export default function ReplyBox({
         </div>
       </div>
 
-      <div className="mb-2 truncate text-2xs text-muted">
-        To: {recipients.to.join(", ") || "—"}
-        {recipients.cc.length ? ` · Cc: ${recipients.cc.join(", ")}` : ""}
+      <div className="mb-2 grid gap-1.5">
+        <RecipientField
+          label="To"
+          value={toText}
+          onChange={setToText}
+          otherFieldValue={ccText}
+          placeholder="name@company.com, another@company.com"
+        />
+        <RecipientField
+          label="Cc"
+          value={ccText}
+          onChange={setCcText}
+          otherFieldValue={toText}
+          placeholder="optional"
+        />
       </div>
 
       {/* Prompt-in: steer the AI for complex replies. */}

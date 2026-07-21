@@ -89,3 +89,16 @@ export function completedTokens(value: string): string[] {
   const parts = value.split(",").map((p) => p.trim()).filter(Boolean);
   return parts.slice(0, value.trim().endsWith(",") ? parts.length : Math.max(parts.length - 1, 0));
 }
+
+// Final parse of a To/Cc field's raw text into the address list a send call
+// actually ships (dev-feedback #18, ReplyBox's editable recipients): unlike
+// completedTokens above, this includes the last token even without a
+// trailing comma/semicolon, since by send time nothing is "still being
+// typed." Comma and semicolon both split, matching Composer's existing
+// pending-link parse.
+export function parseRecipientList(value: string): string[] {
+  return value
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
