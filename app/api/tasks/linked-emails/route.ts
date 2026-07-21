@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
-import { dbConfigured, getDb, tasks as tasksT } from "@/lib/db";
+import { dbConfigured, getDb, tasks as tasksT, people as peopleT } from "@/lib/db";
 import { linkedEmailsForTask, suggestEmailsForTask, DB_TASK_FILE } from "@/lib/taskEmailLinks";
 import type { MatchableTask } from "@/lib/taskEmailMatch";
 
@@ -41,12 +41,30 @@ export async function GET(req: NextRequest) {
 
     let suggested: Awaited<ReturnType<typeof suggestEmailsForTask>> = [];
     if (row) {
+      // dev-feedback #20 item 4: resolve the task's delegate email/name so an
+      // exact-address match against a candidate email can qualify as its own
+      // signal (see lib/taskEmailMatch.ts). This route builds MatchableTask
+      // straight from the raw row rather than via TaskView, so the join
+      // lives here instead of reusing lib/taskEmailLinks.ts's toMatchable.
+      let delegateEmail: string | null = null;
+      let delegateName: string | null = null;
+      if (row.ownerPersonId != null) {
+        const [person] = await db
+          .select({ fullName: peopleT.fullName, email: peopleT.email })
+          .from(peopleT)
+          .where(eq(peopleT.id, row.ownerPersonId))
+          .limit(1);
+        delegateEmail = person?.email ?? null;
+        delegateName = person?.fullName ?? null;
+      }
       const task: MatchableTask = {
         id: `${sourceFile}:${sourceLine}`,
         title: row.text,
         description: row.description,
         notes: row.notes,
         customer: row.customer,
+        delegateEmail,
+        delegateName,
       };
       suggested = await suggestEmailsForTask(task, sourceFile, sourceLine, row.accountId ?? null, 3);
     }

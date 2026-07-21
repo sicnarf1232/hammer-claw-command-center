@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb, dbConfigured } from "@/lib/db";
-import { tasks as tasksT, taskEmails as taskEmailsT, emails as emailsT } from "@/lib/db/schema";
+import { tasks as tasksT, taskEmails as taskEmailsT, emails as emailsT, people as peopleT } from "@/lib/db/schema";
 import { accountNames } from "@/lib/firehose/read";
 import { getOpenTasks } from "@/lib/vault";
 import { listAccounts } from "@/lib/accounts";
@@ -101,6 +101,24 @@ export async function confirmTaskEmailLinks(
     // Best-effort so a task_updates hiccup never undoes the link that just
     // succeeded above.
     try {
+      // dev-feedback #20 item 5 (optional): when the linked email's sender is
+      // exactly the task's delegate, tag the log entry so "waiting for it to
+      // come back" is visible in the task's own story, not just a generic
+      // "Linked to email" line.
+      const [taskRow] = await db
+        .select({ ownerPersonId: tasksT.ownerPersonId })
+        .from(tasksT)
+        .where(eq(tasksT.id, rowId))
+        .limit(1);
+      let delegateEmail: string | null = null;
+      if (taskRow?.ownerPersonId != null) {
+        const [person] = await db
+          .select({ email: peopleT.email })
+          .from(peopleT)
+          .where(eq(peopleT.id, taskRow.ownerPersonId))
+          .limit(1);
+        delegateEmail = person?.email ?? null;
+      }
       const emailRows = await db
         .select({
           id: emailsT.id,
@@ -112,10 +130,12 @@ export async function confirmTaskEmailLinks(
         .from(emailsT)
         .where(inArray(emailsT.id, ids));
       for (const e of emailRows) {
+        const fromDelegate =
+          !!delegateEmail && !!e.fromEmail && delegateEmail.toLowerCase() === e.fromEmail.toLowerCase();
         await addTaskUpdateForTaskId(
           rowId,
           "email-linked",
-          formatEmailLinkedText(e.subject, e.fromName, e.fromEmail),
+          formatEmailLinkedText(e.subject, e.fromName, e.fromEmail, fromDelegate),
           e.threadId ? `t:${e.threadId}` : `m:${e.id}`,
         );
       }
@@ -223,6 +243,8 @@ function toMatchable(t: TaskView): MatchableTask {
     description: t.description ?? null,
     notes: t.notes ?? null,
     customer: t.customer ?? null,
+    delegateEmail: t.delegatedTo?.email ?? null,
+    delegateName: t.delegatedTo?.name ?? null,
   };
 }
 

@@ -24,6 +24,12 @@ export interface MatchableTask {
   description?: string | null;
   notes?: string | null;
   customer?: string | null; // account display name, or "internal"
+  // Structured delegate (dev-feedback #20 item 4), from TaskView.delegatedTo.
+  // A named-person match in free text (below) can be the wrong "Scott"; an
+  // exact address match against the task's actual delegate cannot, so it
+  // qualifies as its own, stronger signal.
+  delegateEmail?: string | null;
+  delegateName?: string | null;
 }
 
 export interface MatchableEmail {
@@ -48,6 +54,10 @@ export interface MatchableContent {
   personNames?: string[]; // candidate names to check against the task's text
   extractedAsks?: string[] | null;
   extractedProvides?: string[] | null;
+  // Email-only: the sender's address, for the exact delegate-email
+  // qualifying signal below. Meetings have no single "from," so this stays
+  // undefined for the meeting matcher.
+  fromEmail?: string | null;
 }
 
 export interface ScoredMatch {
@@ -179,6 +189,21 @@ export function scoreTaskContentPair(task: MatchableTask, content: MatchableCont
     );
   }
 
+  // Signal: the content's sender is an EXACT match for the task's structured
+  // delegate (dev-feedback #20 item 4). QUALIFYING, and stronger than the
+  // fuzzy named-person signal just below: "Scott" mentioned in a task's own
+  // text could be the wrong Scott, but an exact address match against the
+  // task's actual delegate cannot be. This is the concrete "waiting on
+  // someone, and they just replied" moment Jordan described.
+  if (content.kind === "email" && task.delegateEmail && content.fromEmail) {
+    if (norm(task.delegateEmail) === norm(content.fromEmail)) {
+      score += 5;
+      qualifies = true;
+      const who = task.delegateName || "the delegate";
+      reasons.push(`This email is from ${who}, who this task is delegated to.`);
+    }
+  }
+
   // Signal: a person named in the task's own text also appears as a source
   // of this content (email sender, meeting attendee). QUALIFYING: a strong
   // completion signal even with no shared keywords (e.g. "ask Scott for the
@@ -243,6 +268,7 @@ export function scoreTaskEmailPair(task: MatchableTask, email: MatchableEmail): 
     personNames: first ? [first] : [],
     extractedAsks: email.extractedAsks,
     extractedProvides: email.extractedProvides,
+    fromEmail: email.fromEmail ?? null,
   });
 }
 

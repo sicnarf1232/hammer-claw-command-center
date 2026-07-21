@@ -240,6 +240,71 @@ describe("scoreTaskEmailPair (thin email wrapper)", () => {
   });
 });
 
+describe("delegate email exact match (dev-feedback #20 item 4)", () => {
+  it("qualifies on an exact delegate-email match alone, with no other signal", () => {
+    const task: MatchableTask = {
+      id: "t20",
+      title: "Ask about the lead time on the new tooling",
+      delegateEmail: "scott.ridley@merit.com",
+      delegateName: "Scott Ridley",
+    };
+    const email: MatchableEmail = {
+      subject: "hi",
+      bodyText: "just checking in, nothing specific mentioned here",
+      fromName: "Someone Else",
+      fromEmail: "scott.ridley@merit.com",
+    };
+    const { score, reasons, qualifies } = scoreTaskEmailPair(task, email);
+    expect(qualifies).toBe(true);
+    expect(score).toBeGreaterThan(0);
+    expect(reasons.some((r) => r.includes("Scott Ridley") && r.includes("delegated to"))).toBe(true);
+  });
+
+  it("matches case-insensitively", () => {
+    const task: MatchableTask = {
+      id: "t21",
+      title: "Follow up",
+      delegateEmail: "Scott.Ridley@Merit.com",
+      delegateName: "Scott Ridley",
+    };
+    const email: MatchableEmail = {
+      subject: "re",
+      bodyText: "no shared keywords here at all",
+      fromEmail: "scott.ridley@merit.com",
+    };
+    expect(scoreTaskEmailPair(task, email).qualifies).toBe(true);
+  });
+
+  it("does not qualify when the sender is someone else, even with a similar name", () => {
+    const task: MatchableTask = {
+      id: "t22",
+      title: "Ask Scott about the lead time",
+      delegateEmail: "scott.ridley@merit.com",
+      delegateName: "Scott Ridley",
+    };
+    const email: MatchableEmail = {
+      subject: "hi",
+      bodyText: "unrelated note",
+      fromName: "Scott Anderson",
+      fromEmail: "scott.anderson@merit.com",
+    };
+    // Falls back to the fuzzy named-person signal ("Scott" in the task text),
+    // which still qualifies, but the delegate-specific reason must not fire.
+    const { reasons } = scoreTaskEmailPair(task, email);
+    expect(reasons.some((r) => r.includes("delegated to"))).toBe(false);
+  });
+
+  it("does not qualify when the task has no delegate", () => {
+    const task: MatchableTask = { id: "t23", title: "Some unrelated task" };
+    const email: MatchableEmail = {
+      subject: "hi",
+      bodyText: "nothing shared",
+      fromEmail: "anyone@merit.com",
+    };
+    expect(scoreTaskEmailPair(task, email).qualifies).toBe(false);
+  });
+});
+
 describe("matchTasksForEmail", () => {
   const email: MatchableEmail = {
     accountName: null,
