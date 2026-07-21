@@ -13,6 +13,10 @@ export interface ChecklistStep {
   done: boolean;
   owner?: string | null;
   blocking?: boolean;
+  // Optional per-step due date (ISO YYYY-MM-DD), sitting under the task's own
+  // overall due date: "sample build due 8/10, get update from Scott 7/27".
+  // Older jsonb rows simply lack the field; absent means undated.
+  due?: string | null;
 }
 
 export interface TaskMeta {

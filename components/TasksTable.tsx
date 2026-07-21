@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { TaskView } from "@/lib/taskView";
 import { cleanTaskTitle as cleanTitle } from "@/lib/taskView";
 import type { TaskMeta, ChecklistStep } from "@/lib/taskMeta";
-import { checklistProgress, formatChecklistProgress } from "@/lib/checklistProgress";
+import { checklistProgress, formatChecklistProgress, nextStepDue } from "@/lib/checklistProgress";
 import { TASK_TYPES, TASK_TYPE_HUE as TYPE_HUE, type TaskType } from "@/lib/taskType";
 import {
   TASK_STATUSES,
@@ -22,6 +22,7 @@ import TaskFieldEditor from "./TaskFieldEditor";
 import DelegatePicker, { type DelegateCandidate } from "./DelegatePicker";
 import TaskMetaChips from "./TaskMetaChips";
 import TaskSuggestedAction from "./TaskSuggestedAction";
+import StepDueDate from "./StepDueDate";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
 // columns are Task / Account / Type / Status / Start / Due. Default scope is
@@ -363,6 +364,9 @@ function Row({
   // TasksGrouped's TaskCard (which never unmounts its own checklist state).
   const [checklist, setChecklist] = useState<ChecklistStep[]>(meta?.checklist ?? []);
   const checklistProgressLabel = formatChecklistProgress(checklist);
+  // The earliest-dated open step, whispered next to the N/M badge so a task
+  // due AUG 10 still shows that "get update from Scott" is due JUL 27 first.
+  const nextStep = nextStepDue(checklist, today);
 
   async function persistChecklist(next: ChecklistStep[]) {
     setChecklist(next);
@@ -432,9 +436,14 @@ function Row({
             {checklistProgressLabel ? (
               <span
                 className="chip shrink-0 whitespace-nowrap border-border bg-surface2 text-2xs text-muted"
-                title="Sub-items done"
+                title={nextStep ? `Next sub-item: ${nextStep.text}` : "Sub-items done"}
               >
                 {checklistProgressLabel}
+                {nextStep ? (
+                  <span style={nextStep.overdue ? { color: "var(--due)" } : undefined}>
+                    {" "}· next {formatDateShort(nextStep.due)}
+                  </span>
+                ) : null}
               </span>
             ) : null}
           </div>
@@ -654,7 +663,7 @@ function Row({
         <tr className="border-b" style={{ borderColor: "var(--line)", background: "var(--surface-2)" }}>
           <td />
           <td colSpan={7} className="px-3 py-4">
-            <TaskDetail t={t} checklist={checklist} onChecklistChange={persistChecklist} />
+            <TaskDetail t={t} today={today} checklist={checklist} onChecklistChange={persistChecklist} />
           </td>
         </tr>
       )}
@@ -669,10 +678,12 @@ function Row({
 // log (Part A) as the visual centerpiece of the right column.
 function TaskDetail({
   t,
+  today,
   checklist,
   onChecklistChange,
 }: {
   t: TaskView;
+  today: string;
   checklist: ChecklistStep[];
   onChecklistChange: (next: ChecklistStep[]) => void;
 }) {
@@ -715,7 +726,7 @@ function TaskDetail({
             <TaskMetaChips t={t} />
           </div>
 
-          <TaskSubitems checklist={checklist} onChange={onChecklistChange} />
+          <TaskSubitems checklist={checklist} today={today} onChange={onChecklistChange} />
         </div>
 
         {/* Right: what's happening on it (the update log is the centerpiece) */}
@@ -759,25 +770,35 @@ function TaskDetail({
 // off," not a second blocking mechanism, so this stays a plain checklist.
 function TaskSubitems({
   checklist,
+  today,
   onChange,
 }: {
   checklist: ChecklistStep[];
+  today: string;
   onChange: (next: ChecklistStep[]) => void;
 }) {
   const [newStep, setNewStep] = useState("");
+  const [newStepDue, setNewStepDue] = useState("");
   const progress = formatChecklistProgress(checklist);
 
   function addStep() {
     const text = newStep.trim();
     if (!text) return;
-    onChange([...checklist, { id: `s${Date.now()}`, text, done: false }]);
+    onChange([
+      ...checklist,
+      { id: `s${Date.now()}`, text, done: false, ...(newStepDue ? { due: newStepDue } : {}) },
+    ]);
     setNewStep("");
+    setNewStepDue("");
   }
   function toggleStep(id: string) {
     onChange(checklist.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
   }
   function removeStep(id: string) {
     onChange(checklist.filter((s) => s.id !== id));
+  }
+  function setStepDue(id: string, due: string | null) {
+    onChange(checklist.map((s) => (s.id === id ? { ...s, due } : s)));
   }
 
   return (
@@ -807,6 +828,7 @@ function TaskSubitems({
               ✓
             </button>
             <span className={`flex-1 ${s.done ? "text-muted line-through" : "text-fg/85"}`}>{s.text}</span>
+            <StepDueDate due={s.due} done={s.done} today={today} onChange={(due) => setStepDue(s.id, due)} />
             <button
               type="button"
               onClick={() => removeStep(s.id)}
@@ -826,6 +848,15 @@ function TaskSubitems({
           onKeyDown={(e) => e.key === "Enter" && addStep()}
           placeholder="Add sub-item…"
           className="input flex-1 px-2 py-1 text-xs"
+        />
+        <input
+          type="date"
+          aria-label="Sub-item due date (optional)"
+          title="Due date (optional)"
+          value={newStepDue}
+          onChange={(e) => setNewStepDue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addStep()}
+          className="input w-32 shrink-0 px-2 py-1 text-xs text-muted"
         />
         <button
           type="button"

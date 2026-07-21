@@ -5,6 +5,7 @@ import type { TaskView } from "@/lib/taskView";
 import { cleanTaskTitle as cleanTitle } from "@/lib/taskView";
 import type { TaskMeta, ChecklistStep } from "@/lib/taskMeta";
 import { customerHue, initials } from "@/lib/customerHues";
+import { nextStepDue } from "@/lib/checklistProgress";
 import { formatDateMDY, formatDateShort, todayISO } from "@/lib/dates";
 import { TASK_TYPES, TASK_TYPE_HUE, type TaskType } from "@/lib/taskType";
 import {
@@ -21,6 +22,7 @@ import TaskMetaChips from "./TaskMetaChips";
 import TaskSuggestedAction from "./TaskSuggestedAction";
 import { TaskLinkedEmails, TaskLinkedMeetings, TaskEmailAction } from "./TaskEmailLink";
 import TaskUpdateLog from "./TaskUpdateLog";
+import StepDueDate from "./StepDueDate";
 
 // Grouped-by-account task view (the enhanced Tasks default). Each account group
 // shows an urgency-bordered card per task; the header carries the overdue count.
@@ -324,6 +326,7 @@ function TaskCard({
   const [checklist, setChecklist] = useState<ChecklistStep[]>(meta?.checklist ?? []);
   const [lastUpdate, setLastUpdate] = useState<string | null>(meta?.lastCustomerUpdateISO ?? null);
   const [newStep, setNewStep] = useState("");
+  const [newStepDue, setNewStepDue] = useState("");
   const [draft, setDraft] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -340,6 +343,9 @@ function TaskCard({
   const blockedInternally =
     (t.taskStatus ?? "").toLowerCase() === "blocked" || checklist.some((s) => s.blocking && !s.done);
   const doneSteps = checklist.filter((s) => s.done).length;
+  // The earliest-dated open step, surfaced on the collapsed meta line so the
+  // card can say "due AUG 10" while whispering "next JUL 27" underneath.
+  const nextStep = nextStepDue(checklist, today);
 
   async function persistChecklist(next: ChecklistStep[]) {
     setChecklist(next);
@@ -352,14 +358,21 @@ function TaskCard({
   function addStep() {
     const text = newStep.trim();
     if (!text) return;
-    persistChecklist([...checklist, { id: `s${Date.now()}`, text, done: false }]);
+    persistChecklist([
+      ...checklist,
+      { id: `s${Date.now()}`, text, done: false, ...(newStepDue ? { due: newStepDue } : {}) },
+    ]);
     setNewStep("");
+    setNewStepDue("");
   }
   function toggleStep(id: string) {
     persistChecklist(checklist.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
   }
   function toggleBlocking(id: string) {
     persistChecklist(checklist.map((s) => (s.id === id ? { ...s, blocking: !s.blocking } : s)));
+  }
+  function setStepDue(id: string, due: string | null) {
+    persistChecklist(checklist.map((s) => (s.id === id ? { ...s, due } : s)));
   }
 
   async function draftUpdate() {
@@ -455,7 +468,16 @@ function TaskCard({
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-2xs text-muted">
             {showAccount && hasAccount ? <span className="font-medium text-fg/70">{t.customer}</span> : null}
             {t.type ? <span>{t.type}</span> : null}
-            {checklist.length ? <span>{doneSteps}/{checklist.length} steps</span> : null}
+            {checklist.length ? (
+              <span title={nextStep ? `Next step: ${nextStep.text}` : undefined}>
+                {doneSteps}/{checklist.length} steps
+                {nextStep ? (
+                  <span style={nextStep.overdue ? { color: "var(--due)" } : undefined}>
+                    {" "}· next {formatDateShort(nextStep.due)}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
             {/* dev-feedback #20 item 2: "waiting"/"blocked" get the same
                 distinct chip color as the table view, so a task never reads
                 as just-not-started-yet when it's actually in motion
@@ -643,7 +665,7 @@ function TaskCard({
             ) : null}
             <div className="space-y-1">
               {checklist.map((s) => (
-                <div key={s.id} className="flex items-center gap-2 text-xs">
+                <div key={s.id} className="group flex items-center gap-2 text-xs">
                   <button
                     type="button"
                     onClick={() => toggleStep(s.id)}
@@ -654,6 +676,7 @@ function TaskCard({
                     ✓
                   </button>
                   <span className={`flex-1 ${s.done ? "text-muted line-through" : "text-fg/85"}`}>{s.text}</span>
+                  <StepDueDate due={s.due} done={s.done} today={today} onChange={(due) => setStepDue(s.id, due)} />
                   <button
                     type="button"
                     onClick={() => toggleBlocking(s.id)}
@@ -672,6 +695,15 @@ function TaskCard({
                 onKeyDown={(e) => e.key === "Enter" && addStep()}
                 placeholder="Add step…"
                 className="input flex-1 px-2 py-1 text-xs"
+              />
+              <input
+                type="date"
+                aria-label="Step due date (optional)"
+                title="Due date (optional)"
+                value={newStepDue}
+                onChange={(e) => setNewStepDue(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addStep()}
+                className="input w-32 shrink-0 px-2 py-1 text-xs text-muted"
               />
               <button type="button" onClick={addStep} className="rounded-lg border border-border px-2 py-1 text-xs text-fg/70 hover:text-fg">
                 Add
