@@ -18,7 +18,7 @@ export default async function ComposePage({
   const subject = source ? `FW: ${cleanSubject(source.subject) || "(no subject)"}` : "";
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-5xl">
       <Link href="/inbox" className="text-xs text-muted hover:text-fg">
         ← Inbox
       </Link>

@@ -10,6 +10,7 @@ import {
   type LinkedTask,
   type TaskEmailSuggestion,
 } from "@/components/TaskEmailLink";
+import TaskLinkPicker, { type PickedTask } from "@/components/TaskLinkPicker";
 
 // Self-contained thread detail panel (FIGMA FIX 3 + FIX 5): fetches
 // /api/inbox/thread-data and renders header, participants, AI summary,
@@ -156,6 +157,9 @@ export default function ThreadDetail({
   const [summaryOpen, setSummaryOpen] = useState(true);
   const [attachOpen, setAttachOpen] = useState(false);
   const [pickedDocIds, setPickedDocIds] = useState<Set<number>>(new Set());
+  // dev-feedback #15: general manual "link to task(s)" picker, separate from
+  // the AI-suggestion confirm flow above.
+  const [pickedTasks, setPickedTasks] = useState<PickedTask[]>([]);
 
   const [replyTargetId, setReplyTargetId] = useState<number | null>(null);
   // Closed until Jordan hits Reply; opening scrolls the composer into view.
@@ -545,6 +549,12 @@ export default function ThreadDetail({
         suggestions={data.taskEmailSuggestions}
         emailId={data.latestInboundEmailId}
       />
+
+      {/* 4c-ii. General manual "link to task(s)" (dev-feedback #15): Jordan
+          deliberately picks any number of tasks himself, distinct from the
+          AI suggestions above. Links against the latest message in this
+          thread, which always has a real emails row. */}
+      <TaskLinkPicker emailId={data.latestMessageId} selected={pickedTasks} onChange={setPickedTasks} />
 
       {/* 4d. Manual account link (dev-feedback #13): always available, unlike
           senderSuggestion below (which only fires for an unmapped EXTERNAL

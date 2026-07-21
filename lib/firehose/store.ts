@@ -10,6 +10,7 @@ import { loadDomainMap, domainOf } from "./domains";
 import { isInlineAttachment } from "./attach";
 import { promoteAttachmentToLibrary } from "./promote";
 import { htmlTablesToText } from "@/lib/htmlTable";
+import { reconcilePendingTaskLinks } from "@/lib/pendingTaskLinks";
 
 // Skip storing/parsing attachments larger than this (base64 inflates ~33%).
 const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
@@ -317,6 +318,19 @@ export async function storeFirehoseEmail(
     .update(emails)
     .set({ hasAttachments: attCount > 0 })
     .where(eq(emails.id, emailId));
+
+  // dev-feedback #15: a NEW outbound email composed with task links selected
+  // has no id at send time, so the compose page queued a pending link
+  // (lib/pendingTaskLinks.ts). Now that the real row exists, best-effort
+  // reconcile it. Never allowed to fail the capture itself.
+  if (direction === "outbound") {
+    await reconcilePendingTaskLinks({
+      emailId,
+      subject: str(payload.subject),
+      toAddrs: to.map((a) => a.email),
+      sentAt: validSentAt ?? new Date(),
+    }).catch(() => {});
+  }
 
   return {
     ok: true,

@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import RecipientField from "@/components/RecipientField";
+import TaskLinkPicker, { type PickedTask } from "@/components/TaskLinkPicker";
 
 interface UploadRef {
   kind: "upload";
@@ -35,6 +37,7 @@ export default function Composer({
   const [subject, setSubject] = useState(initialSubject ?? "");
   const [steer, setSteer] = useState("");
   const [files, setFiles] = useState<UploadRef[]>([]);
+  const [linkedTasks, setLinkedTasks] = useState<PickedTask[]>([]);
   const [busy, setBusy] = useState<"" | "draft" | "send">("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -117,8 +120,29 @@ export default function Composer({
         }),
       });
       const data = await res.json();
-      if (!res.ok) setError(data.error ?? "Send failed.");
-      else setDone(true);
+      if (!res.ok) {
+        setError(data.error ?? "Send failed.");
+      } else {
+        setDone(true);
+        // dev-feedback #15: this new email has no id yet (Flow B returns no
+        // message id); queue a best-effort pending link so the task<->email
+        // link lands once the outbound-capture webhook sees the real row.
+        if (linkedTasks.length) {
+          const toList = to
+            .split(/[,;]/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          fetch("/api/emails/pending-link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subject,
+              to: toList,
+              taskIds: linkedTasks.map((t) => t.id),
+            }),
+          }).catch(() => {});
+        }
+      }
     } catch {
       setError("Send failed.");
     } finally {
@@ -140,7 +164,7 @@ export default function Composer({
   }
 
   return (
-    <div className="card p-5">
+    <div className="card p-6 sm:p-8">
       {mode === "forward" && forwardFrom ? (
         <div className="mb-3 rounded-xl border border-border bg-surface2 p-2.5 text-xs text-muted">
           Forwarding the message from <span className="text-fg/80">{forwardFrom}</span>. Its original
@@ -149,22 +173,8 @@ export default function Composer({
       ) : null}
 
       <div className="space-y-2">
-        <Field label="To">
-          <input
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            placeholder="name@company.com, another@company.com"
-            className="input w-full text-sm"
-          />
-        </Field>
-        <Field label="Cc">
-          <input
-            value={cc}
-            onChange={(e) => setCc(e.target.value)}
-            placeholder="optional"
-            className="input w-full text-sm"
-          />
-        </Field>
+        <RecipientField label="To" value={to} onChange={setTo} otherFieldValue={cc} placeholder="name@company.com, another@company.com" />
+        <RecipientField label="Cc" value={cc} onChange={setCc} otherFieldValue={to} placeholder="optional" />
         <Field label="Subject">
           <input
             value={subject}
@@ -214,7 +224,7 @@ export default function Composer({
         contentEditable
         suppressContentEditableWarning
         data-placeholder="Write your message, or draft one with AI."
-        className="reply-editor input min-h-[12rem] w-full resize-y overflow-auto text-sm leading-relaxed"
+        className="reply-editor input min-h-[22rem] w-full resize-y overflow-auto text-sm leading-relaxed"
       />
 
       {/* Attachments */}
@@ -246,6 +256,9 @@ export default function Composer({
           </ul>
         ) : null}
       </div>
+
+      {/* dev-feedback #15: link this email to any number of open tasks. */}
+      <TaskLinkPicker emailId={null} selected={linkedTasks} onChange={setLinkedTasks} />
 
       {error ? <div className="mt-3 text-xs text-danger">{error}</div> : null}
       <div className="mt-4 flex items-center justify-between">
