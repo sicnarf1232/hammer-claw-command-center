@@ -44,6 +44,7 @@ export default function Composer({
 }) {
   const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [to, setTo] = useState(initialTo ?? "");
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState(initialSubject ?? "");
@@ -85,6 +86,10 @@ export default function Composer({
       }
     }
     setFiles((prev) => [...prev, ...added]);
+    // Clear the input so picking the SAME file again still fires onChange
+    // (otherwise the value is unchanged and the picker silently does nothing,
+    // which reads as "the file browser won't open").
+    if (fileRef.current) fileRef.current.value = "";
   }
 
   async function generate() {
@@ -251,15 +256,20 @@ export default function Composer({
 
       {/* Attachments */}
       <div className="mt-3">
-        <label className="btn-outline inline-flex cursor-pointer items-center gap-1.5 text-xs">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="btn-outline inline-flex items-center gap-1.5 text-xs"
+        >
           📎 Attach files
-          <input
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => onFiles(e.target.files)}
-          />
-        </label>
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => onFiles(e.target.files)}
+        />
         {files.length ? (
           <ul className="mt-2 flex flex-wrap gap-2">
             {files.map((f, i) => (
