@@ -186,3 +186,18 @@ export const PaperclipIcon = (p: IconProps) => (
     <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
   </Svg>
 );
+
+// Small edit affordance on an established-value chip (dev-feedback #19).
+export const PencilIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    <path d="m15 5 4 4" />
+  </Svg>
+);
+
+// "Add [field]" affordance for an unset task field (dev-feedback #19).
+export const PlusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </Svg>
+);

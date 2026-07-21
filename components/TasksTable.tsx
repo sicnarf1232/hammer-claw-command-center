@@ -10,9 +10,10 @@ import {
   type TaskUpdateField,
 } from "@/lib/taskUpdate";
 import { formatDateShort } from "@/lib/dates";
-import { SearchIcon } from "./icons";
+import { SearchIcon, ActivityIcon } from "./icons";
 import { TaskLinkedEmails, TaskLinkedMeetings, TaskEmailAction } from "./TaskEmailLink";
 import TaskUpdateLog from "./TaskUpdateLog";
+import TaskFieldEditor from "./TaskFieldEditor";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
 // columns are Task / Account / Type / Status / Start / Due. Default scope is
@@ -346,22 +347,35 @@ function Row({
         </td>
         <td className="py-3 pr-3" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
-            <>
-              <select
-                aria-label="Account"
-                value={t.customer && t.customer !== "internal" ? t.customer : ""}
-                onChange={(e) => onFieldUpdate("account", e.target.value)}
-                className="input py-1 text-xs"
-              >
-                <option value="">No account</option>
-                {accounts.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-              {accountErr && <p className="mt-0.5 text-2xs text-danger">{accountErr}</p>}
-            </>
+            <TaskFieldEditor
+              chip={
+                t.customer && t.customer !== "internal" ? (
+                  <span className="chip whitespace-nowrap border-border bg-surface2 text-fg/80">
+                    {t.customer}
+                  </span>
+                ) : null
+              }
+              emptyLabel="Add account"
+              initialValue={t.customer && t.customer !== "internal" ? t.customer : ""}
+              onSave={(value) => onFieldUpdate("account", value)}
+              error={accountErr}
+              renderControl={(value, setValue) => (
+                <select
+                  aria-label="Account"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  className="input py-1 text-xs"
+                  autoFocus
+                >
+                  <option value="">No account</option>
+                  {accounts.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
+              )}
+            />
           ) : t.customer && t.customer !== "internal" ? (
             t.accountSlug ? (
               <Link
@@ -381,22 +395,36 @@ function Row({
         </td>
         <td className="py-3 pr-3" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
-            <>
-              <select
-                aria-label="Type"
-                value={t.type}
-                onChange={(e) => onFieldUpdate("type", e.target.value)}
-                className="input py-1 text-xs"
-                style={{ color: TYPE_HUE[t.type] }}
-              >
-                {TASK_TYPES.map((ty) => (
-                  <option key={ty} value={ty}>
-                    {ty}
-                  </option>
-                ))}
-              </select>
-              {typeErr && <p className="mt-0.5 text-2xs text-danger">{typeErr}</p>}
-            </>
+            <TaskFieldEditor
+              chip={
+                <span
+                  className="chip whitespace-nowrap"
+                  style={{ background: `${TYPE_HUE[t.type]}1a`, color: TYPE_HUE[t.type], borderColor: "transparent" }}
+                >
+                  {t.type}
+                </span>
+              }
+              emptyLabel="Add type"
+              initialValue={t.type}
+              onSave={(value) => onFieldUpdate("type", value)}
+              error={typeErr}
+              renderControl={(value, setValue) => (
+                <select
+                  aria-label="Type"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value as TaskType)}
+                  className="input py-1 text-xs"
+                  style={{ color: TYPE_HUE[value] }}
+                  autoFocus
+                >
+                  {TASK_TYPES.map((ty) => (
+                    <option key={ty} value={ty}>
+                      {ty}
+                    </option>
+                  ))}
+                </select>
+              )}
+            />
           ) : (
             <span
               className="chip whitespace-nowrap"
@@ -408,21 +436,32 @@ function Row({
         </td>
         <td className="py-3 pr-3 text-fg/80" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
-            <>
-              <select
-                aria-label="Status"
-                value={(t.taskStatus ?? "open").toLowerCase()}
-                onChange={(e) => onFieldUpdate("status", e.target.value)}
-                className="input py-1 text-xs"
-              >
-                {TASK_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s[0].toUpperCase() + s.slice(1)}
-                  </option>
-                ))}
-              </select>
-              {statusErr && <p className="mt-0.5 text-2xs text-danger">{statusErr}</p>}
-            </>
+            <TaskFieldEditor
+              chip={
+                <span className="chip whitespace-nowrap border-border bg-surface2 text-muted">
+                  {statusLabel(t)}
+                </span>
+              }
+              emptyLabel="Add status"
+              initialValue={(t.taskStatus ?? "open").toLowerCase()}
+              onSave={(value) => onFieldUpdate("status", value)}
+              error={statusErr}
+              renderControl={(value, setValue) => (
+                <select
+                  aria-label="Status"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  className="input py-1 text-xs"
+                  autoFocus
+                >
+                  {TASK_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s[0].toUpperCase() + s.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            />
           ) : (
             statusLabel(t)
           )}
@@ -430,17 +469,32 @@ function Row({
         <td className="py-3 pr-3 tabular-nums text-muted">{t.start ? formatDateShort(t.start) : "—"}</td>
         <td className="py-3 pr-3 tabular-nums" onClick={canEdit ? stop : undefined}>
           {canEdit ? (
-            <>
-              <input
-                type="date"
-                aria-label="Due date"
-                value={t.due ?? ""}
-                onChange={(e) => onFieldUpdate("due", e.target.value)}
-                className="input py-1 text-xs"
-                style={{ color: overdue ? "var(--due)" : dueToday ? "var(--warm)" : undefined }}
-              />
-              {dueErr && <p className="mt-0.5 text-2xs text-danger">{dueErr}</p>}
-            </>
+            <TaskFieldEditor
+              chip={
+                t.due ? (
+                  <span
+                    className="chip whitespace-nowrap"
+                    style={{ color: overdue ? "var(--due)" : dueToday ? "var(--warm)" : "var(--ink-2)" }}
+                  >
+                    {formatDateShort(t.due)}
+                  </span>
+                ) : null
+              }
+              emptyLabel="Add due date"
+              initialValue={t.due ?? ""}
+              onSave={(value) => onFieldUpdate("due", value)}
+              error={dueErr}
+              renderControl={(value, setValue) => (
+                <input
+                  type="date"
+                  aria-label="Due date"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  className="input py-1 text-xs"
+                  autoFocus
+                />
+              )}
+            />
           ) : t.due ? (
             <span style={{ color: overdue ? "var(--due)" : dueToday ? "var(--warm)" : "var(--ink-2)" }}>
               {formatDateShort(t.due)}
@@ -549,7 +603,14 @@ function TaskDetail({ t }: { t: TaskView }) {
         {/* Right: what's happening on it (the update log is the centerpiece) */}
         <div className="min-w-0 border-t border-line2 pt-4 md:border-l md:border-t-0 md:pl-6 md:pt-0">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="eyebrow text-muted">Update log</div>
+            {/* dev-feedback #19: labeled "Activity" (not "Update log") so it
+                reads as the answer to "track anything related to this task
+                directly under an activity view," which is Jordan's own
+                phrasing for this section. */}
+            <div className="eyebrow flex items-center gap-1.5 text-muted">
+              <ActivityIcon className="h-3.5 w-3.5" />
+              Activity
+            </div>
             {/* dev-feedback #18: one click to either reply on a linked thread
                 or start a new email, without duplicating a reply composer here. */}
             <TaskEmailAction
