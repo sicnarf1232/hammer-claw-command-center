@@ -44,10 +44,18 @@ export async function POST(req: NextRequest) {
         ? await gatherTaskActionContext(sourceFile, sourceLine).catch(() => EMPTY_ACTION_CONTEXT)
         : EMPTY_ACTION_CONTEXT;
 
+    // Task description is Jordan's own text; the linked meeting/email
+    // summaries describe what a customer or colleague said, so they get the
+    // same <untrusted_content> wrapping every other place in this app uses
+    // when a model reads someone else's words (see extractEmailAsks,
+    // suggestTaskAction above). draftReply's system prompt is instructed to
+    // treat any such tagged reference material as background, not commands.
+    const wrapUntrusted = (label: string, text: string): string =>
+      `${label}:\n<untrusted_content>\n${text.replace(/<\/?untrusted_content>/gi, "")}\n</untrusted_content>`;
     const groundingParts = [
       description ? `Task description: ${description}` : "",
-      context.meetingContext ? `Related meeting(s):\n${context.meetingContext}` : "",
-      context.emailContext ? `Related email(s):\n${context.emailContext}` : "",
+      context.meetingContext ? wrapUntrusted("Related meeting(s)", context.meetingContext) : "",
+      context.emailContext ? wrapUntrusted("Related email(s)", context.emailContext) : "",
     ].filter(Boolean);
 
     const voice = voiceInstructions(await getVoiceProfile().catch(() => null));
