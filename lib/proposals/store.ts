@@ -159,6 +159,49 @@ export async function getProposal(id: number): Promise<ProposalRow | null> {
   return row ? rowFrom(row) : null;
 }
 
+// Edit a PENDING meeting-file proposal in place before approval (Jordan fixing
+// a typo in the note, or correcting the contacts it would add). Only the note
+// content and the contact-name list are editable, and only while pending, so
+// an already-decided proposal is never mutated. Returns the updated row, or
+// null when the proposal is missing, not pending, or not a meeting file.
+export interface MeetingProposalEdit {
+  content?: string;
+  contactNames?: string[]; // replaces contactsToAdd.names (empty clears it)
+}
+
+export async function updateMeetingProposal(
+  id: number,
+  edit: MeetingProposalEdit,
+): Promise<ProposalRow | null> {
+  if (!dbConfigured()) return null;
+  await ensureProposalsSchema();
+  const row = await getProposal(id);
+  if (!row || row.status !== "pending" || row.kind !== "meeting-file") return null;
+
+  const payload = { ...(row.payload as Record<string, unknown>) };
+  if (typeof edit.content === "string") payload.content = edit.content;
+  if (Array.isArray(edit.contactNames)) {
+    const names = edit.contactNames.map((n) => n.trim()).filter(Boolean);
+    const existing = (payload.contactsToAdd ?? null) as {
+      accountPath: string;
+      accountName: string;
+      names: string[];
+    } | null;
+    // Names live under an accountPath/accountName the meeting already resolved;
+    // we only ever edit the names, never invent an account link here. With no
+    // existing contactsToAdd there is nothing to attach names to, so a name
+    // edit is a no-op in that case.
+    payload.contactsToAdd = existing ? { ...existing, names } : null;
+  }
+
+  const [updated] = await getDb()
+    .update(aiProposals)
+    .set({ payload })
+    .where(and(eq(aiProposals.id, id), eq(aiProposals.status, "pending")))
+    .returning();
+  return updated ? rowFrom(updated) : null;
+}
+
 // Reject a pending proposal; cascades to its pending children (a series update
 // makes no sense once its meeting is rejected).
 export async function rejectProposal(id: number): Promise<void> {

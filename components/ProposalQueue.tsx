@@ -121,6 +121,55 @@ function ProposalCard({
   busy: boolean;
   decide: (ids: number[], action: "approve" | "reject") => void;
 }) {
+  const router = useRouter();
+  const isMeeting = p.kind === "meeting-file";
+
+  // Local, editable copies so Jordan can fix a typo or correct a contact
+  // before approving instead of rejecting and re-pulling from Granola. Saved
+  // back to the pending proposal's payload; nothing reaches the vault until
+  // Approve. Only meeting files are editable.
+  const [open, setOpen] = useState(false);
+  const [content, setContent] = useState(p.content ?? "");
+  const [names, setNames] = useState<string[]>(p.contactsToAdd?.names ?? []);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const contentDirty = isMeeting && content !== (p.content ?? "");
+  const namesDirty =
+    isMeeting &&
+    !!p.contactsToAdd &&
+    JSON.stringify(names) !== JSON.stringify(p.contactsToAdd.names);
+  const dirty = contentDirty || namesDirty;
+
+  async function save() {
+    setSaving(true);
+    setErr(null);
+    setSavedNote(null);
+    try {
+      const body: { id: number; content?: string; contactNames?: string[] } = { id: p.id };
+      if (contentDirty) body.content = content;
+      if (namesDirty) body.contactNames = names;
+      const res = await fetch("/api/proposals/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data.error ?? "Could not save the edit.");
+      } else {
+        setSavedNote("Saved. This is what Approve will file.");
+        router.refresh();
+      }
+    } catch {
+      setErr("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -156,21 +205,104 @@ function ProposalCard({
           </button>
         </div>
       </div>
-      {p.contactsToAdd && p.contactsToAdd.names.length > 0 && (
-        <div className="mt-1.5 text-2xs text-muted">
-          Also adds {p.contactsToAdd.names.join(", ")} to{" "}
-          <span className="text-fg">{p.contactsToAdd.accountName}</span>
+
+      {/* Contact assignments Jordan can proof and correct (add a missing last
+          name, drop someone who was actually internal) before approval,
+          rather than rejecting the whole note and re-pulling from Granola. */}
+      {isMeeting && p.contactsToAdd ? (
+        <div className="mt-2 rounded-md border border-border bg-surface p-2.5">
+          <div className="mb-1.5 text-2xs text-muted">
+            Adds these contacts to{" "}
+            <span className="font-medium text-fg">{p.contactsToAdd.accountName}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {names.map((n, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded-full border border-border bg-surface2 px-2 py-0.5 text-2xs text-fg/85"
+              >
+                <input
+                  value={n}
+                  onChange={(e) =>
+                    setNames((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))
+                  }
+                  className="w-auto min-w-[3rem] max-w-[12rem] bg-transparent text-2xs text-fg/85 outline-none"
+                  aria-label={`Contact ${i + 1}`}
+                  size={Math.max(n.length, 4)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setNames((prev) => prev.filter((_, j) => j !== i))}
+                  className="text-muted hover:text-danger"
+                  title="Remove this contact"
+                  aria-label={`Remove ${n}`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newName.trim()) {
+                  e.preventDefault();
+                  setNames((prev) => [...prev, newName.trim()]);
+                  setNewName("");
+                }
+              }}
+              placeholder="+ add name"
+              className="w-24 rounded-full border border-dashed border-line2 bg-transparent px-2 py-0.5 text-2xs text-fg/85 outline-none placeholder:text-muted"
+              aria-label="Add a contact"
+            />
+          </div>
         </div>
-      )}
+      ) : null}
+
       {p.content ? (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-2xs text-muted hover:text-fg">
-            Preview note
-          </summary>
-          <pre className="mt-1.5 max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-surface p-2.5 text-2xs leading-relaxed text-fg/90">
-            {p.content}
-          </pre>
-        </details>
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="text-2xs text-muted hover:text-fg"
+          >
+            {open ? "Hide note" : isMeeting ? "Review and edit note" : "Preview note"} {open ? "▾" : "▸"}
+          </button>
+          {open ? (
+            isMeeting ? (
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                spellCheck
+                className="mt-1.5 h-80 w-full resize-y rounded-md border border-border bg-surface p-3 text-xs leading-relaxed text-fg/90 outline-none focus:border-accent"
+              />
+            ) : (
+              <div className="mt-1.5 max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-surface p-3 text-xs leading-relaxed text-fg/90">
+                {p.content}
+              </div>
+            )
+          ) : null}
+        </div>
+      ) : null}
+
+      {isMeeting && (dirty || savedNote || err) ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {dirty ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={save}
+              className="btn btn-primary text-2xs disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Save edits"}
+            </button>
+          ) : null}
+          {savedNote && !dirty ? <span className="text-2xs text-ok">{savedNote}</span> : null}
+          {dirty ? (
+            <span className="text-2xs text-muted">Save before you approve, or the edit is lost.</span>
+          ) : null}
+          {err ? <span className="text-2xs text-danger">{err}</span> : null}
+        </div>
       ) : null}
     </div>
   );
