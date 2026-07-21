@@ -472,6 +472,44 @@ export const taskEmails = pgTable(
   (t) => ({ pk: uniqueIndex("task_emails_pk").on(t.taskId, t.emailId) }),
 );
 
+// Many-to-many task <-> meeting link (dev-feedback #14 Part 3): same shape
+// and provenance discipline as task_emails above, but a DIFFERENT
+// relationship than tasks.meetingId (the single meeting a task was born from
+// at pull time, e.g. an action item extracted there). This table is "this
+// task also relates to / is informed by this meeting", additive, confirmed
+// only, never automatic.
+export const taskMeetings = pgTable(
+  "task_meetings",
+  {
+    taskId: integer("task_id").notNull().references(() => tasks.id),
+    meetingId: integer("meeting_id").notNull().references(() => meetings.id),
+    aiGenerated: boolean("ai_generated").notNull().default(false),
+    confirmedBy: text("confirmed_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ pk: uniqueIndex("task_meetings_pk").on(t.taskId, t.meetingId) }),
+);
+
+// Cached AI extraction of what an inbound email asks for / provides
+// (dev-feedback #14 Part 2). One row per email, computed lazily and reused
+// across page views and matching calls instead of re-run on every render
+// (see lib/emailExtraction.ts's ensureEmailExtraction). The asks/provides
+// text feeds a plain deterministic phrase-overlap check in
+// lib/taskEmailMatch.ts as a QUALIFYING signal; extraction is the only AI
+// step here, the crossing itself stays pure.
+export const emailExtractions = pgTable(
+  "email_extractions",
+  {
+    id: serial("id").primaryKey(),
+    emailId: integer("email_id").notNull(),
+    asks: jsonb("asks").$type<string[]>().notNull().default([]),
+    provides: jsonb("provides").$type<string[]>().notNull().default([]),
+    model: text("model"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ emailIdUx: uniqueIndex("email_extractions_email_id_ux").on(t.emailId) }),
+);
+
 // User-managed brand kits (Phase 3 PART B). The shared exports (PDF, email HTML)
 // are CLIENT-branded; a meeting resolves its kit by workstream. One row per
 // workstream (workstreamKey unique, nullable for ad-hoc kits). logoUrl points to

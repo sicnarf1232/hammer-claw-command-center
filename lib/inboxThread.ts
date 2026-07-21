@@ -18,6 +18,7 @@ import {
   type LinkedTaskRef,
 } from "@/lib/taskEmailLinks";
 import type { TaskEmailMatch } from "@/lib/taskEmailMatch";
+import { ensureEmailExtraction } from "@/lib/emailExtraction";
 
 const JORDAN = "jordan.francis@merit.com";
 
@@ -200,19 +201,32 @@ export async function getThreadViewData(key: string): Promise<ThreadViewData | n
     ? await suggestTasksForThread(acct?.name ?? null, suggestText, 3).catch(() => [])
     : [];
 
-  // Task<->email smart linkage (dev-feedback #11): suggestion-only, scored
-  // against the latest inbound message's actual text (not just the triage
-  // summary), so a sender name or part number the triage summary drops still
-  // scores. Same noise/FYI gate as the doc suggestions below.
+  // Task<->email smart linkage (dev-feedback #11, rebuilt for #14): suggestion
+  // -only, scored against the latest inbound message's actual text (not just
+  // the triage summary), so a sender name or part number the triage summary
+  // drops still scores. Same noise/FYI gate as the doc suggestions below.
+  //
+  // dev-feedback #14 Part 2: the full body is already loaded right here (the
+  // primary matching direction), so this is where the AI ask/provide
+  // extraction runs, lazily and cached (lib/emailExtraction.ts never re-runs
+  // it on a re-view). The extracted text feeds the matcher as a QUALIFYING
+  // signal, not just the account/keyword boosts.
+  const latestInboundText = latestInbound ? formatEmailBody(latestInbound).main : "";
+  const extraction =
+    latestInbound && triage?.pathway !== "noise" && triage?.pathway !== "fyi"
+      ? await ensureEmailExtraction(latestInbound.id, subject, latestInboundText).catch(() => null)
+      : null;
   const taskEmailSuggestions =
     latestInbound && triage?.pathway !== "noise" && triage?.pathway !== "fyi"
       ? await suggestTasksForEmail(
           {
             accountName: acct?.name ?? null,
             subject,
-            bodyText: formatEmailBody(latestInbound).main,
+            bodyText: latestInboundText,
             fromName: latestInbound.fromName,
             fromEmail: latestInbound.fromEmail,
+            extractedAsks: extraction?.asks ?? null,
+            extractedProvides: extraction?.provides ?? null,
           },
           latestInbound.id,
           3,

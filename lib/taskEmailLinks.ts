@@ -13,6 +13,7 @@ import {
   type TaskEmailMatch,
   type EmailMatch,
 } from "@/lib/taskEmailMatch";
+import { getCachedEmailExtractions } from "@/lib/emailExtraction";
 
 export const DB_TASK_FILE = "db:tasks";
 
@@ -277,20 +278,34 @@ export async function suggestEmailsForTask(
     .limit(40);
 
   const inbound = rows.filter((r) => r.direction !== "outbound");
-  const accountMap = await accountNames(
-    inbound.map((r) => r.accountId).filter((n): n is number => n != null),
-  ).catch(() => new Map());
+  const [accountMap, extractionMap] = await Promise.all([
+    accountNames(inbound.map((r) => r.accountId).filter((n): n is number => n != null)).catch(
+      () => new Map(),
+    ),
+    // dev-feedback #14 Part 2: best-effort, cache-only. This surface scores a
+    // task against many recent candidate emails on a single page render, so
+    // it reuses whatever extraction already ran from the thread view instead
+    // of triggering fresh AI calls here; a candidate with no cached row just
+    // carries no asks/provides signal and still falls back to Part 1's
+    // stricter part-number/named-sender qualifying bar.
+    getCachedEmailExtractions(inbound.map((r) => r.id)).catch(() => new Map()),
+  ]);
 
-  const candidates = inbound.map((r) => ({
-    key: String(r.id),
-    email: {
-      accountName: r.accountId != null ? accountMap.get(r.accountId)?.name ?? null : null,
-      subject: r.subject ?? "",
-      bodyText: r.bodyPreview ?? "",
-      fromName: r.fromName,
-      fromEmail: r.fromEmail,
-    } as MatchableEmail,
-  }));
+  const candidates = inbound.map((r) => {
+    const extraction = extractionMap.get(r.id);
+    return {
+      key: String(r.id),
+      email: {
+        accountName: r.accountId != null ? accountMap.get(r.accountId)?.name ?? null : null,
+        subject: r.subject ?? "",
+        bodyText: r.bodyPreview ?? "",
+        fromName: r.fromName,
+        fromEmail: r.fromEmail,
+        extractedAsks: extraction?.asks ?? null,
+        extractedProvides: extraction?.provides ?? null,
+      } as MatchableEmail,
+    };
+  });
 
   const already = await linkedEmailsForTask(sourceFile, sourceLine).catch(() => []);
   const linkedIds = new Set(already.map((e) => e.emailId));

@@ -297,3 +297,160 @@ export function TaskLinkedEmails({
     </div>
   );
 }
+
+interface LinkedMeetingRow {
+  meetingId: number;
+  title: string | null;
+  date: string | null;
+  accountName: string | null;
+  aiGenerated: boolean;
+  sourcePath: string | null;
+}
+
+interface MeetingSuggestionRow {
+  meetingId: number;
+  score: number;
+  reasons: string[];
+  title: string | null;
+  date: string | null;
+  sourcePath: string | null;
+}
+
+// Tasks page: "Linked meetings (N)" on an expanded task row (dev-feedback
+// #14 Part 3). Same lazy-fetch-on-open, possible-matches pattern as
+// TaskLinkedEmails above, just pointed at /api/tasks/linked-meetings and
+// /api/tasks/link-meeting. This is a DIFFERENT relationship than a task's
+// single origin meeting (the one it was born from at pull time): this is
+// "also relates to / informed by," additive, and only ever written when
+// Jordan clicks Link.
+export function TaskLinkedMeetings({
+  sourceFile,
+  sourceLine,
+}: {
+  sourceFile: string;
+  sourceLine: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [linked, setLinked] = useState<LinkedMeetingRow[]>([]);
+  const [suggested, setSuggested] = useState<MeetingSuggestionRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [confirmedIds, setConfirmedIds] = useState<Set<number>>(new Set());
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    setLoading(true);
+    fetch(
+      `/api/tasks/linked-meetings?sourceFile=${encodeURIComponent(sourceFile)}&sourceLine=${sourceLine}`,
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        setLinked(Array.isArray(data.linked) ? data.linked : []);
+        setSuggested(Array.isArray(data.suggested) ? data.suggested : []);
+        setLoaded(true);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open, loaded, sourceFile, sourceLine]);
+
+  async function confirmSuggestion(s: MeetingSuggestionRow) {
+    setBusyId(s.meetingId);
+    try {
+      const res = await fetch("/api/tasks/link-meeting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceFile,
+          sourceLine,
+          meetingIds: [s.meetingId],
+          aiGenerated: true,
+        }),
+      });
+      if (res.ok) setConfirmedIds((prev) => new Set(prev).add(s.meetingId));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const count = linked.length;
+
+  return (
+    <div className="pt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-2xs font-semibold text-muted hover:text-fg"
+      >
+        🗒 Linked meetings{loaded ? ` (${count})` : ""} {open ? "▾" : "▸"}
+      </button>
+      {open ? (
+        loading ? (
+          <p className="mt-1 text-2xs text-muted">Loading…</p>
+        ) : (
+          <div className="mt-1.5 grid gap-1">
+            {linked.map((m) =>
+              m.sourcePath ? (
+                <Link
+                  key={m.meetingId}
+                  href={`/meetings?note=${encodeURIComponent(m.sourcePath)}`}
+                  className="text-2xs text-accent2 hover:underline"
+                >
+                  {m.title || "(untitled meeting)"} {m.date ? `· ${m.date}` : ""}
+                </Link>
+              ) : (
+                <span key={m.meetingId} className="text-2xs text-fg/80">
+                  {m.title || "(untitled meeting)"} {m.date ? `· ${m.date}` : ""}
+                </span>
+              ),
+            )}
+            {!linked.length ? <p className="text-2xs text-muted">No linked meetings yet.</p> : null}
+            {suggested.length ? (
+              <div className="mt-1 border-t border-line2 pt-1">
+                <p className="text-2xs font-semibold uppercase tracking-wide text-muted">
+                  Possible matches
+                </p>
+                {suggested.map((s) => {
+                  const confirmedNow = confirmedIds.has(s.meetingId);
+                  return (
+                    <div key={s.meetingId} className="mt-1 flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        {s.sourcePath ? (
+                          <Link
+                            href={`/meetings?note=${encodeURIComponent(s.sourcePath)}`}
+                            className="text-2xs text-fg/80 hover:underline"
+                          >
+                            {s.title || "(untitled meeting)"} {s.date ? `· ${s.date}` : ""}
+                          </Link>
+                        ) : (
+                          <span className="text-2xs text-fg/80">
+                            {s.title || "(untitled meeting)"} {s.date ? `· ${s.date}` : ""}
+                          </span>
+                        )}
+                        {s.reasons.length ? (
+                          <p className="text-2xs text-muted">{s.reasons.join(" ")}</p>
+                        ) : null}
+                      </div>
+                      {confirmedNow ? (
+                        <span className="shrink-0 text-2xs font-semibold text-ok">Linked</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => confirmSuggestion(s)}
+                          disabled={busyId === s.meetingId}
+                          className="shrink-0 rounded-lg border border-accent px-1.5 py-0.5 text-2xs font-semibold text-accent hover:bg-accentSoft disabled:opacity-50"
+                        >
+                          {busyId === s.meetingId ? "Linking…" : "Link"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        )
+      ) : null}
+    </div>
+  );
+}

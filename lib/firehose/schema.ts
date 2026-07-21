@@ -108,6 +108,20 @@ const DDL: string[] = [
   // ever written by the bug, so this is safe to re-run; the fixed writer records
   // the model reported by the API response.
   `UPDATE "email_triage" SET "model" = 'unknown (pre-fix)' WHERE "model" = 'claude-haiku-4-5-20251001'`,
+
+  // Cached AI extraction of what an inbound email asks for / provides
+  // (dev-feedback #14 Part 2, smart task<->email linkage rebuild). One row
+  // per email, computed lazily by lib/emailExtraction.ts and reused across
+  // page views instead of re-run on every render.
+  `CREATE TABLE IF NOT EXISTS "email_extractions" (
+    "id" serial PRIMARY KEY,
+    "email_id" integer NOT NULL,
+    "asks" jsonb NOT NULL DEFAULT '[]'::jsonb,
+    "provides" jsonb NOT NULL DEFAULT '[]'::jsonb,
+    "model" text,
+    "created_at" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "email_extractions_email_id_ux" ON "email_extractions" ("email_id")`,
 ];
 
 // Run the DDL once per warm lambda. A failed run does not latch, so the next

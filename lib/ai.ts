@@ -1242,3 +1242,63 @@ export async function proposeImportMapping(
     modelUsed: res.model,
   };
 }
+
+// ---- Email ask/provide extraction (dev-feedback #14, smart task<->email
+// linkage rebuild). The ONLY AI step in the linkage feature: read one email
+// and pull out short plain-English phrases for what the sender is explicitly
+// ASKING for and what they are explicitly PROVIDING or CONFIRMING. The result
+// is cached (lib/emailExtraction.ts) and then crossed against task text by a
+// plain deterministic phrase-overlap check (lib/taskEmailMatch.ts) so the
+// matching itself stays pure and testable; this function is upstream
+// extraction only, never a decision.
+
+export interface EmailAskExtraction {
+  asks: string[];
+  provides: string[];
+  modelUsed: string;
+}
+
+export async function extractEmailAsks(input: {
+  subject: string;
+  bodyText: string;
+}): Promise<EmailAskExtraction> {
+  const system = [
+    "You read one email and extract two short lists in plain English.",
+    "asks: what the sender is explicitly asking Jordan or Merit for (a request, a question, something they need).",
+    "provides: what the sender is explicitly providing or confirming (an attachment, an answer, a status update).",
+    "Each entry is a short phrase (under 15 words), specific enough to be useful, quoting or closely paraphrasing the email's own words. Do not invent, infer, or pad: if the email does not clearly ask or provide anything, return an empty array for that list.",
+    "Never use an em dash. Use commas or periods instead.",
+    'Output ONLY JSON: {"asks":["confirmation the sterilization docs are updated"],"provides":["the drawing for PN 1234, attached"]}',
+  ].join("\n");
+  const user = [
+    `Subject: ${input.subject || "(no subject)"}`,
+    "Body:",
+    input.bodyText.slice(0, 6000) || "(empty)",
+    "Return the JSON now.",
+  ].join("\n");
+
+  const res = await client().messages.create({
+    model: fastModel(),
+    max_tokens: 500,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+  const raw = parseJsonObject(text);
+  const strList = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v
+          .map((s) => noEmDash(typeof s === "string" ? s.trim() : ""))
+          .filter((s): s is string => s.length > 0)
+          .slice(0, 8)
+      : [];
+  return {
+    asks: strList(raw.asks),
+    provides: strList(raw.provides),
+    modelUsed: res.model,
+  };
+}

@@ -148,6 +148,21 @@ const STATEMENTS: string[] = [
   // the AI matcher's suggestion vs a direct manual action.
   `alter table task_emails add column if not exists ai_generated boolean not null default false`,
   `alter table task_emails add column if not exists confirmed_by text`,
+
+  // task_meetings (dev-feedback #14 Part 3): same shape and provenance as
+  // task_emails above, a DIFFERENT relationship from tasks.meeting_id (the
+  // single meeting a task was born from). Documented here for parity with
+  // task_emails; the live provisioning path most requests actually hit is
+  // the lazy CREATE in lib/taskMeetingLinks.ts, since this cutover schema
+  // only re-runs when Jordan explicitly re-applies the cutover.
+  `create table if not exists task_meetings (
+     task_id integer not null,
+     meeting_id integer not null,
+     ai_generated boolean not null default false,
+     confirmed_by text,
+     created_at timestamptz not null default now()
+   )`,
+  `create unique index if not exists task_meetings_pk on task_meetings (task_id, meeting_id)`,
 ];
 
 let ensured: Promise<void> | null = null;

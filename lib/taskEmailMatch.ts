@@ -1,12 +1,22 @@
 import { extractKeywords } from "@/lib/firehose/suggest";
 
-// Pure task<->email matching (dev-feedback #11): given an open task and an
-// inbound email, score how plausible it is that the email completes or
-// relates to the task, with a short human-readable WHY for each signal.
-// Suggestion-only: this never decides anything by itself. Every candidate
-// still needs Jordan's confirmation before it becomes a stored task_emails
-// link (see lib/taskEmailLinks.ts), per CLAUDE.md's hard rule that AI output
-// never becomes canonical fact without his say-so.
+// Pure task<->content matching (dev-feedback #11, generalized for #14 Part 3
+// to also cover meeting notes). Given an open task and a piece of content (an
+// inbound email, or a meeting note), score how plausible it is that the
+// content completes or relates to the task, with a short human-readable WHY
+// for each signal. Suggestion-only: this never decides anything by itself.
+// Every candidate still needs Jordan's confirmation before it becomes a
+// stored task_emails/task_meetings link, per CLAUDE.md's hard rule that AI
+// output never becomes canonical fact without his say-so.
+//
+// dev-feedback #14: Jordan's complaint about the first cut of this feature
+// was that "same account" alone surfaced every open task on that account.
+// account match and generic keyword overlap now only ever BOOST a ranking;
+// they can never by themselves QUALIFY a suggestion to surface. A suggestion
+// must have at least one precise signal: a shared part-number token, a named
+// person match, or an extracted-intent match (asks/provides text an AI
+// extraction pulled out of an email, crossed against the task's own text by
+// a plain deterministic phrase-overlap check, see phraseOverlapsText below).
 
 export interface MatchableTask {
   id: string; // TaskView id (sourceFile:sourceLine, or db:tasks:<id>)
@@ -22,11 +32,32 @@ export interface MatchableEmail {
   bodyText: string;
   fromName?: string | null;
   fromEmail?: string | null;
+  // Cached AI extraction (lib/emailExtraction.ts), optional: when present,
+  // a matching ask/provide phrase is a QUALIFYING signal, not just a boost.
+  extractedAsks?: string[] | null;
+  extractedProvides?: string[] | null;
+}
+
+// Generalized content shape both the email matcher (below) and the meeting
+// matcher (lib/taskMeetingMatch.ts) collapse into before scoring, so the
+// qualifying-bar logic and weights live in exactly one place.
+export interface MatchableContent {
+  kind: "email" | "meeting";
+  accountName?: string | null;
+  text: string; // subject+body, or title+topic+sections collapsed to one blob
+  personNames?: string[]; // candidate names to check against the task's text
+  extractedAsks?: string[] | null;
+  extractedProvides?: string[] | null;
 }
 
 export interface ScoredMatch {
   score: number;
   reasons: string[];
+  // A suggestion only ever surfaces when this is true (see the module
+  // comment above). Account match and generic keyword overlap alone never
+  // set it; they still add to score/reasons as supporting color once
+  // something else has qualified the pair.
+  qualifies: boolean;
 }
 
 export interface TaskEmailMatch extends ScoredMatch {
@@ -92,32 +123,55 @@ function senderFirstName(email: MatchableEmail): string | null {
   return null;
 }
 
-// The shared scorer: every directional matcher below (task->candidates,
-// email->candidates) runs through this one function so the signals and their
-// weights live in exactly one place.
-export function scoreTaskEmailPair(task: MatchableTask, email: MatchableEmail): ScoredMatch {
+// Deterministic phrase-overlap check between an extracted ask/provide phrase
+// (short, AI-produced) and a task's own text (title/description/notes). Kept
+// pure and dependency-free so it is unit-testable with fake phrases: the
+// extraction step is the only AI involvement in this feature, the crossing
+// itself never calls a model. A short phrase must match in full (its one
+// significant word, at least 5 characters, has to appear); a longer phrase
+// qualifies once at least half its significant words appear, so a paraphrase
+// still counts without letting one stray shared word through.
+export function phraseOverlapsText(phrase: string, text: string): boolean {
+  const phraseWords = extractKeywords(phrase);
+  if (!phraseWords.length) return false;
+  const textWords = new Set(extractKeywords(text));
+  const shared = phraseWords.filter((w) => textWords.has(w));
+  if (!shared.length) return false;
+  if (phraseWords.length === 1) return shared.length === 1 && phraseWords[0].length >= 5;
+  return shared.length / phraseWords.length >= 0.5;
+}
+
+// The shared scorer (dev-feedback #14 Part 3): both the email matcher below
+// and lib/taskMeetingMatch.ts's meeting matcher collapse their content into
+// this one shape and run through this one function, so the qualifying-bar
+// logic and weights live in exactly one place.
+export function scoreTaskContentPair(task: MatchableTask, content: MatchableContent): ScoredMatch {
   const reasons: string[] = [];
   let score = 0;
+  let qualifies = false;
 
   const taskText = `${task.title} ${task.description ?? ""} ${task.notes ?? ""}`;
-  const emailText = `${email.subject} ${email.bodyText}`;
+  const contentText = content.text;
+  const sourceLabel = content.kind === "meeting" ? "This meeting" : "This email";
 
-  // Signal 1: same account/customer. Internal tasks never match on account
-  // (there is no customer to line up).
+  // Signal: same account/customer. BOOST ONLY, never qualifying on its own,
+  // per dev-feedback #14: this was the exact signal that made the first cut
+  // of this feature surface every open task on an account.
   const taskAccount = norm(task.customer);
-  const emailAccount = norm(email.accountName);
-  if (taskAccount && taskAccount !== "internal" && emailAccount && taskAccount === emailAccount) {
+  const contentAccount = norm(content.accountName);
+  if (taskAccount && taskAccount !== "internal" && contentAccount && taskAccount === contentAccount) {
     score += 4;
     reasons.push(`Same account as this task (${task.customer}).`);
   }
 
-  // Signal 2: shared part-number-shaped tokens. The strongest single content
-  // signal, since a part number pinpoints the exact thing the task is about.
+  // Signal: shared part-number-shaped tokens. QUALIFYING: a part number
+  // pinpoints the exact thing the task is about.
   const taskParts = new Set(extractPartNumberTokens(taskText));
-  const emailParts = extractPartNumberTokens(emailText);
-  const sharedParts = emailParts.filter((p) => taskParts.has(p)).slice(0, 2);
+  const contentParts = extractPartNumberTokens(contentText);
+  const sharedParts = contentParts.filter((p) => taskParts.has(p)).slice(0, 2);
   if (sharedParts.length) {
     score += 3 * sharedParts.length;
+    qualifies = true;
     reasons.push(
       sharedParts.length === 1
         ? `Mentions part number ${sharedParts[0]}, which the task also names.`
@@ -125,20 +179,47 @@ export function scoreTaskEmailPair(task: MatchableTask, email: MatchableEmail): 
     );
   }
 
-  // Signal 3: sender named in the task. An internal engineer replying to a
-  // request the task text names by first name is a strong completion signal
-  // even with no shared keywords (e.g. "ask Scott for the drawing").
-  const first = senderFirstName(email);
-  if (first && nameAppearsInText(first, taskText)) {
-    score += 3;
-    reasons.push(`${first} is named in this task, and the email is from ${first}.`);
+  // Signal: a person named in the task's own text also appears as a source
+  // of this content (email sender, meeting attendee). QUALIFYING: a strong
+  // completion signal even with no shared keywords (e.g. "ask Scott for the
+  // drawing").
+  for (const name of content.personNames ?? []) {
+    if (name && nameAppearsInText(name, taskText)) {
+      score += 3;
+      qualifies = true;
+      reasons.push(
+        content.kind === "meeting"
+          ? `${name} is named in this task, and ${name} is on this meeting.`
+          : `${name} is named in this task, and the email is from ${name}.`,
+      );
+      break;
+    }
   }
 
-  // Signal 4: generic keyword overlap (reuses the same extractor as the
-  // existing thread->task Smart Action suggestions).
+  // Signal: extracted intent (dev-feedback #14 Part 2). QUALIFYING: an AI
+  // extraction (lib/ai.ts's extractEmailAsks, cached in lib/emailExtraction.ts)
+  // pulled a plain-English ask/provide phrase out of the content; this checks
+  // it against the task's text with the plain deterministic phraseOverlapsText
+  // above, so the crossing itself needs no model call.
+  const matchedAsk = (content.extractedAsks ?? []).find((a) => phraseOverlapsText(a, taskText));
+  if (matchedAsk) {
+    score += 4;
+    qualifies = true;
+    reasons.push(`${sourceLabel} asks: "${matchedAsk}", which matches the task.`);
+  }
+  const matchedProvide = (content.extractedProvides ?? []).find((p) => phraseOverlapsText(p, taskText));
+  if (matchedProvide) {
+    score += 4;
+    qualifies = true;
+    reasons.push(`${sourceLabel} provides: "${matchedProvide}", which matches the task.`);
+  }
+
+  // Signal: generic keyword overlap (reuses the same extractor as the
+  // existing thread->task Smart Action suggestions). BOOST ONLY: noisy on
+  // its own (see dev-feedback #14), useful once something else qualifies.
   const taskWords = new Set(extractKeywords(taskText));
-  const emailWords = extractKeywords(emailText);
-  const sharedWords = emailWords.filter((w) => taskWords.has(w)).slice(0, 3);
+  const contentWords = extractKeywords(contentText);
+  const sharedWords = contentWords.filter((w) => taskWords.has(w)).slice(0, 3);
   if (sharedWords.length) {
     score += sharedWords.length;
     reasons.push(
@@ -148,11 +229,27 @@ export function scoreTaskEmailPair(task: MatchableTask, email: MatchableEmail): 
     );
   }
 
-  return { score, reasons };
+  return { score, reasons, qualifies };
+}
+
+// Email-specific wrapper around the shared scorer: collapses an email into
+// the generalized MatchableContent shape.
+export function scoreTaskEmailPair(task: MatchableTask, email: MatchableEmail): ScoredMatch {
+  const first = senderFirstName(email);
+  return scoreTaskContentPair(task, {
+    kind: "email",
+    accountName: email.accountName,
+    text: `${email.subject} ${email.bodyText}`,
+    personNames: first ? [first] : [],
+    extractedAsks: email.extractedAsks,
+    extractedProvides: email.extractedProvides,
+  });
 }
 
 // Given one inbound email, rank the open tasks it might complete. This is the
-// primary direction (thread view: "this email may complete...").
+// primary direction (thread view: "this email may complete..."). Only
+// QUALIFYING matches surface (see the module comment above); score still
+// ranks among them.
 export function matchTasksForEmail(
   tasks: MatchableTask[],
   email: MatchableEmail,
@@ -160,7 +257,7 @@ export function matchTasksForEmail(
 ): TaskEmailMatch[] {
   return tasks
     .map((t) => ({ taskId: t.id, ...scoreTaskEmailPair(t, email) }))
-    .filter((m) => m.score > 0)
+    .filter((m) => m.qualifies)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }
@@ -175,7 +272,7 @@ export function matchEmailsForTask(
 ): EmailMatch[] {
   return emails
     .map(({ key, email }) => ({ emailKey: key, ...scoreTaskEmailPair(task, email) }))
-    .filter((m) => m.score > 0)
+    .filter((m) => m.qualifies)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }

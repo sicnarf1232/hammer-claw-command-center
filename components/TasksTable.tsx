@@ -11,7 +11,7 @@ import {
 } from "@/lib/taskUpdate";
 import { formatDateShort } from "@/lib/dates";
 import { SearchIcon } from "./icons";
-import { TaskLinkedEmails } from "./TaskEmailLink";
+import { TaskLinkedEmails, TaskLinkedMeetings } from "./TaskEmailLink";
 
 // Phase: the Tasks page as a sortable, filterable table. Rows are tasks; the
 // columns are Task / Account / Type / Status / Start / Due. Default scope is
@@ -462,6 +462,7 @@ function TaskDetail({ t }: { t: TaskView }) {
         </div>
       )}
       <TaskLinkedEmails sourceFile={t.sourceFile} sourceLine={t.sourceLine} />
+      <TaskLinkedMeetings sourceFile={t.sourceFile} sourceLine={t.sourceLine} />
       {t.notes && (
         <p className="whitespace-pre-wrap text-xs text-muted">
           <span className="font-semibold text-fg/70">Notes: </span>
