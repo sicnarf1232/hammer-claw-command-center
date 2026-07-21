@@ -15,6 +15,20 @@ export const TASK_TYPES = [
 
 export type TaskType = (typeof TASK_TYPES)[number];
 
+// Per-type chip color, shared by TasksTable.tsx and TasksGrouped.tsx (dev-
+// feedback #21 parity pass: both views used to keep their own copy of this
+// map, which is exactly how two views drift). One source of truth here means
+// a type always reads as the same color everywhere it appears.
+export const TASK_TYPE_HUE: Record<TaskType, string> = {
+  PCN: "#5145E6",
+  "Quality & Reg": "#0E9F8E",
+  "Pricing/Quote": "#D98A0B",
+  "Samples/Dev": "#B852CC",
+  "Supply/Logistics": "#2E7DD1",
+  Commercial: "#C2456E",
+  "Admin/Other": "#6B7280",
+};
+
 const RULES: { type: TaskType; re: RegExp }[] = [
   { type: "PCN", re: /\b(pcn|ecn|change notice|change order|gtin|udi|label change|eifu)\b/i },
   {

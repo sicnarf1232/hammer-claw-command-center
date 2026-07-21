@@ -24,6 +24,39 @@ export interface TaskView {
   sourceLine: number;
 }
 
+// Strip the inline vault field markers ([customer:: ...], [due:: ...], etc.)
+// that can leak into a task's raw title text, for any UI that displays or
+// forwards the title. Hoisted here (dev-feedback #21 parity pass) so
+// TasksTable.tsx, TasksGrouped.tsx, and TaskSuggestedAction.tsx share one
+// implementation instead of three near-identical copies drifting apart.
+//
+// Matches a [[Wikilink]] or [[Target|Alias]] value FIRST (its own two-char
+// close), falling back to a plain (non-bracket) value. The single-pattern
+// version this replaced (`[^\]]*\]`) stopped at the first `]` inside a
+// wikilink value, e.g. `[customer:: [[Trelleborg]]]` (the vault contract's
+// own real-example format for the customer field), and left a stray `]]`
+// behind; caught by lib/taskView.test.ts.
+const FIELD_MARKER_RE = /\[[A-Za-z][\w-]*::\s*\[\[[^\]]*\]\]\s*\]|\[[A-Za-z][\w-]*::[^\]]*\]/g;
+
+export function cleanTaskTitle(s: string): string {
+  return s.replace(FIELD_MARKER_RE, "").replace(/\s+/g, " ").trim();
+}
+
+// Build the /quote handoff URL from a task (dev-feedback #11 Part B),
+// carrying the task's own text over as the quote builder's free-form parse
+// input. Shared by TaskDetail (TasksTable.tsx) and TaskCard (TasksGrouped.tsx)
+// via components/TaskSuggestedAction.tsx, so both views build the same link.
+export function quoteHrefForTask(
+  t: Pick<TaskView, "customer" | "title" | "description" | "notes">,
+): string {
+  const params = new URLSearchParams();
+  if (t.customer && t.customer !== "internal") params.set("customer", t.customer);
+  params.set("desc", cleanTaskTitle(t.title));
+  const parseText = [cleanTaskTitle(t.title), t.description, t.notes].filter(Boolean).join("\n");
+  if (parseText) params.set("parse", parseText);
+  return `/quote?${params.toString()}`;
+}
+
 // Derive the workstream from the vault folder the task lives in (reliable even
 // when the note has no workstream field), falling back to the task's own value.
 export function workstreamFromPath(

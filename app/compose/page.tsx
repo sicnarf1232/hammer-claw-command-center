@@ -14,9 +14,25 @@ export default async function ComposePage({
   // here with `account` (the task's linked account slug) and `subject` (a
   // sensible default referencing the task) so Jordan gets one click to a
   // compose page with useful context, not a blank form.
-  searchParams: Promise<{ forwardId?: string; account?: string; subject?: string }>;
+  // dev-feedback #21: the suggested-action "Draft email to X" flow lands
+  // here with `to` (a resolved recipient email, when one was found) and
+  // `body` (the AI's drafted HTML). `to` wins over the account-contact
+  // prefill below when both are present.
+  searchParams: Promise<{
+    forwardId?: string;
+    account?: string;
+    subject?: string;
+    to?: string;
+    body?: string;
+  }>;
 }) {
-  const { forwardId, account: accountSlug, subject: subjectParam } = await searchParams;
+  const {
+    forwardId,
+    account: accountSlug,
+    subject: subjectParam,
+    to: toParam,
+    body: bodyParam,
+  } = await searchParams;
   const fwdId = forwardId ? Number(forwardId) : NaN;
   const source = Number.isInteger(fwdId) ? await getEmailById(fwdId) : null;
   const mode = source ? "forward" : "new";
@@ -28,7 +44,7 @@ export default async function ComposePage({
   // broken compose page.
   const account =
     !source && accountSlug ? await getAccountBySlug(accountSlug).catch(() => null) : null;
-  const initialTo = account?.contacts.find((c) => c.email)?.email ?? undefined;
+  const initialTo = toParam?.trim() || (account?.contacts.find((c) => c.email)?.email ?? undefined);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -46,6 +62,7 @@ export default async function ComposePage({
         forwardId={source ? source.id : undefined}
         initialSubject={subject}
         initialTo={initialTo}
+        initialBodyHtml={bodyParam || undefined}
         forwardFrom={source ? source.fromName?.trim() || source.fromEmail : null}
       />
     </div>

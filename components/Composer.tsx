@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import RecipientField from "@/components/RecipientField";
 import TaskLinkPicker, { type PickedTask } from "@/components/TaskLinkPicker";
@@ -25,6 +25,7 @@ export default function Composer({
   initialSubject,
   forwardFrom,
   initialTo,
+  initialBodyHtml,
 }: {
   mode: "new" | "forward";
   forwardId?: number;
@@ -34,6 +35,12 @@ export default function Composer({
   // the To field with that account's contact; still a plain editable
   // RecipientField underneath, so Jordan can change it freely.
   initialTo?: string;
+  // dev-feedback #21: the suggested-action "Draft email to X" flow lands
+  // here with a body already drafted by the AI (lib/ai.ts's draftReply, via
+  // /api/tasks/draft-action-email). Same review-before-send discipline as
+  // "Draft with AI" below, just pre-filled instead of requiring a second
+  // click; Jordan can still edit or clear it freely before sending.
+  initialBodyHtml?: string;
 }) {
   const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
@@ -46,6 +53,16 @@ export default function Composer({
   const [busy, setBusy] = useState<"" | "draft" | "send">("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  // One-time landing prefill (dev-feedback #21), not a live sync: applied
+  // once on mount, then Jordan edits the contentEditable body freely from
+  // there, same as "Draft with AI" filling it in below.
+  useEffect(() => {
+    if (initialBodyHtml && editorRef.current) {
+      editorRef.current.innerHTML = initialBodyHtml;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function exec(cmd: string) {
     editorRef.current?.focus();
