@@ -28,6 +28,8 @@ The meeting note remains easy to read, while the structured records underneath b
 8. `lib/meetingsDb.ts` parses the approved Markdown and synchronizes action items into `tasks`.
 9. The normal meeting editor later rewrites the Markdown representation through `components/MeetingEditor.tsx` and `lib/meetingEdit.ts`.
 
+The intended post-cutover architecture is DB-first, but meeting/series execution is not fully there yet. `lib/proposals/executeMeeting.ts` and `lib/createSeries.ts` still contain live-vault reads on parts of the execution path. This plan treats those as concrete migration gaps rather than describing the target state as already complete.
+
 ## Confirmed gaps
 
 ### 1. Extracted owner names do not become person links
@@ -70,6 +72,16 @@ Effect: incorrect matching is difficult to diagnose and future quality cannot be
 
 Skipping a second AI pass for an already-templated note is sensible. However, both paths eventually produce only an owner string. Deterministic identity resolution still needs to run after either extraction path.
 
+### 8. Schema management is currently hybrid
+
+The repository has numbered Drizzle SQL, `db:push`, and more than a dozen modules that create or alter schema at request time. Requiring checked-in, reversible migrations for new meeting-intelligence schema is a deliberate forward change, not the current universal convention.
+
+Effect: Slices B and D must not quietly absorb a repository-wide conversion. They should add their own new schema through migrations, document dependencies on existing self-provisioned tables, and leave broader consolidation as separate work.
+
+## Deliberate workflow change
+
+This plan adopts feature branches, pull requests, and cross-agent review for Claude/Codex work. Jordan approved that direction on 2026-07-22. It replaces the previous direct-to-main, always-deploy habit for this collaboration so that one agent builds and the other independently reviews before production.
+
 ## Proposed target workflow
 
 ```text
@@ -97,14 +109,15 @@ The model extracts meaning. Deterministic code resolves known identities. Jordan
 Do not change production behavior yet.
 
 - Add tests that capture the current Granola/template-to-proposal behavior.
-- Add database synchronization tests for reorder, edit, remove, split, merge, and reprocessing scenarios.
+- Extract the smallest pure meeting-action reconciliation model/helper needed to characterize current line-number identity and the desired stable-ID behaviors. Do not stand up a database harness in this slice.
+- Add pure reconciliation tests for reorder, edit, remove, split, merge, and reprocessing scenarios.
 - Add fixtures for duplicate first names, unknown attendees, internal meetings about customers, and multi-account meetings.
 - Document the current production schema needed by meetings and tasks.
 
 Acceptance:
 
 - Tests demonstrate the current owner-link and line-number problems before the fix.
-- Existing 540 unit tests still pass.
+- The existing test suite still passes.
 
 ### Slice B: Stable identity and proposal contract
 
@@ -214,7 +227,7 @@ After the meeting data is trustworthy, expose confirmed meeting actions in the C
 ## Rollout
 
 1. Implement Slice A in a feature branch.
-2. Create a preview Neon branch and verify migrations there.
+2. Create a preview Neon branch before Slice B introduces migrations; Slice A itself stays pure and needs no database.
 3. Implement B and C behind a meeting-review feature flag if the transition cannot be atomic.
 4. Backfill stable action links for a small, inspectable meeting sample.
 5. Let Jordan review the sample in preview.
@@ -230,4 +243,3 @@ After the meeting data is trustworthy, expose confirmed meeting actions in the C
 - No production database mutation during development.
 - No Main St. rebrand.
 - No rewrite of the entire meeting page in one pull request.
-

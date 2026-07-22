@@ -37,9 +37,10 @@ The tests must make the current risks visible:
 
 ## Work requested
 
-1. Add focused tests around `dbSaveMeetingContent()` and meeting action synchronization. Use a test database/harness or the smallest faithful database boundary available. Do not connect to production.
-2. Add pure characterization tests for attendee/contact resolution, duplicate names, ambiguous identity, internal meetings about an account, and template-passthrough versus AI-shaped proposal inputs.
-3. Add representative fixtures for:
+1. Extract the smallest pure reconciliation model/helper needed to describe how approved meeting actions correspond to existing task rows. Keep the production database writer behavior unchanged in this pull request.
+2. Use the pure helper to characterize the current `sourceLine` identity behavior and specify expected stable-identity outcomes for reorder, edit, removal, split, merge, and reprocessing. Do not create a Neon/Drizzle test harness in Slice A; that is explicitly out of scope.
+3. Add pure characterization tests for attendee/contact resolution, duplicate names, ambiguous identity, internal meetings about an account, and template-passthrough versus AI-shaped proposal inputs.
+4. Add representative fixtures for:
    - two people named Scott;
    - an owner named in an action but absent from attendees;
    - a team owner such as Operations;
@@ -47,14 +48,16 @@ The tests must make the current risks visible:
    - an internal meeting concerning a customer;
    - action reorder, edit, removal, split, and merge;
    - the same Granola note processed twice.
-4. If the current code is too tightly coupled to test safely, extract only the smallest pure reconciliation helper needed to characterize behavior. Do not implement the new schema or new review UI in this pull request.
-5. Update `docs/plans/meeting-intelligence-cleanup.md` only when the code proves an assumption wrong. Record the evidence, not a new speculative design.
+5. Document, without integration-testing against a live database, that `dbSaveMeetingContent()` currently omits `ownerPersonId`, keys existing task rows by `sourceLine`, and does not reconcile disappeared rows.
+6. Do not implement the new schema or new review UI in this pull request.
+7. Update `docs/plans/meeting-intelligence-cleanup.md` only when the code proves an assumption wrong. Record the evidence, not a new speculative design.
 
 ## Guardrails
 
 - Preserve Main St. branding exactly.
 - Do not redesign `/meetings` in this slice.
 - Do not add runtime `CREATE TABLE` or `ALTER TABLE` behavior.
+- The migration-only rule is a deliberate forward change from the repository's current hybrid/self-provisioning convention. Do not attempt a repository-wide schema conversion in this slice.
 - Do not add autonomous writes or approvals.
 - Do not silently “fix” the known failures before tests demonstrate them.
 - Do not change unrelated inbox, quote, pricing, or dashboard behavior.
@@ -87,4 +90,3 @@ Use these headings:
 Expected production behavior change for this slice: none, except any minimal pure-code extraction required for testability.
 
 When the pull request is ready, hand it to Codex for a read-only review before addressing findings.
-

@@ -16,9 +16,10 @@ Keep the existing Main St. branding, typography, colors, and theme behavior unle
 ## Source of truth
 
 - After the July 2026 cutover, Neon Postgres is the live application source of truth.
-- The Obsidian vault is seed-in and explicit export-out. Normal app behavior must not require live vault reads once the database is ready.
+- The Obsidian vault is seed-in and explicit export-out. The target architecture is that normal app behavior does not require live vault reads once the database is ready. Some meeting/series execution paths still read the vault today; treat those as documented migration gaps, not proof that the vault is authoritative.
 - Do not add a second database write path for an existing business operation.
 - New schema changes belong in checked-in, reversible migrations. Do not add new request-time `CREATE TABLE` or `ALTER TABLE` behavior.
+- This migration rule is a deliberate forward change from the repository's current hybrid convention. Existing modules use numbered Drizzle SQL, `db:push`, and many request-time self-provisioners. Do not silently convert all existing self-provisioners inside an unrelated feature; inventory and migrate them through separately scoped work.
 - Never use the production database for development, tests, or preview deployments.
 
 ## AI trust rules
@@ -40,7 +41,7 @@ Keep the existing Main St. branding, typography, colors, and theme behavior unle
 
 ## Working agreement
 
-- Never commit feature work directly to `main`.
+- For Claude/Codex feature work, never commit directly to `main`. Jordan approved this branch-and-review workflow on 2026-07-22 as a deliberate change from the repository's prior direct-to-main, always-deploy habit.
 - Use one feature branch and one primary implementer at a time. The other agent reviews through the pull request.
 - Do not have Claude and Codex edit the same uncommitted checkout.
 - Before implementation, create or update the relevant file under `docs/plans/`.
@@ -77,4 +78,3 @@ Before declaring work complete:
 - Include screenshots for user-interface changes.
 - Explain new environment variables and migration/rollback steps.
 - Confirm that existing Main St. branding remains unchanged.
-
