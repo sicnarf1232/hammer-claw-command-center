@@ -306,6 +306,11 @@ export const tasks = pgTable(
     fields: jsonb("fields").$type<Record<string, string>>(),
     sourcePath: text("source_path"),
     sourceLine: integer("source_line"),
+    // Stable, line-independent meeting-action identity (Slice B). Nullable:
+    // legacy rows and non-meeting tasks carry NULL. Populated by Slice D when
+    // the writer reconciles actions by id instead of source_line. Added via
+    // drizzle/0010_meeting_action_identity.sql (migration-only, no runtime DDL).
+    actionId: text("action_id"),
     origin: text("origin").notNull().default("seed"), // seed | app | proposal
     confirmedBy: text("confirmed_by"),
     supersededBy: integer("superseded_by"),
@@ -315,6 +320,7 @@ export const tasks = pgTable(
   (t) => ({
     doneIdx: index("tasks_done_idx").on(t.done),
     ownerIdx: index("tasks_owner_idx").on(t.ownerPersonId),
+    actionIdIdx: index("tasks_action_id_idx").on(t.actionId),
   }),
 );
 
