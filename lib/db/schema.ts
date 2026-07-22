@@ -9,6 +9,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // Postgres holds ONLY fast-changing state that should not live in git
 // (docs/01). The vault markdown remains the source of truth.
@@ -320,7 +321,11 @@ export const tasks = pgTable(
   (t) => ({
     doneIdx: index("tasks_done_idx").on(t.done),
     ownerIdx: index("tasks_owner_idx").on(t.ownerPersonId),
-    actionIdIdx: index("tasks_action_id_idx").on(t.actionId),
+    // One task per action id; partial so NULL (legacy / non-meeting tasks) stays
+    // valid and unconstrained. Mirrors drizzle/0010_meeting_action_identity.sql.
+    actionIdUx: uniqueIndex("tasks_action_id_ux")
+      .on(t.actionId)
+      .where(sql`${t.actionId} is not null`),
   }),
 );
 

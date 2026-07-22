@@ -139,10 +139,30 @@ export interface ReconcileByIdResult {
   removed: IdentifiedTaskRow[];
 }
 
+// Guard: a duplicate action id on either side is a data-integrity violation
+// (the tasks_action_id_ux partial unique index forbids it in the database, and
+// mintActionIdsForNote disambiguates duplicate text). Detect it loudly instead
+// of letting a Map silently keep the last row and drop the rest.
+function assertUniqueActionIds(ids: string[], where: string): void {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) dupes.add(id);
+    seen.add(id);
+  }
+  if (dupes.size) {
+    throw new Error(
+      `Duplicate action id(s) in ${where}: ${[...dupes].join(", ")}`,
+    );
+  }
+}
+
 export function reconcileActionsById(
   actions: IdentifiedAction[],
   existingRows: IdentifiedTaskRow[],
 ): ReconcileByIdResult {
+  assertUniqueActionIds(existingRows.map((r) => r.actionId), "existing task rows");
+  assertUniqueActionIds(actions.map((a) => a.actionId), "incoming actions");
   const byId = new Map(existingRows.map((r) => [r.actionId, r.id]));
   const present = new Set<string>();
 

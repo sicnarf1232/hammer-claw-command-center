@@ -21,21 +21,32 @@ export type ActionReviewState =
   | "rejected";
 
 // The structured linking contract for one extracted meeting action (Slice B).
-// It carries a stable, line-independent identity plus the fields the review UI
-// (Slice C) and the correct-persistence writer (Slice D) will need. In Slice B
-// the candidate arrays are always empty and identities are left unresolved: no
-// person or account is guessed here.
+// It carries a stable, line-independent identity, an IMMUTABLE record of the
+// original extraction, Jordan's editable/approved version, and the review
+// scaffolding the UI (Slice C) and the persistence writer (Slice D) will need.
+// In Slice B the candidate arrays are always empty and identities are left
+// unresolved: no person or account is guessed here. The audit fields satisfy
+// docs/decisions/meeting-linking-rules.md "Audit requirements" and AGENTS.md.
 export interface MeetingActionProposal {
   actionId: string; // stable id (lib/meetingActionIdentity.ts), minted once
-  fingerprint: string; // normalized-text hash; extraction hint only, not identity
-  text: string; // action text, owner prefix stripped
-  ownerText: string | null; // raw extracted owner ("Scott", "Operations", ...)
+  fingerprint: string; // normalized-text hash of the CURRENT text; hint, not identity
+
+  // ---- original extraction: immutable audit record of the first extraction ----
+  originalText: string; // action text as first extracted, never edited
+  originalOwnerText: string | null; // owner as first extracted, never edited
+  sourceRef: string; // action-level source reference to the original extraction
+  provenance: string; // model id or deterministic matcher that produced the extraction
+
+  // ---- approved / editable: Jordan's version (starts equal to the original) ----
+  text: string; // editable action text (owner prefix stripped)
+  ownerText: string | null; // editable owner ("Scott", "Operations", ...)
   ownerClass: OwnerClass; // me | team | customer | unknown (from the roster pass)
   candidatePersonIds: number[]; // resolver output; [] in Slice B (unresolved)
   candidateAccountIds: number[]; // resolver output; [] in Slice B (unresolved)
   reasons: string[]; // human-readable evidence; populated by the resolver later
   confidence: "high" | "medium" | "low" | "none";
-  reviewState: ActionReviewState;
+  ownerReviewState: ActionReviewState; // owner link review state
+  accountReviewState: ActionReviewState; // account link review state (separate axis)
   isJordans: boolean; // true => a real task in Jordan's views
   due: string | null; // YYYY-MM-DD if concrete
   dueText: string | null; // raw due phrase when not concrete

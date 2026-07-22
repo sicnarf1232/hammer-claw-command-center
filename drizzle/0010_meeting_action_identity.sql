@@ -14,9 +14,16 @@
 -- never references it.
 
 ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "action_id" text;
-CREATE INDEX IF NOT EXISTS "tasks_action_id_idx" ON "tasks" ("action_id");
+
+-- One task per action id. A UNIQUE PARTIAL index enforces uniqueness only for
+-- non-null action_id, so legacy rows and non-meeting tasks (action_id IS NULL)
+-- remain valid and may coexist in any number. Slice D relies on this to keep a
+-- single canonical task per meeting action.
+CREATE UNIQUE INDEX IF NOT EXISTS "tasks_action_id_ux"
+  ON "tasks" ("action_id")
+  WHERE "action_id" IS NOT NULL;
 
 -- Rollback (reverse of the above; drizzle-kit here is forward-only, so the down
 -- step is recorded in-file):
---   DROP INDEX IF EXISTS "tasks_action_id_idx";
+--   DROP INDEX IF EXISTS "tasks_action_id_ux";
 --   ALTER TABLE "tasks" DROP COLUMN IF EXISTS "action_id";

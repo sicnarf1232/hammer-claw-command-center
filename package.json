@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:migrate": "node scripts/apply-migration.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

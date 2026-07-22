@@ -212,6 +212,28 @@ describe("reconcileActionsById: stable identity survives reorder and edit", () =
     expect(result.updates.map((u) => u.id).sort()).toEqual([1, 3]);
   });
 
+  it("DUPLICATE existing rows: throws instead of silently collapsing via a Map", () => {
+    const dupRows = [
+      { id: 1, actionId: "act_dup" },
+      { id: 2, actionId: "act_dup" },
+    ];
+    expect(() =>
+      reconcileActionsById([{ actionId: "act_dup", text: "x" }], dupRows),
+    ).toThrow(/duplicate action id/i);
+  });
+
+  it("DUPLICATE incoming actions: throws instead of dropping one", () => {
+    expect(() =>
+      reconcileActionsById(
+        [
+          { actionId: "act_dup", text: "a" },
+          { actionId: "act_dup", text: "b" },
+        ],
+        [],
+      ),
+    ).toThrow(/duplicate action id/i);
+  });
+
   it("INSERT: a genuinely new action (new id) inserts without disturbing the rest", () => {
     const added = mintActionIdsForNote(GRANOLA, ["Draft the CAPA closure memo."])[0];
     const withNew: IdentifiedAction[] = [
