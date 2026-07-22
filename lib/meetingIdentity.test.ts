@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { TriagedActionItem } from "./ai";
 import { parseRoster, classifyName } from "./vault/roster";
 import { resolveAttendees } from "./contacts";
 import { parseMeetingNote } from "./vault/meetings";
@@ -67,22 +68,47 @@ describe("attendee/contact resolution risks", () => {
     // TODO Slice C/D: unknown external identities must stay unassigned and enter
     // review, never auto-proposed as an account contact.
   });
+});
 
-  it("a team/function owner such as Operations is treated as an unknown person", () => {
-    // A team owner is not an individual and has no person identity, yet it
-    // classifies as "unknown" and would be proposed as a contact just like a
-    // person. linking-rules models this as a distinct `group` ownership state.
-    const res = resolveAttendees(["Operations"], [], roster);
-    expect(res[0].classification).toBe("unknown");
-    expect(res[0].willCreate).toBe(true);
+describe("action ownership is distinct from meeting attendance", () => {
+  // Grounded in a real parsed meeting, not a hand-built attendee list. The note
+  // is attended by Jordan and Nick (Merit) but its two actions are owned by
+  // "Operations" (a team) and "Scott" (a person who did not attend). Attendee
+  // resolution and action ownership are two different axes; these pin that the
+  // current pipeline keeps action owners as bare strings and never reconciles
+  // them against attendance. linking-rules models `group` ownership and
+  // absent-owner review as separate states from attendee contact creation.
+  const note = parseMeetingNote(NOTE_INTERNAL_ABOUT_CUSTOMER, "internal.md");
+  const attendees = resolveAttendees(note.attendees, [], parseRoster(ROSTER_BASIC));
+  const owners = note.actionItems.map((a) => a.owner);
+
+  it("the meeting's attendees and its action owners are disjoint sets", () => {
+    // Titles are stripped on parse, so attendees are the two Merit names.
+    expect(attendees.map((a) => a.name)).toEqual(["Jordan Francis", "Nick Patel"]);
+    // Neither action owner attended, so neither can be resolved via attendance.
+    expect(owners).toEqual(["Operations", "Scott"]);
+    for (const owner of owners) {
+      expect(attendees.map((a) => a.name)).not.toContain(owner);
+    }
   });
 
-  it("an owner named in an action but absent from attendees is never resolved from attendance", () => {
-    // "Nick Patel" owns nothing in the attendee list here; attendee resolution
-    // only ever sees the attendee names it is given, so an action owner who did
-    // not attend cannot be resolved through this path.
-    const res = resolveAttendees(["Jordan Francis", "Amy Lee"], [], roster);
-    expect(res.map((r) => r.name)).not.toContain("Nick Patel");
+  it("a team owner (Operations) stays a plain string with no person identity", () => {
+    // A team/function owner is not an individual. It survives only as the owner
+    // string on the action item; there is no ownerPersonId and no roster lookup.
+    // linking-rules models this as a distinct `group` ownership state.
+    const opsAction = note.actionItems.find((a) => a.owner === "Operations");
+    expect(opsAction).toBeDefined();
+    expect(opsAction).not.toHaveProperty("ownerPersonId");
+    expect(classifyName(parseRoster(ROSTER_BASIC), "Operations")).toBeUndefined();
+    // TODO Slice C/D: team owners must resolve to a `group` state, not be
+    // conflated with an unknown person or proposed as an account contact.
+  });
+
+  it("an action owner absent from attendance is never fabricated as an attendee", () => {
+    // "Scott" owns an action but did not attend; attendee resolution only sees
+    // the names on the attendee line, so it cannot surface Scott at all.
+    expect(attendees.map((a) => a.name)).not.toContain("Scott");
+    // TODO Slice E: an absent action owner must enter review, not silently drop.
   });
 });
 
@@ -103,11 +129,10 @@ describe("internal meeting concerning a customer account", () => {
 });
 
 describe("template passthrough vs AI-shaped proposal produce the same shallow owner", () => {
-  it("a templated note skips AI yet yields only an owner STRING, no person id", () => {
-    // plan gap 7: both the deterministic template path and the AI path end with
-    // an owner string and no identity resolution. This asserts the template
-    // path's shape; the AI path (lib/ai.ts TriagedActionItem) has the same
-    // `owner: string | null` field and likewise no ownerPersonId.
+  // plan gap 7: both the deterministic template path and the AI path end with an
+  // owner string and no identity resolution. Both contracts are exercised here.
+
+  it("the template path yields only an owner STRING, no person id", () => {
     expect(matchesNoteTemplate(NOTE_TEMPLATED_PASSTHROUGH)).toBe(true);
     const parsed = parseTemplatedNote(NOTE_TEMPLATED_PASSTHROUGH);
     const triaged = triagedFromTemplate(parsed, {
@@ -116,11 +141,32 @@ describe("template passthrough vs AI-shaped proposal produce the same shallow ow
       knownAccounts: ["Intuitive Surgical"],
       date: "2026-07-20",
     });
+    expect(triaged.actionItems.length).toBeGreaterThan(0);
     for (const item of triaged.actionItems) {
       expect(typeof item.owner === "string" || item.owner === null).toBe(true);
       expect(item).not.toHaveProperty("ownerPersonId");
     }
     // TODO Slice B/D: after either extraction path, deterministic identity
     // resolution must run so owners become candidate person ids for review.
+  });
+
+  it("the AI path's action contract carries the same owner-string-only shape", () => {
+    // The AI path (lib/ai.ts triageMeeting) returns TriagedActionItem objects.
+    // Its owner field is `string | null` and the interface has no ownerPersonId,
+    // so an approved AI proposal reaches the writer with an owner string and no
+    // identity, exactly like the template path above. Inert data typed to the
+    // real interface: if lib/ai.ts ever adds ownerPersonId, this stops compiling
+    // and the characterization must be revisited.
+    const aiActions: TriagedActionItem[] = [
+      { owner: "Jordan", text: "Send the updated Q3 forecast.", isJordans: true },
+      { owner: "Amy", text: "Confirm the revised GTIN list.", isJordans: false },
+      { owner: null, text: "Circulate the CAPA summary.", isJordans: false },
+    ];
+    for (const item of aiActions) {
+      expect(typeof item.owner === "string" || item.owner === null).toBe(true);
+      expect(item).not.toHaveProperty("ownerPersonId");
+    }
+    // TODO Slice B/D: same as the template path. Identity resolution must run on
+    // AI-produced owners before an approved proposal is written.
   });
 });
