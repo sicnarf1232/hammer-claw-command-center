@@ -44,7 +44,9 @@ describe("buildActionProposals: stable identity + audit + unresolved contract", 
     expect(jordan.originalOwnerText).toBe("Jordan");
     expect(jordan.text).toBe(jordan.originalText);
     expect(jordan.ownerText).toBe(jordan.originalOwnerText);
+    // Original and current provenance both start as the extracting model.
     expect(jordan.provenance).toBe(MODEL);
+    expect(jordan.currentProvenance).toBe(MODEL);
     expect(jordan.sourceRef).toBe(`granola:${GRANOLA}#${jordan.fingerprint}`);
   });
 
@@ -105,12 +107,13 @@ describe("both extraction paths produce the same contract shape", () => {
   });
 });
 
-// Finding 2: the real refresh boundary. A refresh re-triages from Granola and
-// rebuilds the contract; because the id is derived from text, changed wording
-// would mint a different id unless the prior id is carried. These tests build
-// the prior contract with the REAL builder, then refresh with changed wording,
-// so the carried id is derived from the prior payload, not hand-inserted.
-describe("refreshActionProposals: identity survives re-triage with changed wording", () => {
+// Finding 2 (round 1) + Finding 1 (round 2): the real refresh boundary. A
+// refresh re-triages from Granola and rebuilds the contract; because the id is
+// derived from text, UNCHANGED wording must keep its id, while a rewording must
+// NOT silently inherit a removed action's identity. These tests build the prior
+// contract with the REAL builder, then refresh, so any carried id is derived
+// from the prior payload, not hand-inserted.
+describe("refreshActionProposals: identity carried only on reliable evidence", () => {
   const first: TriagedActionItem[] = [
     { owner: "Jordan", text: "Send the updated Q3 forecast.", isJordans: true, ownerClass: "me" },
     { owner: "Amy", text: "Confirm the revised GTIN list.", isJordans: false, ownerClass: "customer" },
@@ -123,25 +126,6 @@ describe("refreshActionProposals: identity survives re-triage with changed wordi
     expect(again.map((a) => a.actionId)).toEqual(prior.map((a) => a.actionId));
   });
 
-  it("a single reworded action carries its id by deterministic elimination", () => {
-    // Two of three unchanged (match by fingerprint); the third is reworded, so
-    // exactly one prior and one new remain unmatched => same action, id carried.
-    const reworded: TriagedActionItem[] = [
-      first[0],
-      first[1],
-      { owner: "Jordan", text: "Close out the open CAPA with the Quality team.", isJordans: true, ownerClass: "me" },
-    ];
-    const refreshed = refreshActionProposals(prior, reworded, GRANOLA, MODEL);
-    // Identity carried from the PRIOR payload (not inserted into the input):
-    expect(refreshed[2].actionId).toBe(prior[2].actionId);
-    // Editable text follows the new wording; the original extraction is preserved.
-    expect(refreshed[2].text).toBe("Close out the open CAPA with the Quality team.");
-    expect(refreshed[2].originalText).toBe("Chase the open CAPA with Quality.");
-    expect(refreshed[2].sourceRef).toBe(prior[2].sourceRef);
-    // Fingerprint reflects the current wording, so it differs from the original.
-    expect(refreshed[2].fingerprint).not.toBe(prior[2].fingerprint);
-  });
-
   it("reordering across a refresh keeps every id attached to its action", () => {
     const reordered: TriagedActionItem[] = [first[2], first[0], first[1]];
     const refreshed = refreshActionProposals(prior, reordered, GRANOLA, MODEL);
@@ -150,38 +134,86 @@ describe("refreshActionProposals: identity survives re-triage with changed wordi
     expect(refreshed[2].actionId).toBe(prior[1].actionId);
   });
 
-  it("ambiguous multi-rewording stays unresolved: fresh ids, not positional guesses", () => {
-    // Two actions BOTH reworded at once (only the first stays unchanged). Two
-    // priors and two new remain unmatched after fingerprinting; elimination is
-    // ambiguous, so the reworded actions get fresh ids rather than a guess.
-    const twoReworded: TriagedActionItem[] = [
-      first[0],
-      { owner: "Amy", text: "Verify the corrected GTIN spreadsheet.", isJordans: false, ownerClass: "customer" },
-      { owner: "Jordan", text: "Escalate the CAPA to management.", isJordans: true, ownerClass: "me" },
-    ];
-    const refreshed = refreshActionProposals(prior, twoReworded, GRANOLA, MODEL);
-    expect(refreshed[0].actionId).toBe(prior[0].actionId); // unchanged, carried
-    // The two reworded actions did NOT inherit prior[1]/prior[2] ids.
-    const priorIds = new Set(prior.map((a) => a.actionId));
-    expect(priorIds.has(refreshed[1].actionId)).toBe(false);
-    expect(priorIds.has(refreshed[2].actionId)).toBe(false);
-    expect(refreshed[1].actionId).not.toBe(refreshed[2].actionId);
-  });
-
-  it("meetingActionContract routes to the refresh path when prior actions are supplied", () => {
+  it("a reworded action does NOT carry a prior id; it becomes unresolved", () => {
+    // Only the CAPA action is reworded. Its fingerprint changed, so there is no
+    // reliable evidence it is the same action; it must not inherit prior[2].
     const reworded: TriagedActionItem[] = [
       first[0],
       first[1],
-      { owner: "Jordan", text: "Close the CAPA fully.", isJordans: true, ownerClass: "me" },
+      { owner: "Jordan", text: "Close out the open CAPA with the Quality team.", isJordans: true, ownerClass: "me" },
     ];
+    const refreshed = refreshActionProposals(prior, reworded, GRANOLA, MODEL);
+    const priorIds = new Set(prior.map((a) => a.actionId));
+    expect(refreshed[2].actionId).not.toBe(prior[2].actionId);
+    expect(priorIds.has(refreshed[2].actionId)).toBe(false);
+    // Fresh action: its own text is the original, no prior audit is borrowed.
+    expect(refreshed[2].originalText).toBe("Close out the open CAPA with the Quality team.");
+  });
+
+  it("simultaneous removal + insertion: the new action never inherits the removed id", () => {
+    // Prior [A, B]; refreshed [A, C]. A is unchanged (carried). B was removed and
+    // C is new. Single-leftover elimination would wrongly give C the identity and
+    // history of B; it must not.
+    const twoPrior = buildActionProposals(
+      GRANOLA,
+      [
+        { owner: "Jordan", text: "Send the updated Q3 forecast.", isJordans: true, ownerClass: "me" },
+        { owner: "Amy", text: "Confirm the revised GTIN list.", isJordans: false, ownerClass: "customer" },
+      ],
+      MODEL,
+    );
+    const refreshed = refreshActionProposals(
+      twoPrior,
+      [
+        { owner: "Jordan", text: "Send the updated Q3 forecast.", isJordans: true, ownerClass: "me" }, // A
+        { owner: "Nick", text: "Book the supplier audit for August.", isJordans: false, ownerClass: "team" }, // C (new)
+      ],
+      GRANOLA,
+      MODEL,
+    );
+    expect(refreshed[0].actionId).toBe(twoPrior[0].actionId); // A carried
+    // C must be a fresh id, not the removed B's id (twoPrior[1]).
+    expect(refreshed[1].actionId).not.toBe(twoPrior[1].actionId);
+    expect(new Set(twoPrior.map((a) => a.actionId)).has(refreshed[1].actionId)).toBe(false);
+    expect(refreshed[1].originalText).toBe("Book the supplier audit for August.");
+  });
+
+  it("keeps original provenance immutable while updating current provenance on refresh", () => {
+    const MODEL_A = "claude-opus-4-8";
+    const MODEL_B = "claude-sonnet-5";
+    const priorA = buildActionProposals(GRANOLA, first, MODEL_A);
+    const refreshed = refreshActionProposals(
+      priorA,
+      [
+        first[0], // unchanged -> carried
+        first[1], // unchanged -> carried
+        { owner: "Jordan", text: "A brand new action item.", isJordans: true, ownerClass: "me" }, // new
+      ],
+      GRANOLA,
+      MODEL_B,
+    );
+    // Carried action: original provenance preserved, current provenance updated.
+    expect(refreshed[0].provenance).toBe(MODEL_A);
+    expect(refreshed[0].currentProvenance).toBe(MODEL_B);
+    // Genuinely new action: both provenances are the current model.
+    expect(refreshed[2].provenance).toBe(MODEL_B);
+    expect(refreshed[2].currentProvenance).toBe(MODEL_B);
+  });
+
+  it("meetingActionContract routes to the refresh path (carried original provenance proves it)", () => {
+    const MODEL_B = "claude-sonnet-5";
     const { contractVersion, actions } = meetingActionContract(
       GRANOLA,
-      reworded,
-      MODEL,
-      prior,
+      first, // unchanged actions
+      MODEL_B,
+      prior, // prior built with MODEL
     );
     expect(contractVersion).toBe(MEETING_ACTION_CONTRACT_VERSION);
-    expect(actions[2].actionId).toBe(prior[2].actionId); // carried through the wrapper
+    // A fresh build with MODEL_B would set provenance=MODEL_B; the refresh path
+    // preserves the ORIGINAL provenance, so this proves routing to the refresh.
+    expect(actions[0].actionId).toBe(prior[0].actionId);
+    expect(actions[0].provenance).toBe(MODEL); // original, carried
+    expect(actions[0].currentProvenance).toBe(MODEL_B); // this refresh
   });
 });
 

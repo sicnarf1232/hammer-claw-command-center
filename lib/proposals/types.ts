@@ -35,7 +35,9 @@ export interface MeetingActionProposal {
   originalText: string; // action text as first extracted, never edited
   originalOwnerText: string | null; // owner as first extracted, never edited
   sourceRef: string; // action-level source reference to the original extraction
-  provenance: string; // model id or deterministic matcher that produced the extraction
+  provenance: string; // model id / matcher of the ORIGINAL extraction (immutable)
+  currentProvenance: string; // model id / matcher of the extraction that produced
+  //                            the CURRENT editable text (updated on each refresh)
 
   // ---- approved / editable: Jordan's version (starts equal to the original) ----
   text: string; // editable action text (owner prefix stripped)

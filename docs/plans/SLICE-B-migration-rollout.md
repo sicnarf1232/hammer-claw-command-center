@@ -16,8 +16,17 @@ node scripts/apply-migration.mts drizzle/0010_meeting_action_identity.sql --dry-
 ```
 
 `scripts/apply-migration.mts` reads `POSTGRES_URL` from the environment, else
-from `.env.local`. Statements use `IF NOT EXISTS`, so a repeat run is a safe
-no-op (idempotent).
+from `.env.local`, and applies each statement through the neon HTTP driver
+(`@neondatabase/serverless`, an existing direct dependency; no WebSocket driver
+or other undeclared dependency is required). Statements use `IF NOT EXISTS`, so a
+repeat run is a safe no-op (idempotent).
+
+Verify with the focused, read-only checker (column exists; `tasks_action_id_ux`
+exists, is UNIQUE, and is PARTIAL on `action_id IS NOT NULL`):
+
+```
+node scripts/verify-migration-0010.mts     # POSTGRES_URL = target database
+```
 
 ## Why ordering matters (expand migration)
 
@@ -39,10 +48,12 @@ early is safe for production while the old code is still live.
    node scripts/apply-migration.mts drizzle/0010_meeting_action_identity.sql --dry-run
    npm run db:migrate -- drizzle/0010_meeting_action_identity.sql
    ```
-4. Verify the column and unique partial index exist and legacy NULL rows are
-   unaffected:
+4. Verify the column and unique partial index (this performs the four explicit
+   checks: column present, index present, UNIQUE, PARTIAL on `action_id IS NOT
+   NULL`):
    ```
-   node scripts/check-live-schema.mts    # POSTGRES_URL = preview branch
+   node scripts/verify-migration-0010.mts   # POSTGRES_URL = preview branch
+   node scripts/check-live-schema.mts        # optional: full-schema diff
    ```
 5. Deploy this branch to a Vercel PREVIEW bound to the preview Neon branch and
    exercise a task-reading route end to end, e.g.:
@@ -63,7 +74,7 @@ Run in this order; each step must succeed before the next:
    # POSTGRES_URL = production
    node scripts/apply-migration.mts drizzle/0010_meeting_action_identity.sql --dry-run
    npm run db:migrate -- drizzle/0010_meeting_action_identity.sql
-   node scripts/check-live-schema.mts
+   node scripts/verify-migration-0010.mts
    ```
 2. Only after the column and index are confirmed present in production, merge and
    deploy `main`.

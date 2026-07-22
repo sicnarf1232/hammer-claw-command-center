@@ -11,12 +11,13 @@
 // idempotent (IF NOT EXISTS), so a repeat run is a safe no-op.
 //
 // --dry-run prints the statements it would execute and touches no database.
+//
+// Uses the neon HTTP driver (already a direct dependency via
+// @neondatabase/serverless); each parameterless DDL statement runs as a raw
+// query, so no WebSocket driver or other undeclared dependency is required.
 
 import { readFileSync } from "node:fs";
-import { neonConfig, Client } from "@neondatabase/serverless";
-import ws from "ws";
-
-neonConfig.webSocketConstructor = ws;
+import { neon } from "@neondatabase/serverless";
 
 function envLocal(key: string): string | null {
   try {
@@ -69,16 +70,12 @@ if (!url) {
   process.exit(1);
 }
 
-const client = new Client(url);
-await client.connect();
-try {
-  for (const stmt of statements) {
-    const head = stmt.split("\n")[0].slice(0, 90);
-    process.stdout.write(`applying: ${head} ... `);
-    await client.query(stmt);
-    console.log("ok");
-  }
-} finally {
-  await client.end();
+const sql = neon(url);
+for (const stmt of statements) {
+  const head = stmt.split("\n")[0].slice(0, 90);
+  process.stdout.write(`applying: ${head} ... `);
+  // The neon HTTP function accepts a plain string as a raw, parameterless query.
+  await sql(stmt);
+  console.log("ok");
 }
 console.log(`Applied ${statements.length} statement(s) from ${file}`);

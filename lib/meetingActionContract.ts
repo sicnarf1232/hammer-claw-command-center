@@ -33,7 +33,8 @@ export function actionSourceRef(granolaId: string, originalFingerprint: string):
 }
 
 // Fresh contract for one action, from its triaged item and freshly minted
-// identity. original* == editable at first extraction.
+// identity. original* == editable at first extraction, and the original and
+// current extraction provenance are the same model.
 function freshProposal(
   granolaId: string,
   item: TriagedActionItem,
@@ -49,6 +50,7 @@ function freshProposal(
     originalOwnerText: item.owner,
     sourceRef: actionSourceRef(granolaId, fingerprint),
     provenance,
+    currentProvenance: provenance,
     text: item.text,
     ownerText: item.owner,
     ownerClass,
@@ -80,14 +82,16 @@ export function buildActionProposals(
 
 // Re-derive an editable/approved proposal from a NEW extraction while carrying a
 // prior action's stable identity and immutable audit record. Editable fields
-// (text/owner/due) follow the new extraction; the original* audit fields,
-// sourceRef, provenance, and actionId come from the prior. A prior owner link
-// that was already confirmed (`assigned`) is preserved so reprocessing never
+// (text/owner/due) follow the new extraction; the actionId, original* audit
+// fields, sourceRef, and original `provenance` come from the prior, while
+// `currentProvenance` records the model of THIS refresh. A prior owner link that
+// was already confirmed (`assigned`) is preserved so reprocessing never
 // overwrites a confirmed action; otherwise the owner state is recomputed.
 function carryPrior(
   prior: MeetingActionProposal,
   item: TriagedActionItem,
   newFingerprint: string,
+  currentProvenance: string,
 ): MeetingActionProposal {
   const ownerClass: OwnerClass = item.ownerClass ?? "unknown";
   const ownerConfirmed = prior.ownerReviewState === "assigned";
@@ -97,7 +101,8 @@ function carryPrior(
     originalText: prior.originalText, // immutable audit
     originalOwnerText: prior.originalOwnerText, // immutable audit
     sourceRef: prior.sourceRef, // ties to the original extraction
-    provenance: prior.provenance, // original extraction provenance
+    provenance: prior.provenance, // ORIGINAL extraction provenance (immutable)
+    currentProvenance, // model of THIS refresh (the current editable text)
     text: item.text, // editable follows the refreshed wording
     ownerText: ownerConfirmed ? prior.ownerText : item.owner,
     ownerClass: ownerConfirmed ? prior.ownerClass : ownerClass,
@@ -117,24 +122,22 @@ function carryPrior(
 }
 
 // Refresh the contract for an already-staged meeting from a NEW triage, carrying
-// existing stable ids so changed wording does not mint a different id. This is
+// existing stable ids so unchanged wording does not mint a different id. This is
 // the fix for the real refresh boundary (stageGranolaMeetings refreshPending):
 // building fresh would re-derive ids from the current text and lose identity.
 //
-// Reassociation is deterministic only:
-//   1. exact fingerprint match (text unchanged) against a unique unconsumed
-//      prior action carries that prior id;
-//   2. if, after step 1, exactly one prior action and one new action remain
-//      unmatched, they are the same action by elimination and the id is carried
-//      even though the wording changed;
-//   3. anything still unmatched is genuinely ambiguous (several priors and
-//      several reworded new actions) and gets a fresh id, left unresolved rather
-//      than guessed by position.
+// Reassociation is carried ONLY on reliable, deterministic evidence: an exact
+// fingerprint match against a UNIQUE unconsumed prior action (i.e. the text did
+// not change). A reworded action has a different fingerprint and cannot be
+// distinguished from a removal + a new insertion (prior [A,B], refreshed [A,C]
+// must not silently give C the identity and history of B), so it is treated as a
+// new, unresolved action with a fresh id and left for human review. No positional
+// or single-leftover elimination guessing is performed.
 export function refreshActionProposals(
   prior: MeetingActionProposal[],
   actionItems: TriagedActionItem[],
   granolaId: string,
-  provenance: string,
+  currentProvenance: string,
 ): MeetingActionProposal[] {
   // Fresh identities/fingerprints for the new list (dup-text safe, order-stable).
   const minted = mintActionIdsForNote(
@@ -144,7 +147,8 @@ export function refreshActionProposals(
   const result: (MeetingActionProposal | null)[] = actionItems.map(() => null);
   const priorConsumed = new Array<boolean>(prior.length).fill(false);
 
-  // Pass 1: exact fingerprint match, only when the prior match is unambiguous.
+  // Exact fingerprint match, only when the prior match is unambiguous. This is
+  // the only reliable reassociation signal available here.
   actionItems.forEach((item, i) => {
     const fp = minted[i].fingerprint;
     const matches: number[] = [];
@@ -153,26 +157,13 @@ export function refreshActionProposals(
     }
     if (matches.length === 1) {
       priorConsumed[matches[0]] = true;
-      result[i] = carryPrior(prior[matches[0]], item, fp);
+      result[i] = carryPrior(prior[matches[0]], item, fp, currentProvenance);
     }
   });
 
-  // Pass 2: single leftover prior + single leftover new => same action by
-  // elimination (deterministic), carry the id despite changed wording.
-  const unmatchedNew = result
-    .map((r, i) => (r === null ? i : -1))
-    .filter((i) => i >= 0);
-  const unmatchedPrior = priorConsumed
-    .map((used, p) => (used ? -1 : p))
-    .filter((p) => p >= 0);
-  if (unmatchedNew.length === 1 && unmatchedPrior.length === 1) {
-    const i = unmatchedNew[0];
-    const p = unmatchedPrior[0];
-    priorConsumed[p] = true;
-    result[i] = carryPrior(prior[p], actionItems[i], minted[i].fingerprint);
-  }
-
-  // Pass 3: still unmatched => genuinely new or ambiguous, mint fresh (unresolved).
+  // Anything unmatched is genuinely new or a reworded/ambiguous extraction: mint
+  // a fresh id and leave it unresolved. Prior actions with no match simply drop
+  // out of the contract (Slice D reconciles those as removed/archivable by id).
   result.forEach((r, i) => {
     if (r === null) {
       result[i] = freshProposal(
@@ -180,7 +171,7 @@ export function refreshActionProposals(
         actionItems[i],
         minted[i].actionId,
         minted[i].fingerprint,
-        provenance,
+        currentProvenance,
       );
     }
   });
