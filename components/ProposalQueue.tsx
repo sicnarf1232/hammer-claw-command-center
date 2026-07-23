@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MeetingActionReview, {
   type ReviewActionView,
   type ReviewPersonOption,
 } from "./MeetingActionReview";
-import { approvalGate, type ReviewPanelState } from "@/lib/reviewGate";
+import {
+  approvalGate,
+  combinePanelStates,
+  gateForProposals,
+  type ReviewPanelState,
+} from "@/lib/reviewGate";
 
 export interface QueueProposal {
   id: number;
@@ -47,9 +52,12 @@ export default function ProposalQueue({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  // Unsaved/saving action-review state per proposal id: Approve (per card and
-  // Approve all) is disabled while any review panel is dirty or mid-save, so
-  // selections cannot be silently lost by approving first.
+  // Unsaved/saving edit state per proposal id (action reviews, note content,
+  // and contact-name edits combined): Approve (per card and Approve all) is
+  // disabled while anything is dirty or mid-save, so selections cannot be
+  // silently lost by approving first. The queue gate is derived only from the
+  // proposals currently rendered, so a rejected/removed proposal's stale
+  // entry can never keep blocking Approve all.
   const [panelStates, setPanelStates] = useState<Record<number, ReviewPanelState>>({});
 
   if (!proposals.length) return null;
@@ -60,7 +68,7 @@ export default function ProposalQueue({
       if (cur && cur.dirty === state.dirty && cur.saving === state.saving) return prev;
       return { ...prev, [id]: state };
     });
-  const allGate = approvalGate(Object.values(panelStates));
+  const allGate = gateForProposals(panelStates, proposals.map((p) => p.id));
 
   const parents = proposals.filter((p) => p.kind === "meeting-file");
   const orphanChildren = proposals.filter(
@@ -183,12 +191,13 @@ function ProposalCard({
   const [saving, setSaving] = useState(false);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // Structured review panel state for THIS card; gates the card's Approve.
+  // Structured review panel state for THIS card. Combined with the note/
+  // contact edit state below, it gates the card's Approve and is reported
+  // upward for the queue-level Approve all gate.
   const [reviewPanel, setReviewPanel] = useState<ReviewPanelState>({
     dirty: false,
     saving: false,
   });
-  const gate = approvalGate([reviewPanel]);
 
   const contentDirty = isMeeting && content !== (p.content ?? "");
   const namesDirty =
@@ -196,6 +205,15 @@ function ProposalCard({
     !!p.contactsToAdd &&
     JSON.stringify(names) !== JSON.stringify(p.contactsToAdd.names);
   const dirty = contentDirty || namesDirty;
+
+  // The full unsaved-edit picture for this card: note/contact edits AND the
+  // structured action review panel. One gate, one save-first explanation.
+  const combined = combinePanelStates([reviewPanel, { dirty, saving }]);
+  const gate = approvalGate([combined]);
+  useEffect(() => {
+    onPanelState(combined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combined.dirty, combined.saving]);
 
   async function save() {
     setSaving(true);
@@ -287,10 +305,7 @@ function ProposalCard({
           proposalId={p.id}
           actions={p.actions}
           people={people}
-          onPanelState={(s) => {
-            setReviewPanel(s);
-            onPanelState(s);
-          }}
+          onPanelState={setReviewPanel}
         />
       ) : null}
 
