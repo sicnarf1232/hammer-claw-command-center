@@ -255,6 +255,59 @@ function pseudoAction(actionId: string, text: string): MeetingActionProposal {
   };
 }
 
+// Pick WHICH existing meeting row the reviewed links reconcile onto (Codex
+// D-review round 2). Basename alone is not identity: two meetings can share a
+// filename under different paths/accounts, and reconciling onto the wrong one
+// would attach Jordan's confirmed owners and tasks to the wrong meeting.
+// Authoritative order:
+//   1. exact granola_id match (the transcript identity), when available;
+//   2. exact source_path match (the proposal's own path);
+//   3. basename fallback for legacy rows, ONLY when exactly one row matches;
+//   4. zero or multiple fallback matches: fail — never choose the first row.
+export type ReconcileTargetResult<T> =
+  | { ok: true; row: T }
+  | { ok: false; error: string };
+
+export function selectReconcileTarget<
+  T extends { sourcePath: string | null; granolaId: string | null },
+>(
+  rows: T[],
+  proposal: { path: string; granolaId: string | null },
+): ReconcileTargetResult<T> {
+  if (proposal.granolaId) {
+    const byGranola = rows.filter((r) => r.granolaId === proposal.granolaId);
+    if (byGranola.length === 1) return { ok: true, row: byGranola[0] };
+    if (byGranola.length > 1) {
+      return {
+        ok: false,
+        error: `Multiple meetings carry granola id ${proposal.granolaId}; reconciliation is ambiguous and reviewed links were NOT applied.`,
+      };
+    }
+  }
+  const byPath = rows.filter((r) => r.sourcePath === proposal.path);
+  if (byPath.length === 1) return { ok: true, row: byPath[0] };
+
+  const base = basenameOf(proposal.path);
+  const byBase = rows.filter(
+    (r) => r.sourcePath && basenameOf(r.sourcePath) === base,
+  );
+  if (byBase.length === 1) return { ok: true, row: byBase[0] };
+  if (byBase.length > 1) {
+    return {
+      ok: false,
+      error: `Multiple meetings share the filename ${base}; reconciliation is ambiguous and reviewed links were NOT applied.`,
+    };
+  }
+  return {
+    ok: false,
+    error: `No stored meeting matches this proposal (granola id, path, or filename); reviewed links were NOT applied.`,
+  };
+}
+
+function basenameOf(path: string): string {
+  return path.split("/").pop()!.replace(/\.md$/, "").toLowerCase();
+}
+
 // Why an approved proposal's reviewed links CANNOT be reconciled against an
 // already-existing meeting (Codex D-review blocker 2). Non-null means the
 // execution must FAIL (status 'error'), never approve with only a warning:

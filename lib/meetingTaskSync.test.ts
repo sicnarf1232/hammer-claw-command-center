@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   planMeetingTaskSync,
   reconcileBlocker,
+  selectReconcileTarget,
   ARCHIVED_STATUS,
   type SyncMdItem,
   type SyncTaskRow,
@@ -356,5 +357,72 @@ describe("reconcileBlocker: reconcile-existing must fail loudly, never falsely s
 
   it("blocks when the meeting has no stored content", () => {
     expect(reconcileBlocker(true, false)).toMatch(/no stored content/i);
+  });
+});
+
+describe("selectReconcileTarget: authoritative identity, never first-match by filename", () => {
+  const R = (id: number, sourcePath: string | null, granolaId: string | null) => ({
+    id,
+    sourcePath,
+    granolaId,
+  });
+
+  it("exact granola id wins, even when paths and basenames disagree", () => {
+    const rows = [
+      R(1, "Merit/Meetings/2026-07-20 Sync.md", "gran-A"),
+      R(2, "Sloan/Meetings/2026-07-20 Sync.md", "gran-B"),
+    ];
+    const res = selectReconcileTarget(rows, {
+      path: "Somewhere/Else/2026-07-20 Sync.md",
+      granolaId: "gran-B",
+    });
+    expect(res).toEqual({ ok: true, row: rows[1] });
+  });
+
+  it("exact source path wins when no granola id matches", () => {
+    const rows = [
+      R(1, "Merit/Meetings/2026-07-20 Sync.md", null),
+      R(2, "Sloan/Meetings/2026-07-20 Sync.md", null),
+    ];
+    const res = selectReconcileTarget(rows, {
+      path: "Sloan/Meetings/2026-07-20 Sync.md",
+      granolaId: "gran-unknown",
+    });
+    expect(res).toEqual({ ok: true, row: rows[1] });
+  });
+
+  it("legacy basename fallback succeeds only with exactly one match", () => {
+    const rows = [
+      R(1, "Merit/Meetings/2026-07-20 Sync.md", null),
+      R(2, "Merit/Meetings/2026-07-21 Other.md", null),
+    ];
+    const res = selectReconcileTarget(rows, {
+      path: "Staged/Path/2026-07-20 Sync.md", // different folder, same filename
+      granolaId: null,
+    });
+    expect(res).toEqual({ ok: true, row: rows[0] });
+  });
+
+  it("duplicate basenames under different paths fail as ambiguous", () => {
+    const rows = [
+      R(1, "Merit/Meetings/2026-07-20 Sync.md", null),
+      R(2, "Sloan/Meetings/2026-07-20 Sync.md", null),
+    ];
+    const res = selectReconcileTarget(rows, {
+      path: "Staged/2026-07-20 Sync.md",
+      granolaId: null,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/ambiguous/i);
+  });
+
+  it("no match at all fails rather than picking anything", () => {
+    const rows = [R(1, "Merit/Meetings/2026-07-19 Standup.md", "gran-Z")];
+    const res = selectReconcileTarget(rows, {
+      path: "Staged/2026-07-20 Sync.md",
+      granolaId: "gran-Q",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no stored meeting/i);
   });
 });

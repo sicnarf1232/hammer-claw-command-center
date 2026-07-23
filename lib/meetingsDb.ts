@@ -7,7 +7,12 @@ import {
   tasks as tasksT,
 } from "@/lib/db";
 import { cutoverActive } from "@/lib/dbSource";
-import { planMeetingTaskSync, reconcileBlocker, ARCHIVED_STATUS } from "@/lib/meetingTaskSync";
+import {
+  planMeetingTaskSync,
+  reconcileBlocker,
+  selectReconcileTarget,
+  ARCHIVED_STATUS,
+} from "@/lib/meetingTaskSync";
 import type { MeetingActionProposal } from "@/lib/proposals/types";
 import { parseMeetingNote } from "@/lib/vault/meetings";
 import { parseSeriesDoc, type Series } from "@/lib/vault/series";
@@ -333,10 +338,13 @@ async function syncMeetingTasks(args: {
 // Approval found the meeting ALREADY in the DB (Codex D-review blocker 2):
 // the stored content is preserved (never overwritten with the stale staged
 // copy), but Jordan's reviewed action links still land, reconciled against
-// the CURRENT stored content. Throws when reconciliation is impossible, so
-// the approval fails loudly instead of succeeding while dropping links.
+// the CURRENT stored content. The target row is chosen by AUTHORITATIVE
+// identity (selectReconcileTarget: granola id, then exact path, then a
+// single-match basename fallback); ambiguity or no match throws, so the
+// approval fails loudly instead of reconciling onto the wrong meeting or
+// succeeding while dropping links.
 export async function dbReconcileMeetingActions(
-  targetBasename: string,
+  proposal: { path: string; granolaId: string | null },
   structured: { actions: MeetingActionProposal[]; granolaId: string | null },
 ): Promise<{ path: string }> {
   const db = getDb();
@@ -344,28 +352,26 @@ export async function dbReconcileMeetingActions(
     .select({
       id: meetingsT.id,
       sourcePath: meetingsT.sourcePath,
+      granolaId: meetingsT.granolaId,
       bodyMarkdown: meetingsT.bodyMarkdown,
       accountId: meetingsT.accountId,
     })
     .from(meetingsT);
-  const want = targetBasename.toLowerCase();
-  const row = rows.find(
-    (r) =>
-      r.sourcePath &&
-      r.sourcePath.split("/").pop()!.replace(/\.md$/, "").toLowerCase() === want,
-  );
-  const blocker = reconcileBlocker(!!row, !!row?.bodyMarkdown);
+  const target = selectReconcileTarget(rows, proposal);
+  if (!target.ok) throw new Error(target.error);
+  const row = target.row;
+  const blocker = reconcileBlocker(true, !!row.bodyMarkdown);
   if (blocker) throw new Error(blocker);
-  const note = parseMeetingNote(row!.bodyMarkdown!, row!.sourcePath!);
+  const note = parseMeetingNote(row.bodyMarkdown!, row.sourcePath!);
   await syncMeetingTasks({
-    path: row!.sourcePath!,
+    path: row.sourcePath!,
     note,
-    meetingId: row!.id,
-    accountId: row!.accountId ?? null,
+    meetingId: row.id,
+    accountId: row.accountId ?? null,
     origin: "proposal",
     structured,
   });
-  return { path: row!.sourcePath! };
+  return { path: row.sourcePath! };
 }
 
 // Manual meeting note creation: insert-only. Returns created: false when a

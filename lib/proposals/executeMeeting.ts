@@ -90,10 +90,10 @@ async function executeMeetingFile(p: MeetingFilePayload): Promise<ExecuteOutcome
     } else if (plan === "reconcile-existing") {
       // Throws on failure: the proposal then lands in status 'error', never
       // a false success that silently dropped Jordan's confirmed links.
-      const { path } = await dbReconcileMeetingActions(base, {
-        actions: p.actions!,
-        granolaId: p.granolaId ?? null,
-      });
+      const { path } = await dbReconcileMeetingActions(
+        { path: p.path, granolaId: p.granolaId ?? null },
+        { actions: p.actions!, granolaId: p.granolaId ?? null },
+      );
       warnings.push(
         `Meeting already existed at ${path}; content preserved, reviewed action links reconciled.`,
       );
