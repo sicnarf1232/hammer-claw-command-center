@@ -59,16 +59,14 @@ describe("buildActionProposals: stable identity + audit + unresolved contract", 
     }
   });
 
-  it("carries separate owner and account review states; accounts always unassigned", () => {
-    const byText = new Map(actions.map((a) => [a.text, a]));
-    // A team/function owner is a state we already know, not a person guess.
-    expect(byText.get("Pull the affected lot travelers.")?.ownerReviewState).toBe("group");
-    // Jordan (me), Amy (customer), Scott (unknown): owners all left unresolved.
-    expect(byText.get("Send the updated Q3 forecast.")?.ownerReviewState).toBe("unassigned");
-    expect(byText.get("Confirm the revised GTIN list.")?.ownerReviewState).toBe("unassigned");
-    expect(byText.get("Review the complaint history.")?.ownerReviewState).toBe("unassigned");
-    // Account review is a separate axis, unresolved for every action in Slice B.
-    for (const a of actions) expect(a.accountReviewState).toBe("unassigned");
+  it("carries separate owner and account review states, all starting unassigned", () => {
+    // The builder no longer infers `group` (Slice C: classifyOwner's "team"
+    // means an internal PERSON; true team/function detection lives in the
+    // deterministic resolver, which runs right after the build in the pull).
+    for (const a of actions) {
+      expect(a.ownerReviewState).toBe("unassigned");
+      expect(a.accountReviewState).toBe("unassigned");
+    }
   });
 
   it("defaults a missing ownerClass to unknown/unassigned rather than guessing", () => {

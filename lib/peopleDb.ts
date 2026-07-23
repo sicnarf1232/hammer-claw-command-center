@@ -153,6 +153,44 @@ export async function dbSetPersonName(
   return { id: inserted.id };
 }
 
+// People with ids/aliases/emails for the deterministic meeting-action owner
+// resolver (Slice C, lib/meetingActionResolve.ts). Loaded once per pull.
+// Unknown-classification rows are included: the resolver treats candidates as
+// review material, and an unknown person can still be the right owner.
+export interface ResolvePersonRow {
+  id: number;
+  fullName: string;
+  classification: string;
+  accountId: number | null;
+  email: string | null;
+  aliases: string[];
+  isSelf: boolean;
+}
+
+export async function listPeopleForResolve(): Promise<ResolvePersonRow[]> {
+  if (!(await cutoverActive())) return [];
+  const db = getDb();
+  const [rows, aliasRows] = await Promise.all([
+    db.select().from(peopleT),
+    db.select().from(aliasesT),
+  ]);
+  const aliasesByPerson = new Map<number, string[]>();
+  for (const a of aliasRows) {
+    const list = aliasesByPerson.get(a.personId) ?? [];
+    list.push(a.alias);
+    aliasesByPerson.set(a.personId, list);
+  }
+  return rows.map((p) => ({
+    id: p.id,
+    fullName: p.fullName,
+    classification: p.classification,
+    accountId: p.accountId ?? null,
+    email: p.email ?? null,
+    aliases: aliasesByPerson.get(p.id) ?? [],
+    isSelf: p.isSelf ?? false,
+  }));
+}
+
 export interface ReviewPerson {
   id: number;
   fullName: string;

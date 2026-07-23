@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import MeetingActionReview, {
+  type ReviewActionView,
+  type ReviewPersonOption,
+} from "./MeetingActionReview";
 
 export interface QueueProposal {
   id: number;
@@ -14,6 +18,12 @@ export interface QueueProposal {
   path: string | null;
   content: string | null;
   contactsToAdd: { accountName: string; names: string[] } | null;
+  // Structured action links to review (Slice C); [] for legacy payloads.
+  actions: ReviewActionView[];
+  // Meeting primary account and the accounts the meeting is ABOUT, reviewed as
+  // separate concepts (an internal meeting can concern a customer).
+  account: string | null;
+  relatedAccounts: string[];
 }
 
 interface Outcome {
@@ -26,7 +36,13 @@ interface Outcome {
 // updates). Nothing reaches the vault until approved here. Series updates are
 // grouped under their meeting; rejecting a meeting also rejects its pending
 // series update.
-export default function ProposalQueue({ proposals }: { proposals: QueueProposal[] }) {
+export default function ProposalQueue({
+  proposals,
+  people,
+}: {
+  proposals: QueueProposal[];
+  people: ReviewPersonOption[];
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -99,10 +115,10 @@ export default function ProposalQueue({ proposals }: { proposals: QueueProposal[
       <ul className="space-y-3">
         {[...parents, ...orphanChildren].map((p) => (
           <li key={p.id} className="rounded-lg border border-border p-3">
-            <ProposalCard p={p} busy={busy} decide={decide} />
+            <ProposalCard p={p} busy={busy} decide={decide} people={people} />
             {childrenOf(p.id).map((c) => (
               <div key={c.id} className="mt-2 border-t border-border pt-2 pl-3">
-                <ProposalCard p={c} busy={busy} decide={decide} />
+                <ProposalCard p={c} busy={busy} decide={decide} people={people} />
               </div>
             ))}
           </li>
@@ -116,10 +132,12 @@ function ProposalCard({
   p,
   busy,
   decide,
+  people,
 }: {
   p: QueueProposal;
   busy: boolean;
   decide: (ids: number[], action: "approve" | "reject") => void;
+  people: ReviewPersonOption[];
 }) {
   const router = useRouter();
   const isMeeting = p.kind === "meeting-file";
@@ -205,6 +223,28 @@ function ProposalCard({
           </button>
         </div>
       </div>
+
+      {/* Primary vs related accounts, reviewed as separate concepts: an
+          internal meeting can be ABOUT a customer without becoming a customer
+          meeting. Display-only here; the note's 🔗/📎 lines stay editable. */}
+      {isMeeting && (p.account || p.relatedAccounts.length > 0) ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-2xs text-muted">
+          <span>
+            Account:{" "}
+            <span className="font-medium text-fg/85">{p.account ?? "Internal"}</span>
+          </span>
+          {p.relatedAccounts.length ? (
+            <span>
+              About: <span className="text-fg/85">{p.relatedAccounts.join(", ")}</span>
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Structured action-owner review (Slice C). */}
+      {isMeeting ? (
+        <MeetingActionReview proposalId={p.id} actions={p.actions} people={people} />
+      ) : null}
 
       {/* Contact assignments Jordan can proof and correct (add a missing last
           name, drop someone who was actually internal) before approval,

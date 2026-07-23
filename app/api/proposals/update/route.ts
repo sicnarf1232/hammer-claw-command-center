@@ -25,12 +25,33 @@ export async function POST(req: NextRequest) {
   const contactNames = Array.isArray(body?.contactNames)
     ? body.contactNames.map((n: unknown) => String(n))
     : undefined;
-  if (content === undefined && contactNames === undefined) {
+  // Structured action review decisions (Slice C). Validated to the known patch
+  // shape; unknown states or malformed entries are dropped rather than stored.
+  const VALID_STATES = new Set(["assigned", "unassigned", "group", "rejected", "suggested"]);
+  const actionReviews = Array.isArray(body?.actionReviews)
+    ? (body.actionReviews as unknown[])
+        .filter(
+          (r): r is Record<string, unknown> =>
+            !!r &&
+            typeof r === "object" &&
+            typeof (r as Record<string, unknown>).actionId === "string" &&
+            VALID_STATES.has(String((r as Record<string, unknown>).state)),
+        )
+        .map((r) => ({
+          actionId: String(r.actionId),
+          state: String(r.state) as "assigned" | "unassigned" | "group" | "rejected" | "suggested",
+          personId:
+            typeof r.personId === "number" ? r.personId : r.personId === null ? null : undefined,
+          text: typeof r.text === "string" ? r.text : undefined,
+          ownerText: typeof r.ownerText === "string" ? r.ownerText : undefined,
+        }))
+    : undefined;
+  if (content === undefined && contactNames === undefined && !actionReviews?.length) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
   try {
-    const updated = await updateMeetingProposal(id, { content, contactNames });
+    const updated = await updateMeetingProposal(id, { content, contactNames, actionReviews });
     if (!updated) {
       return NextResponse.json(
         { error: "Proposal not found, already decided, or not an editable meeting file." },

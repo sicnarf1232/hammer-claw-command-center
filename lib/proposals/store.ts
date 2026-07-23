@@ -3,7 +3,13 @@ import { getDb, dbConfigured } from "@/lib/db";
 import { aiProposals } from "@/lib/db/schema";
 import { ensureProposalsSchema } from "./schema";
 import { stageAction, stableStringify } from "./build";
-import type { ProposalKind, ProposalRow, ProposalStatus } from "./types";
+import { applyActionReviews, type ActionReviewPatch } from "./review";
+import type {
+  MeetingActionProposal,
+  ProposalKind,
+  ProposalRow,
+  ProposalStatus,
+} from "./types";
 
 // Pending proposals older than this are lazily marked expired on list. Stale
 // staged meetings are cheap to re-create with another pull.
@@ -167,6 +173,10 @@ export async function getProposal(id: number): Promise<ProposalRow | null> {
 export interface MeetingProposalEdit {
   content?: string;
   contactNames?: string[]; // replaces contactsToAdd.names (empty clears it)
+  // Structured action review decisions (Slice C): applied per action id onto
+  // payload.actions via the pure applyActionReviews. Original suggestions are
+  // preserved; only review state/confirmation move.
+  actionReviews?: ActionReviewPatch[];
 }
 
 export async function updateMeetingProposal(
@@ -192,6 +202,14 @@ export async function updateMeetingProposal(
     // existing contactsToAdd there is nothing to attach names to, so a name
     // edit is a no-op in that case.
     payload.contactsToAdd = existing ? { ...existing, names } : null;
+  }
+  if (Array.isArray(edit.actionReviews) && edit.actionReviews.length) {
+    const actions = (payload.actions ?? null) as MeetingActionProposal[] | null;
+    // Legacy payloads (staged before Slice B) carry no structured actions;
+    // there is nothing to review on them.
+    if (actions) {
+      payload.actions = applyActionReviews(actions, edit.actionReviews, "jordan");
+    }
   }
 
   const [updated] = await getDb()
