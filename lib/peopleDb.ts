@@ -153,6 +153,78 @@ export async function dbSetPersonName(
   return { id: inserted.id };
 }
 
+// People with ids/aliases/emails for the deterministic meeting-action owner
+// resolver (Slice C, lib/meetingActionResolve.ts). Loaded once per pull.
+// Unknown-classification rows are included: the resolver treats candidates as
+// review material, and an unknown person can still be the right owner.
+export interface ResolvePersonRow {
+  id: number;
+  fullName: string;
+  classification: string;
+  accountId: number | null;
+  email: string | null;
+  aliases: string[];
+  isSelf: boolean;
+}
+
+// Pure mapper: ACTIVE people only. A superseded identity (superseded_by set)
+// was merged into another person; it must never create false ambiguity, appear
+// as a candidate, or be selectable in the review dropdown — the linking rules
+// key on "only one ACTIVE person matches". Its aliases drop with it (they
+// belong to the merge target after a proper Slice E merge).
+export function activeResolvePeople(
+  peopleRows: Array<{
+    id: number;
+    fullName: string;
+    classification: string;
+    accountId: number | null;
+    email: string | null;
+    isSelf: boolean | null;
+    supersededBy: number | null;
+  }>,
+  aliasRows: Array<{ personId: number; alias: string }>,
+): ResolvePersonRow[] {
+  const active = peopleRows.filter((p) => p.supersededBy == null);
+  const activeIds = new Set(active.map((p) => p.id));
+  const aliasesByPerson = new Map<number, string[]>();
+  for (const a of aliasRows) {
+    if (!activeIds.has(a.personId)) continue;
+    const list = aliasesByPerson.get(a.personId) ?? [];
+    list.push(a.alias);
+    aliasesByPerson.set(a.personId, list);
+  }
+  return active.map((p) => ({
+    id: p.id,
+    fullName: p.fullName,
+    classification: p.classification,
+    accountId: p.accountId ?? null,
+    email: p.email ?? null,
+    aliases: aliasesByPerson.get(p.id) ?? [],
+    isSelf: p.isSelf ?? false,
+  }));
+}
+
+export async function listPeopleForResolve(): Promise<ResolvePersonRow[]> {
+  if (!(await cutoverActive())) return [];
+  const db = getDb();
+  const [rows, aliasRows] = await Promise.all([
+    db.select().from(peopleT),
+    db.select().from(aliasesT),
+  ]);
+  return activeResolvePeople(rows, aliasRows);
+}
+
+// Active person ids for server-side review validation: a confirmed owner must
+// exist and must not be a superseded identity.
+export async function activePersonIdSet(ids: number[]): Promise<Set<number>> {
+  if (!ids.length || !(await cutoverActive())) return new Set();
+  const rows = await getDb()
+    .select({ id: peopleT.id })
+    .from(peopleT)
+    .where(and(sql`${peopleT.id} = any(${ids})`, sql`${peopleT.supersededBy} is null`));
+  return new Set(rows.map((r) => r.id));
+}
+
 export interface ReviewPerson {
   id: number;
   fullName: string;

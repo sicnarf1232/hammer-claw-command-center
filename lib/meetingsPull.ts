@@ -32,6 +32,9 @@ import {
   triagedFromTemplate,
 } from "@/lib/noteTemplate";
 import { meetingActionContract } from "@/lib/meetingActionContract";
+import { resolveActionOwners } from "@/lib/meetingActionResolve";
+import { listPeopleForResolve } from "@/lib/peopleDb";
+import { parseMeetingNote } from "@/lib/vault/meetings";
 import {
   meetingBasename,
   meetingFolder,
@@ -139,12 +142,16 @@ export async function stageGranolaMeetings(opts?: {
   // 3) Context for triage + dedup, loaded once. Roster/accounts/series are
   // DB-first accessors post-cutover; basename dedup asks the DB when seeded,
   // else scans the vault file list.
-  const [roster, accounts, dbBasenames, seriesFromAccessor] = await Promise.all([
-    getRoster().catch(() => new Map() as Roster),
-    listAccounts().catch(() => []),
-    existingMeetingBasenamesFromDb().catch(() => null),
-    getSeriesList().catch(() => [] as Series[]),
-  ]);
+  const [roster, accounts, dbBasenames, seriesFromAccessor, resolvePeople] =
+    await Promise.all([
+      getRoster().catch(() => new Map() as Roster),
+      listAccounts().catch(() => []),
+      existingMeetingBasenamesFromDb().catch(() => null),
+      getSeriesList().catch(() => [] as Series[]),
+      // People with ids for the deterministic owner resolver (Slice C). An
+      // empty list just means every owner stays unresolved for review.
+      listPeopleForResolve().catch(() => []),
+    ]);
   const knownAccounts = accounts.map((a) => a.name);
   let existingBasenames: Set<string>;
   if (dbBasenames) {
@@ -324,12 +331,23 @@ export async function stageGranolaMeetings(opts?: {
         opts?.refreshPending && prior?.status === "pending"
           ? (prior.payload as MeetingFilePayload).actions ?? null
           : null;
-      const { contractVersion, actions } = meetingActionContract(
+      const { contractVersion, actions: builtActions } = meetingActionContract(
         note.id,
         triaged.actionItems,
         triaged.modelUsed,
         priorActions,
       );
+      // Deterministic owner resolution (Slice C): suggest/flag candidates per
+      // the linking rules. Confirmed (`assigned`) actions carried through a
+      // refresh are never re-resolved.
+      const actions = resolveActionOwners(builtActions, {
+        people: resolvePeople,
+        attendees: plainAttendees,
+      });
+      // Accounts the meeting is ABOUT (📎 marker), for separate review of
+      // primary vs related accounts. Parsed from the rendered note so both
+      // extraction paths produce it.
+      const relatedAccounts = parseMeetingNote(content, path).relatedAccounts;
 
       const payload: MeetingFilePayload = {
         granolaId: note.id,
@@ -346,6 +364,7 @@ export async function stageGranolaMeetings(opts?: {
         seriesName: matched?.name ?? null,
         contractVersion,
         actions,
+        relatedAccounts,
       };
       const res = await stageProposal({
         kind: "meeting-file",

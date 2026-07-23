@@ -24,6 +24,7 @@ import SetupNotice from "@/components/SetupNotice";
 import PullFromGranola from "@/components/PullFromGranola";
 import ProposalQueue, { type QueueProposal } from "@/components/ProposalQueue";
 import { listProposals } from "@/lib/proposals/store";
+import { listPeopleForResolve } from "@/lib/peopleDb";
 import type { MeetingFilePayload, SeriesUpdatePayload } from "@/lib/proposals/types";
 import MeetingsHub from "@/components/MeetingsHub";
 import { granolaConfigured } from "@/lib/granola";
@@ -95,6 +96,13 @@ export default async function MeetingsPage({
   // AI proposals awaiting review (Granola filings + series updates). The queue
   // is the only path from staged AI output to a vault write.
   const pendingProposals = await listProposals("pending").catch(() => []);
+  // People options for the structured action-owner review (Slice C). Loaded
+  // only when a meeting proposal is actually pending.
+  const reviewPeople = pendingProposals.some((p) => p.kind === "meeting-file")
+    ? (await listPeopleForResolve().catch(() => []))
+        .map((p) => ({ id: p.id, name: p.fullName }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
   const queueItems: QueueProposal[] = pendingProposals.map((p) => {
     const isMeeting = p.kind === "meeting-file";
     const mp = isMeeting ? (p.payload as MeetingFilePayload) : null;
@@ -111,6 +119,19 @@ export default async function MeetingsPage({
       contactsToAdd: mp?.contactsToAdd
         ? { accountName: mp.contactsToAdd.accountName, names: mp.contactsToAdd.names }
         : null,
+      actions: (mp?.actions ?? []).map((a) => ({
+        actionId: a.actionId,
+        text: a.text,
+        ownerText: a.ownerText,
+        ownerReviewState: a.ownerReviewState,
+        candidatePersonIds: a.candidatePersonIds ?? [],
+        reasons: a.reasons ?? [],
+        confidence: a.confidence,
+        isJordans: a.isJordans,
+        confirmedPersonId: a.confirmedPersonId ?? null,
+      })),
+      account: mp?.account ?? null,
+      relatedAccounts: mp?.relatedAccounts ?? [],
     };
   });
 
@@ -121,7 +142,7 @@ export default async function MeetingsPage({
           <PullFromGranola />
         </div>
       )}
-      <ProposalQueue proposals={queueItems} />
+      <ProposalQueue proposals={queueItems} people={reviewPeople} />
       {error ? (
         <div className="card max-w-2xl border-danger/30 p-5 text-sm text-danger">
           {error}

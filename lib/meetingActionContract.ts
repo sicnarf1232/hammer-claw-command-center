@@ -19,11 +19,12 @@ import {
 // Account review is always `unassigned` in Slice B. This keeps uncertain matches
 // unresolved for later human review.
 
-// The owner review state Slice B is allowed to emit: a team/function owner is a
-// `group`; everything else is left `unassigned` until the resolver runs.
-function initialOwnerReviewState(ownerClass: OwnerClass): ActionReviewState {
-  return ownerClass === "team" ? "group" : "unassigned";
-}
+// Every action starts `unassigned`; the deterministic resolver (Slice C,
+// lib/meetingActionResolve.ts) decides suggested/ambiguous/group afterward.
+// (Slice B mapped ownerClass "team" to `group` here, but classifyOwner's
+// "team" means a Merit-internal PERSON, not a function; the resolver detects
+// true team/function owners from the owner text instead.)
+const INITIAL_OWNER_STATE: ActionReviewState = "unassigned";
 
 // A stable, action-level reference to the ORIGINAL extraction: the transcript
 // (granola id) plus the original-text fingerprint. Immutable audit; it does not
@@ -58,7 +59,7 @@ function freshProposal(
     candidateAccountIds: [],
     reasons: [],
     confidence: "none",
-    ownerReviewState: initialOwnerReviewState(ownerClass),
+    ownerReviewState: INITIAL_OWNER_STATE,
     accountReviewState: "unassigned",
     isJordans: item.isJordans,
     due: item.due ?? null,
@@ -110,9 +111,7 @@ function carryPrior(
     candidateAccountIds: prior.candidateAccountIds ?? [],
     reasons: ownerConfirmed ? prior.reasons : [],
     confidence: ownerConfirmed ? prior.confidence : "none",
-    ownerReviewState: ownerConfirmed
-      ? prior.ownerReviewState
-      : initialOwnerReviewState(ownerClass),
+    ownerReviewState: ownerConfirmed ? prior.ownerReviewState : INITIAL_OWNER_STATE,
     accountReviewState:
       prior.accountReviewState === "assigned" ? prior.accountReviewState : "unassigned",
     isJordans: item.isJordans,

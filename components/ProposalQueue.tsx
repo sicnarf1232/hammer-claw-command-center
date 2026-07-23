@@ -1,7 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import MeetingActionReview, {
+  type ReviewActionView,
+  type ReviewPersonOption,
+} from "./MeetingActionReview";
+import {
+  approvalGate,
+  combinePanelStates,
+  gateForProposals,
+  type ReviewPanelState,
+} from "@/lib/reviewGate";
 
 export interface QueueProposal {
   id: number;
@@ -14,6 +24,12 @@ export interface QueueProposal {
   path: string | null;
   content: string | null;
   contactsToAdd: { accountName: string; names: string[] } | null;
+  // Structured action links to review (Slice C); [] for legacy payloads.
+  actions: ReviewActionView[];
+  // Meeting primary account and the accounts the meeting is ABOUT, reviewed as
+  // separate concepts (an internal meeting can concern a customer).
+  account: string | null;
+  relatedAccounts: string[];
 }
 
 interface Outcome {
@@ -26,12 +42,33 @@ interface Outcome {
 // updates). Nothing reaches the vault until approved here. Series updates are
 // grouped under their meeting; rejecting a meeting also rejects its pending
 // series update.
-export default function ProposalQueue({ proposals }: { proposals: QueueProposal[] }) {
+export default function ProposalQueue({
+  proposals,
+  people,
+}: {
+  proposals: QueueProposal[];
+  people: ReviewPersonOption[];
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Unsaved/saving edit state per proposal id (action reviews, note content,
+  // and contact-name edits combined): Approve (per card and Approve all) is
+  // disabled while anything is dirty or mid-save, so selections cannot be
+  // silently lost by approving first. The queue gate is derived only from the
+  // proposals currently rendered, so a rejected/removed proposal's stale
+  // entry can never keep blocking Approve all.
+  const [panelStates, setPanelStates] = useState<Record<number, ReviewPanelState>>({});
 
   if (!proposals.length) return null;
+
+  const setPanelState = (id: number, state: ReviewPanelState) =>
+    setPanelStates((prev) => {
+      const cur = prev[id];
+      if (cur && cur.dirty === state.dirty && cur.saving === state.saving) return prev;
+      return { ...prev, [id]: state };
+    });
+  const allGate = gateForProposals(panelStates, proposals.map((p) => p.id));
 
   const parents = proposals.filter((p) => p.kind === "meeting-file");
   const orphanChildren = proposals.filter(
@@ -80,10 +117,13 @@ export default function ProposalQueue({ proposals }: { proposals: QueueProposal[
             {proposals.length}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {!allGate.allowed ? (
+            <span className="text-2xs text-due">{allGate.reason}</span>
+          ) : null}
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !allGate.allowed}
             onClick={() => decide(allIds, "approve")}
             className="btn btn-primary text-xs disabled:opacity-60"
           >
@@ -99,10 +139,22 @@ export default function ProposalQueue({ proposals }: { proposals: QueueProposal[
       <ul className="space-y-3">
         {[...parents, ...orphanChildren].map((p) => (
           <li key={p.id} className="rounded-lg border border-border p-3">
-            <ProposalCard p={p} busy={busy} decide={decide} />
+            <ProposalCard
+              p={p}
+              busy={busy}
+              decide={decide}
+              people={people}
+              onPanelState={(s) => setPanelState(p.id, s)}
+            />
             {childrenOf(p.id).map((c) => (
               <div key={c.id} className="mt-2 border-t border-border pt-2 pl-3">
-                <ProposalCard p={c} busy={busy} decide={decide} />
+                <ProposalCard
+                  p={c}
+                  busy={busy}
+                  decide={decide}
+                  people={people}
+                  onPanelState={(s) => setPanelState(c.id, s)}
+                />
               </div>
             ))}
           </li>
@@ -116,10 +168,14 @@ function ProposalCard({
   p,
   busy,
   decide,
+  people,
+  onPanelState,
 }: {
   p: QueueProposal;
   busy: boolean;
   decide: (ids: number[], action: "approve" | "reject") => void;
+  people: ReviewPersonOption[];
+  onPanelState: (state: ReviewPanelState) => void;
 }) {
   const router = useRouter();
   const isMeeting = p.kind === "meeting-file";
@@ -135,6 +191,13 @@ function ProposalCard({
   const [saving, setSaving] = useState(false);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Structured review panel state for THIS card. Combined with the note/
+  // contact edit state below, it gates the card's Approve and is reported
+  // upward for the queue-level Approve all gate.
+  const [reviewPanel, setReviewPanel] = useState<ReviewPanelState>({
+    dirty: false,
+    saving: false,
+  });
 
   const contentDirty = isMeeting && content !== (p.content ?? "");
   const namesDirty =
@@ -142,6 +205,15 @@ function ProposalCard({
     !!p.contactsToAdd &&
     JSON.stringify(names) !== JSON.stringify(p.contactsToAdd.names);
   const dirty = contentDirty || namesDirty;
+
+  // The full unsaved-edit picture for this card: note/contact edits AND the
+  // structured action review panel. One gate, one save-first explanation.
+  const combined = combinePanelStates([reviewPanel, { dirty, saving }]);
+  const gate = approvalGate([combined]);
+  useEffect(() => {
+    onPanelState(combined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combined.dirty, combined.saving]);
 
   async function save() {
     setSaving(true);
@@ -186,12 +258,16 @@ function ProposalCard({
             ) : null}
           </div>
         </div>
-        <div className="flex shrink-0 gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!gate.allowed ? (
+            <span className="text-2xs text-due">{gate.reason}</span>
+          ) : null}
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !gate.allowed}
             onClick={() => decide([p.id], "approve")}
             className="btn btn-primary text-xs disabled:opacity-60"
+            title={gate.reason ?? undefined}
           >
             Approve
           </button>
@@ -205,6 +281,33 @@ function ProposalCard({
           </button>
         </div>
       </div>
+
+      {/* Primary vs related accounts, reviewed as separate concepts: an
+          internal meeting can be ABOUT a customer without becoming a customer
+          meeting. Display-only here; the note's 🔗/📎 lines stay editable. */}
+      {isMeeting && (p.account || p.relatedAccounts.length > 0) ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-2xs text-muted">
+          <span>
+            Account:{" "}
+            <span className="font-medium text-fg/85">{p.account ?? "Internal"}</span>
+          </span>
+          {p.relatedAccounts.length ? (
+            <span>
+              About: <span className="text-fg/85">{p.relatedAccounts.join(", ")}</span>
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Structured action-owner review (Slice C). */}
+      {isMeeting ? (
+        <MeetingActionReview
+          proposalId={p.id}
+          actions={p.actions}
+          people={people}
+          onPanelState={setReviewPanel}
+        />
+      ) : null}
 
       {/* Contact assignments Jordan can proof and correct (add a missing last
           name, drop someone who was actually internal) before approval,

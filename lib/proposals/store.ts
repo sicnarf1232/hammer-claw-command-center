@@ -3,7 +3,20 @@ import { getDb, dbConfigured } from "@/lib/db";
 import { aiProposals } from "@/lib/db/schema";
 import { ensureProposalsSchema } from "./schema";
 import { stageAction, stableStringify } from "./build";
-import type { ProposalKind, ProposalRow, ProposalStatus } from "./types";
+import {
+  applyActionReviews,
+  collectAssignedPersonIds,
+  missingPersonIds,
+  InvalidActionReviewError,
+  type ActionReviewPatch,
+} from "./review";
+import { activePersonIdSet } from "@/lib/peopleDb";
+import type {
+  MeetingActionProposal,
+  ProposalKind,
+  ProposalRow,
+  ProposalStatus,
+} from "./types";
 
 // Pending proposals older than this are lazily marked expired on list. Stale
 // staged meetings are cheap to re-create with another pull.
@@ -167,6 +180,10 @@ export async function getProposal(id: number): Promise<ProposalRow | null> {
 export interface MeetingProposalEdit {
   content?: string;
   contactNames?: string[]; // replaces contactsToAdd.names (empty clears it)
+  // Structured action review decisions (Slice C): applied per action id onto
+  // payload.actions via the pure applyActionReviews. Original suggestions are
+  // preserved; only review state/confirmation move.
+  actionReviews?: ActionReviewPatch[];
 }
 
 export async function updateMeetingProposal(
@@ -192,6 +209,28 @@ export async function updateMeetingProposal(
     // existing contactsToAdd there is nothing to attach names to, so a name
     // edit is a no-op in that case.
     payload.contactsToAdd = existing ? { ...existing, names } : null;
+  }
+  if (Array.isArray(edit.actionReviews) && edit.actionReviews.length) {
+    const actions = (payload.actions ?? null) as MeetingActionProposal[] | null;
+    // Legacy payloads (staged before Slice B) carry no structured actions;
+    // there is nothing to review on them.
+    if (actions) {
+      // Server-side validation: assigned person ids must be positive integers
+      // AND existing, active (not superseded) people. A crafted or stale
+      // client id rejects the whole update; nothing is partially applied.
+      const collected = collectAssignedPersonIds(edit.actionReviews);
+      if (!collected.ok) throw new InvalidActionReviewError(collected.error);
+      if (collected.ids.length) {
+        const active = await activePersonIdSet(collected.ids);
+        const missing = missingPersonIds(collected.ids, active);
+        if (missing.length) {
+          throw new InvalidActionReviewError(
+            `Person id(s) ${missing.join(", ")} do not exist or are superseded identities.`,
+          );
+        }
+      }
+      payload.actions = applyActionReviews(actions, edit.actionReviews, "jordan");
+    }
   }
 
   const [updated] = await getDb()

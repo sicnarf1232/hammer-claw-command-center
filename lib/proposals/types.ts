@@ -52,6 +52,13 @@ export interface MeetingActionProposal {
   isJordans: boolean; // true => a real task in Jordan's views
   due: string | null; // YYYY-MM-DD if concrete
   dueText: string | null; // raw due phrase when not concrete
+  // ---- review outcome (Slice C), all optional for legacy payloads ----
+  // Set when Jordan confirms an owner in the review UI. Distinct from the
+  // candidate list so "changing a suggestion preserves the original suggestion
+  // and its explanation" (linking-rules, Human corrections).
+  confirmedPersonId?: number | null;
+  reviewedBy?: string; // who confirmed/changed it ("jordan")
+  reviewedAt?: string; // ISO timestamp of the review action
 }
 
 // Current version of the structured meeting-action contract. Bumped when the
