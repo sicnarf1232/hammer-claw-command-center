@@ -7,6 +7,13 @@ import {
   tasks as tasksT,
 } from "@/lib/db";
 import { cutoverActive } from "@/lib/dbSource";
+import {
+  planMeetingTaskSync,
+  reconcileBlocker,
+  selectReconcileTarget,
+  ARCHIVED_STATUS,
+} from "@/lib/meetingTaskSync";
+import type { MeetingActionProposal } from "@/lib/proposals/types";
 import { parseMeetingNote } from "@/lib/vault/meetings";
 import { parseSeriesDoc, type Series } from "@/lib/vault/series";
 import { indexRowFromPath } from "@/lib/meetingFormat";
@@ -172,10 +179,18 @@ async function accountIdByName(name: string | null): Promise<number | null> {
 }
 
 // Re-derive the structured columns from (possibly edited) content and save.
+// `structured` rides along on the proposal-approval path (Slice D): the
+// reviewed action contract plus the granola id used as the identity namespace.
+// Without it (editor/manual paths) identity still holds: existing rows' own
+// action ids are carried by fingerprint, so reorders no longer corrupt tasks.
 export async function dbSaveMeetingContent(
   path: string,
   content: string,
   origin: "app" | "proposal" = "app",
+  structured?: {
+    actions: MeetingActionProposal[] | null;
+    granolaId: string | null;
+  },
 ): Promise<{ commitSha: string; path: string }> {
   const db = getDb();
   const note = parseMeetingNote(content, path);
@@ -204,9 +219,10 @@ export async function dbSaveMeetingContent(
     await db.insert(meetingsT).values({ ...values, sourcePath: path });
   }
 
-  // Keep this meeting's task rows in step with its (dual-capture) action
-  // items: update matched source lines, insert new ones. Never deletes (task
-  // ids are referenced by task_meta / task_emails).
+  // Keep this meeting's task rows in step with its action items, reconciled
+  // by STABLE ACTION ID (Slice D), not source line. The pure planner decides
+  // updates/inserts/archives; removed actions are archived (status only),
+  // never deleted (task ids are referenced by task_meta / task_emails).
   const meetingId =
     existing?.id ??
     (await db
@@ -216,39 +232,146 @@ export async function dbSaveMeetingContent(
       .limit(1)
       .then((r) => r[0]?.id));
   if (meetingId != null) {
-    const taskRows = await db
-      .select({ id: tasksT.id, sourceLine: tasksT.sourceLine })
-      .from(tasksT)
-      .where(eq(tasksT.sourcePath, path));
-    const byLine = new Map(taskRows.map((t) => [t.sourceLine, t.id]));
-    for (const ai of note.actionItems) {
-      const base = {
-        text: ai.text,
-        done: ai.done,
-        due: ai.due ?? null,
-        isJordans: ai.isJordans,
-        meetingId,
-        accountId,
-        updatedAt: new Date(),
-      };
-      const hit = byLine.get(ai.sourceLine);
-      if (hit != null) {
-        await db.update(tasksT).set(base).where(eq(tasksT.id, hit));
-      } else {
-        await db.insert(tasksT).values({
-          ...base,
-          sourcePath: path,
-          sourceLine: ai.sourceLine,
-          priority: ai.task?.priority ?? null,
-          customer: note.customer?.display ?? null,
-          origin,
-          confirmedBy: "jordan",
-        });
-      }
-    }
+    await syncMeetingTasks({
+      path,
+      note,
+      meetingId,
+      accountId,
+      origin,
+      structured: structured ?? null,
+    });
   }
 
   return { commitSha: "", path };
+}
+
+// Shared task-sync applier: plans against the given note content and applies
+// updates/inserts/archives/reactivations. Used by dbSaveMeetingContent (new or
+// edited content) and by dbReconcileMeetingActions (existing content preserved,
+// reviewed links applied).
+async function syncMeetingTasks(args: {
+  path: string;
+  note: MeetingNote;
+  meetingId: number;
+  accountId: number | null;
+  origin: "app" | "proposal";
+  structured: { actions: MeetingActionProposal[] | null; granolaId: string | null } | null;
+}): Promise<void> {
+  const db = getDb();
+  const { path, note, meetingId, accountId, origin, structured } = args;
+  const taskRows = await db
+    .select({
+      id: tasksT.id,
+      actionId: tasksT.actionId,
+      sourceLine: tasksT.sourceLine,
+      text: tasksT.text,
+      status: tasksT.status,
+    })
+    .from(tasksT)
+    .where(eq(tasksT.sourcePath, path));
+
+  const plan = planMeetingTaskSync({
+    namespace: structured?.granolaId ?? note.granolaId ?? path,
+    contractActions: structured?.actions ?? null,
+    mdItems: note.actionItems.map((ai) => ({
+      text: ai.text,
+      owner: ai.owner ?? null,
+      done: ai.done,
+      due: ai.due ?? null,
+      isJordans: ai.isJordans,
+      sourceLine: ai.sourceLine,
+      priority: ai.task?.priority ?? null,
+    })),
+    existingRows: taskRows,
+  });
+
+  for (const u of plan.updates) {
+    await db
+      .update(tasksT)
+      .set({
+        text: u.text,
+        done: u.done,
+        due: u.due,
+        isJordans: u.isJordans,
+        meetingId,
+        accountId,
+        actionId: u.actionId,
+        sourceLine: u.sourceLine,
+        // undefined = preserve the existing owner link (manual links survive
+        // reprocessing); a number = confirmed link; null = explicit clear.
+        ...(u.ownerPersonId !== undefined ? { ownerPersonId: u.ownerPersonId } : {}),
+        // An archived row reclaimed by a live action returns to active views.
+        // Only reactivations touch status; normal rows keep their workflow
+        // status ("Waiting", ...) untouched.
+        ...(u.reactivate ? { status: null } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(tasksT.id, u.taskId));
+  }
+  for (const ins of plan.inserts) {
+    await db.insert(tasksT).values({
+      text: ins.text,
+      done: ins.done,
+      due: ins.due,
+      isJordans: ins.isJordans,
+      meetingId,
+      accountId,
+      actionId: ins.actionId,
+      sourcePath: path,
+      sourceLine: ins.sourceLine,
+      ownerPersonId: ins.ownerPersonId,
+      priority: ins.priority,
+      customer: note.customer?.display ?? null,
+      origin,
+      confirmedBy: "jordan",
+      updatedAt: new Date(),
+    });
+  }
+  if (plan.archiveTaskIds.length) {
+    await db
+      .update(tasksT)
+      .set({ status: ARCHIVED_STATUS, ...APP_EDIT, updatedAt: new Date() })
+      .where(inArray(tasksT.id, plan.archiveTaskIds));
+  }
+}
+
+// Approval found the meeting ALREADY in the DB (Codex D-review blocker 2):
+// the stored content is preserved (never overwritten with the stale staged
+// copy), but Jordan's reviewed action links still land, reconciled against
+// the CURRENT stored content. The target row is chosen by AUTHORITATIVE
+// identity (selectReconcileTarget: granola id, then exact path, then a
+// single-match basename fallback); ambiguity or no match throws, so the
+// approval fails loudly instead of reconciling onto the wrong meeting or
+// succeeding while dropping links.
+export async function dbReconcileMeetingActions(
+  proposal: { path: string; granolaId: string | null },
+  structured: { actions: MeetingActionProposal[]; granolaId: string | null },
+): Promise<{ path: string }> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: meetingsT.id,
+      sourcePath: meetingsT.sourcePath,
+      granolaId: meetingsT.granolaId,
+      bodyMarkdown: meetingsT.bodyMarkdown,
+      accountId: meetingsT.accountId,
+    })
+    .from(meetingsT);
+  const target = selectReconcileTarget(rows, proposal);
+  if (!target.ok) throw new Error(target.error);
+  const row = target.row;
+  const blocker = reconcileBlocker(true, !!row.bodyMarkdown);
+  if (blocker) throw new Error(blocker);
+  const note = parseMeetingNote(row.bodyMarkdown!, row.sourcePath!);
+  await syncMeetingTasks({
+    path: row.sourcePath!,
+    note,
+    meetingId: row.id,
+    accountId: row.accountId ?? null,
+    origin: "proposal",
+    structured,
+  });
+  return { path: row.sourcePath! };
 }
 
 // Manual meeting note creation: insert-only. Returns created: false when a
