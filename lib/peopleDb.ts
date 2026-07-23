@@ -1,4 +1,4 @@
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   getDb,
   accounts as accountsT,
@@ -214,14 +214,26 @@ export async function listPeopleForResolve(): Promise<ResolvePersonRow[]> {
   return activeResolvePeople(rows, aliasRows);
 }
 
+// Where-predicate for "these person ids, ACTIVE people only". Uses Drizzle's
+// inArray (rendered as `id IN ($1, $2, ...)`) instead of a raw `= any(${ids})`
+// binding: the neon HTTP driver does not pass a JS array as a Postgres array
+// param through the query builder, which failed in production with
+// "op ANY/ALL (array) requires array on right side". Extracted so the
+// generated SQL is testable without a database. Callers must guard ids.length
+// (Drizzle's inArray rejects an empty list).
+export function activePersonIdsPredicate(ids: number[]) {
+  return and(inArray(peopleT.id, ids), isNull(peopleT.supersededBy));
+}
+
 // Active person ids for server-side review validation: a confirmed owner must
-// exist and must not be a superseded identity.
+// exist and must not be a superseded identity. Validation semantics unchanged
+// by the hotfix; only the predicate rendering moved to inArray.
 export async function activePersonIdSet(ids: number[]): Promise<Set<number>> {
   if (!ids.length || !(await cutoverActive())) return new Set();
   const rows = await getDb()
     .select({ id: peopleT.id })
     .from(peopleT)
-    .where(and(sql`${peopleT.id} = any(${ids})`, sql`${peopleT.supersededBy} is null`));
+    .where(activePersonIdsPredicate(ids));
   return new Set(rows.map((r) => r.id));
 }
 
