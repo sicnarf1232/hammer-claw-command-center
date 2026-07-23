@@ -106,3 +106,87 @@ export function rowsAfterFirstSave(
 ): ExistingTaskRow[] {
   return actions.map((a, i) => ({ id: startId + i, sourceLine: a.sourceLine }));
 }
+
+// ---- Slice B: the target-state model, keyed by stable action id ----
+//
+// This is the reconciliation Slice D will adopt in the production writer. It is
+// ADDITIVE: the line-based model above and its Slice A characterization are
+// unchanged, and `dbSaveMeetingContent` is untouched in this slice. Keying on a
+// stable `actionId` (lib/meetingActionIdentity.ts) instead of `sourceLine` makes
+// reorder and edit-in-place non-events and turns a removed action into an
+// identifiable, archivable row instead of a stale one.
+
+export interface IdentifiedAction {
+  actionId: string; // stable id minted once at extraction, carried thereafter
+  text: string; // current (possibly reworded) wording
+}
+
+export interface IdentifiedTaskRow {
+  id: number;
+  actionId: string;
+}
+
+export interface ReconcileByIdResult {
+  // Existing rows whose action id still appears among the actions: updated in
+  // place. Reorder and edit-in-place both land here (identity is the id, not
+  // the line or the text).
+  updates: Array<{ id: number; actionId: string; text: string }>;
+  // Actions whose id has no existing row: genuinely new actions to insert.
+  inserts: IdentifiedAction[];
+  // Existing rows whose action id is gone from the actions. Unlike the
+  // line-based model these are precisely identified by id, so Slice D can
+  // archive/supersede them instead of leaving a stale live task.
+  removed: IdentifiedTaskRow[];
+}
+
+// Guard: a duplicate action id on either side is a data-integrity violation
+// (the tasks_action_id_ux partial unique index forbids it in the database, and
+// mintActionIdsForNote disambiguates duplicate text). Detect it loudly instead
+// of letting a Map silently keep the last row and drop the rest.
+function assertUniqueActionIds(ids: string[], where: string): void {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) dupes.add(id);
+    seen.add(id);
+  }
+  if (dupes.size) {
+    throw new Error(
+      `Duplicate action id(s) in ${where}: ${[...dupes].join(", ")}`,
+    );
+  }
+}
+
+export function reconcileActionsById(
+  actions: IdentifiedAction[],
+  existingRows: IdentifiedTaskRow[],
+): ReconcileByIdResult {
+  assertUniqueActionIds(existingRows.map((r) => r.actionId), "existing task rows");
+  assertUniqueActionIds(actions.map((a) => a.actionId), "incoming actions");
+  const byId = new Map(existingRows.map((r) => [r.actionId, r.id]));
+  const present = new Set<string>();
+
+  const updates: ReconcileByIdResult["updates"] = [];
+  const inserts: IdentifiedAction[] = [];
+  for (const action of actions) {
+    present.add(action.actionId);
+    const hit = byId.get(action.actionId);
+    if (hit != null) {
+      updates.push({ id: hit, actionId: action.actionId, text: action.text });
+    } else {
+      inserts.push(action);
+    }
+  }
+
+  const removed = existingRows.filter((r) => !present.has(r.actionId));
+  return { updates, inserts, removed };
+}
+
+// Modeling helper mirroring rowsAfterFirstSave, but keyed by stable id: the
+// state right after a first save is one row per action carrying its action id.
+export function idRowsAfterFirstSave(
+  actions: IdentifiedAction[],
+  startId = 1,
+): IdentifiedTaskRow[] {
+  return actions.map((a, i) => ({ id: startId + i, actionId: a.actionId }));
+}

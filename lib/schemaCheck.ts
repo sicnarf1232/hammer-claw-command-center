@@ -81,8 +81,11 @@ export const EXPECTED_SCHEMA: Record<string, string[]> = {
     "id", "meeting_id", "owner_person_id", "account_id", "text", "done",
     "due", "priority", "status", "is_jordans", "description", "notes",
     "workstream", "customer", "created_field", "scheduled", "thread",
-    "completed", "fields", "source_path", "source_line", "origin",
-    "confirmed_by", "superseded_by", "created_at", "updated_at",
+    "completed", "fields", "source_path", "source_line",
+    // Slice B: stable meeting-action identity (drizzle/0010). Expected live once
+    // the migration is applied; verify with scripts/verify-migration-0010.mts.
+    "action_id",
+    "origin", "confirmed_by", "superseded_by", "created_at", "updated_at",
   ],
 
   // lib/firehose/schema.ts

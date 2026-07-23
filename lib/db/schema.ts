@@ -9,6 +9,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // Postgres holds ONLY fast-changing state that should not live in git
 // (docs/01). The vault markdown remains the source of truth.
@@ -306,6 +307,11 @@ export const tasks = pgTable(
     fields: jsonb("fields").$type<Record<string, string>>(),
     sourcePath: text("source_path"),
     sourceLine: integer("source_line"),
+    // Stable, line-independent meeting-action identity (Slice B). Nullable:
+    // legacy rows and non-meeting tasks carry NULL. Populated by Slice D when
+    // the writer reconciles actions by id instead of source_line. Added via
+    // drizzle/0010_meeting_action_identity.sql (migration-only, no runtime DDL).
+    actionId: text("action_id"),
     origin: text("origin").notNull().default("seed"), // seed | app | proposal
     confirmedBy: text("confirmed_by"),
     supersededBy: integer("superseded_by"),
@@ -315,6 +321,11 @@ export const tasks = pgTable(
   (t) => ({
     doneIdx: index("tasks_done_idx").on(t.done),
     ownerIdx: index("tasks_owner_idx").on(t.ownerPersonId),
+    // One task per action id; partial so NULL (legacy / non-meeting tasks) stays
+    // valid and unconstrained. Mirrors drizzle/0010_meeting_action_identity.sql.
+    actionIdUx: uniqueIndex("tasks_action_id_ux")
+      .on(t.actionId)
+      .where(sql`${t.actionId} is not null`),
   }),
 );
 

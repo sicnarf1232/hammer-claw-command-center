@@ -3,8 +3,12 @@ import { parseMeetingNote } from "./vault/meetings";
 import {
   reconcileActionsByLine,
   rowsAfterFirstSave,
+  reconcileActionsById,
+  idRowsAfterFirstSave,
   type ReconcileAction,
+  type IdentifiedAction,
 } from "./meetingActionReconcile";
+import { mintActionIdsForNote } from "./meetingActionIdentity";
 import {
   NOTE_BASELINE,
   NOTE_REORDERED,
@@ -146,6 +150,102 @@ describe("reconcileActionsByLine: edge cases in the line-keyed match", () => {
     );
     expect(result.updates).toEqual([{ id: 2, sourceLine: 9, text: "only action" }]);
     expect(result.stranded).toEqual([{ id: 1, sourceLine: 9 }]);
+  });
+});
+
+// Slice B: the target-state reconcile keyed on the stable action id. Same three
+// scenarios the line-based model corrupts above (reorder, edit, removal), now
+// resolved. Identity is CARRIED on each action (minted once, then preserved
+// through review/edit), never recomputed from text or line, so these tests build
+// the second-pull action lists by keeping the baseline ids.
+describe("reconcileActionsById: stable identity survives reorder and edit", () => {
+  const GRANOLA = "granola-xyz";
+  const BASELINE_TEXT = [
+    "Send the updated Q3 forecast.",
+    "Confirm the revised GTIN list.",
+    "Chase the open CAPA with Quality.",
+  ];
+  // Mint ids once for the baseline; these ids are what every later pull carries.
+  const minted = mintActionIdsForNote(GRANOLA, BASELINE_TEXT);
+  const baseline: IdentifiedAction[] = BASELINE_TEXT.map((text, i) => ({
+    actionId: minted[i].actionId,
+    text,
+  }));
+  const rows = idRowsAfterFirstSave(baseline); // ids -> task rows 1,2,3
+
+  it("REORDER: all updates, no inserts, no removed, ids stable", () => {
+    const reordered: IdentifiedAction[] = [baseline[2], baseline[0], baseline[1]];
+    const result = reconcileActionsById(reordered, rows);
+    expect(result.inserts).toEqual([]);
+    expect(result.removed).toEqual([]);
+    // Each id still maps to its original task row and its original text, unlike
+    // the line-based model where task #1 was overwritten with the CAPA action.
+    const byId = new Map(result.updates.map((u) => [u.actionId, u]));
+    expect(byId.get(baseline[0].actionId)?.id).toBe(1);
+    expect(byId.get(baseline[0].actionId)?.text).toBe(
+      "Send the updated Q3 forecast.",
+    );
+    expect(byId.get(baseline[2].actionId)?.id).toBe(3);
+  });
+
+  it("EDIT-IN-PLACE: id is carried, new wording written, no insert or removal", () => {
+    const edited: IdentifiedAction[] = [
+      baseline[0],
+      { actionId: baseline[1].actionId, text: "Confirm the revised GTIN list by Friday." },
+      baseline[2],
+    ];
+    const result = reconcileActionsById(edited, rows);
+    expect(result.inserts).toEqual([]);
+    expect(result.removed).toEqual([]);
+    const gtin = result.updates.find((u) => u.actionId === baseline[1].actionId);
+    expect(gtin?.id).toBe(2);
+    expect(gtin?.text).toBe("Confirm the revised GTIN list by Friday.");
+  });
+
+  it("REMOVAL: the removed id is precisely identified (archivable), nothing strands blindly", () => {
+    const removedMiddle: IdentifiedAction[] = [baseline[0], baseline[2]];
+    const result = reconcileActionsById(removedMiddle, rows);
+    expect(result.inserts).toEqual([]);
+    // Exactly the deleted action's row surfaces, keyed by its stable id, so
+    // Slice D can archive/supersede it instead of leaving a stale live task.
+    expect(result.removed).toEqual([{ id: 2, actionId: baseline[1].actionId }]);
+    expect(result.updates.map((u) => u.id).sort()).toEqual([1, 3]);
+  });
+
+  it("DUPLICATE existing rows: throws instead of silently collapsing via a Map", () => {
+    const dupRows = [
+      { id: 1, actionId: "act_dup" },
+      { id: 2, actionId: "act_dup" },
+    ];
+    expect(() =>
+      reconcileActionsById([{ actionId: "act_dup", text: "x" }], dupRows),
+    ).toThrow(/duplicate action id/i);
+  });
+
+  it("DUPLICATE incoming actions: throws instead of dropping one", () => {
+    expect(() =>
+      reconcileActionsById(
+        [
+          { actionId: "act_dup", text: "a" },
+          { actionId: "act_dup", text: "b" },
+        ],
+        [],
+      ),
+    ).toThrow(/duplicate action id/i);
+  });
+
+  it("INSERT: a genuinely new action (new id) inserts without disturbing the rest", () => {
+    const added = mintActionIdsForNote(GRANOLA, ["Draft the CAPA closure memo."])[0];
+    const withNew: IdentifiedAction[] = [
+      ...baseline,
+      { actionId: added.actionId, text: "Draft the CAPA closure memo." },
+    ];
+    const result = reconcileActionsById(withNew, rows);
+    expect(result.removed).toEqual([]);
+    expect(result.updates.map((u) => u.id)).toEqual([1, 2, 3]);
+    expect(result.inserts).toEqual([
+      { actionId: added.actionId, text: "Draft the CAPA closure memo." },
+    ]);
   });
 });
 

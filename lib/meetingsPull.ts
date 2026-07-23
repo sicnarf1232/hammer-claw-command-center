@@ -31,6 +31,7 @@ import {
   parseTemplatedNote,
   triagedFromTemplate,
 } from "@/lib/noteTemplate";
+import { meetingActionContract } from "@/lib/meetingActionContract";
 import {
   meetingBasename,
   meetingFolder,
@@ -310,6 +311,26 @@ export async function stageGranolaMeetings(opts?: {
         }
       }
 
+      // Structured, stably-identified action contract (Slice B). Built from the
+      // same triaged.actionItems both the AI and template paths produce, so the
+      // contract shape is identical regardless of extraction path. Additive:
+      // `content` remains canonical and the line-based writer is unchanged until
+      // Slice D reconciles by actionId.
+      //
+      // On a refresh of an already-pending proposal, carry the previously minted
+      // ids so re-triaged wording does not mint different ids: the id is derived
+      // from text, so a fresh build would break identity across the refresh.
+      const priorActions =
+        opts?.refreshPending && prior?.status === "pending"
+          ? (prior.payload as MeetingFilePayload).actions ?? null
+          : null;
+      const { contractVersion, actions } = meetingActionContract(
+        note.id,
+        triaged.actionItems,
+        triaged.modelUsed,
+        priorActions,
+      );
+
       const payload: MeetingFilePayload = {
         granolaId: note.id,
         title: triaged.title,
@@ -323,6 +344,8 @@ export async function stageGranolaMeetings(opts?: {
         tldr: triaged.tldr,
         contactsToAdd,
         seriesName: matched?.name ?? null,
+        contractVersion,
+        actions,
       };
       const res = await stageProposal({
         kind: "meeting-file",

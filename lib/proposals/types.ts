@@ -3,7 +3,60 @@
 // the review queue on /meetings. Payloads carry everything execution needs, so
 // approval never re-runs the AI.
 
+import type { OwnerClass } from "@/lib/ai";
+
 export type ProposalKind = "meeting-file" | "series-update";
+
+// Review state of a proposed action (docs/decisions/meeting-linking-rules.md,
+// "Action ownership states"). Slice B only ever emits `group` (a team/function
+// owner) or `unassigned` (an individual owner or none, pending the resolver);
+// `assigned` / `suggested` / `ambiguous` / `rejected` are produced by the
+// people-linking engine and the review UI in later slices.
+export type ActionReviewState =
+  | "assigned"
+  | "suggested"
+  | "ambiguous"
+  | "unassigned"
+  | "group"
+  | "rejected";
+
+// The structured linking contract for one extracted meeting action (Slice B).
+// It carries a stable, line-independent identity, an IMMUTABLE record of the
+// original extraction, Jordan's editable/approved version, and the review
+// scaffolding the UI (Slice C) and the persistence writer (Slice D) will need.
+// In Slice B the candidate arrays are always empty and identities are left
+// unresolved: no person or account is guessed here. The audit fields satisfy
+// docs/decisions/meeting-linking-rules.md "Audit requirements" and AGENTS.md.
+export interface MeetingActionProposal {
+  actionId: string; // stable id (lib/meetingActionIdentity.ts), minted once
+  fingerprint: string; // normalized-text hash of the CURRENT text; hint, not identity
+
+  // ---- original extraction: immutable audit record of the first extraction ----
+  originalText: string; // action text as first extracted, never edited
+  originalOwnerText: string | null; // owner as first extracted, never edited
+  sourceRef: string; // action-level source reference to the original extraction
+  provenance: string; // model id / matcher of the ORIGINAL extraction (immutable)
+  currentProvenance: string; // model id / matcher of the extraction that produced
+  //                            the CURRENT editable text (updated on each refresh)
+
+  // ---- approved / editable: Jordan's version (starts equal to the original) ----
+  text: string; // editable action text (owner prefix stripped)
+  ownerText: string | null; // editable owner ("Scott", "Operations", ...)
+  ownerClass: OwnerClass; // me | team | customer | unknown (from the roster pass)
+  candidatePersonIds: number[]; // resolver output; [] in Slice B (unresolved)
+  candidateAccountIds: number[]; // resolver output; [] in Slice B (unresolved)
+  reasons: string[]; // human-readable evidence; populated by the resolver later
+  confidence: "high" | "medium" | "low" | "none";
+  ownerReviewState: ActionReviewState; // owner link review state
+  accountReviewState: ActionReviewState; // account link review state (separate axis)
+  isJordans: boolean; // true => a real task in Jordan's views
+  due: string | null; // YYYY-MM-DD if concrete
+  dueText: string | null; // raw due phrase when not concrete
+}
+
+// Current version of the structured meeting-action contract. Bumped when the
+// shape changes so consumers can tell a legacy payload from a current one.
+export const MEETING_ACTION_CONTRACT_VERSION = 1;
 
 export type ProposalStatus =
   | "pending"
@@ -34,6 +87,12 @@ export interface MeetingFilePayload {
     names: string[];
   } | null;
   seriesName: string | null; // matched rolling series, display only
+  // Slice B additions, all OPTIONAL so already-pending legacy payloads (staged
+  // before this slice) remain valid and execute unchanged. `content` stays the
+  // canonical rendering; `actions` is additive structured metadata.
+  contractVersion?: number; // MEETING_ACTION_CONTRACT_VERSION when `actions` set
+  actions?: MeetingActionProposal[]; // structured, stably-identified actions
+  relatedAccounts?: string[]; // accounts the meeting is ABOUT (📎), display names
 }
 
 // A rolling-series refresh for one filed meeting. The AI output (logBullets +
