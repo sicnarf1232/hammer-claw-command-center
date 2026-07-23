@@ -6,6 +6,7 @@ import MeetingActionReview, {
   type ReviewActionView,
   type ReviewPersonOption,
 } from "./MeetingActionReview";
+import { approvalGate, type ReviewPanelState } from "@/lib/reviewGate";
 
 export interface QueueProposal {
   id: number;
@@ -46,8 +47,20 @@ export default function ProposalQueue({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Unsaved/saving action-review state per proposal id: Approve (per card and
+  // Approve all) is disabled while any review panel is dirty or mid-save, so
+  // selections cannot be silently lost by approving first.
+  const [panelStates, setPanelStates] = useState<Record<number, ReviewPanelState>>({});
 
   if (!proposals.length) return null;
+
+  const setPanelState = (id: number, state: ReviewPanelState) =>
+    setPanelStates((prev) => {
+      const cur = prev[id];
+      if (cur && cur.dirty === state.dirty && cur.saving === state.saving) return prev;
+      return { ...prev, [id]: state };
+    });
+  const allGate = approvalGate(Object.values(panelStates));
 
   const parents = proposals.filter((p) => p.kind === "meeting-file");
   const orphanChildren = proposals.filter(
@@ -96,10 +109,13 @@ export default function ProposalQueue({
             {proposals.length}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {!allGate.allowed ? (
+            <span className="text-2xs text-due">{allGate.reason}</span>
+          ) : null}
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !allGate.allowed}
             onClick={() => decide(allIds, "approve")}
             className="btn btn-primary text-xs disabled:opacity-60"
           >
@@ -115,10 +131,22 @@ export default function ProposalQueue({
       <ul className="space-y-3">
         {[...parents, ...orphanChildren].map((p) => (
           <li key={p.id} className="rounded-lg border border-border p-3">
-            <ProposalCard p={p} busy={busy} decide={decide} people={people} />
+            <ProposalCard
+              p={p}
+              busy={busy}
+              decide={decide}
+              people={people}
+              onPanelState={(s) => setPanelState(p.id, s)}
+            />
             {childrenOf(p.id).map((c) => (
               <div key={c.id} className="mt-2 border-t border-border pt-2 pl-3">
-                <ProposalCard p={c} busy={busy} decide={decide} people={people} />
+                <ProposalCard
+                  p={c}
+                  busy={busy}
+                  decide={decide}
+                  people={people}
+                  onPanelState={(s) => setPanelState(c.id, s)}
+                />
               </div>
             ))}
           </li>
@@ -133,11 +161,13 @@ function ProposalCard({
   busy,
   decide,
   people,
+  onPanelState,
 }: {
   p: QueueProposal;
   busy: boolean;
   decide: (ids: number[], action: "approve" | "reject") => void;
   people: ReviewPersonOption[];
+  onPanelState: (state: ReviewPanelState) => void;
 }) {
   const router = useRouter();
   const isMeeting = p.kind === "meeting-file";
@@ -153,6 +183,12 @@ function ProposalCard({
   const [saving, setSaving] = useState(false);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Structured review panel state for THIS card; gates the card's Approve.
+  const [reviewPanel, setReviewPanel] = useState<ReviewPanelState>({
+    dirty: false,
+    saving: false,
+  });
+  const gate = approvalGate([reviewPanel]);
 
   const contentDirty = isMeeting && content !== (p.content ?? "");
   const namesDirty =
@@ -204,12 +240,16 @@ function ProposalCard({
             ) : null}
           </div>
         </div>
-        <div className="flex shrink-0 gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!gate.allowed ? (
+            <span className="text-2xs text-due">{gate.reason}</span>
+          ) : null}
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !gate.allowed}
             onClick={() => decide([p.id], "approve")}
             className="btn btn-primary text-xs disabled:opacity-60"
+            title={gate.reason ?? undefined}
           >
             Approve
           </button>
@@ -243,7 +283,15 @@ function ProposalCard({
 
       {/* Structured action-owner review (Slice C). */}
       {isMeeting ? (
-        <MeetingActionReview proposalId={p.id} actions={p.actions} people={people} />
+        <MeetingActionReview
+          proposalId={p.id}
+          actions={p.actions}
+          people={people}
+          onPanelState={(s) => {
+            setReviewPanel(s);
+            onPanelState(s);
+          }}
+        />
       ) : null}
 
       {/* Contact assignments Jordan can proof and correct (add a missing last

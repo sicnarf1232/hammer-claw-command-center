@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { applyActionReviews } from "./review";
+import {
+  applyActionReviews,
+  collectAssignedPersonIds,
+  missingPersonIds,
+} from "./review";
 import { buildActionProposals } from "@/lib/meetingActionContract";
 
 // Slice C: pure application of Jordan's review decisions onto the contract.
@@ -100,6 +104,52 @@ describe("applyActionReviews", () => {
     expect(out[0].actionId).toBe(actions[0].actionId);
     expect(out[0].text).toBe("Review the FULL complaint history.");
     expect(out[0].originalText).toBe("Review the complaint history.");
+  });
+
+  it("nonexistent person id is reported missing (server rejects the update)", () => {
+    const collected = collectAssignedPersonIds([
+      { actionId: "act_a", state: "assigned", personId: 999 },
+    ]);
+    expect(collected.ok).toBe(true);
+    if (collected.ok) {
+      expect(missingPersonIds(collected.ids, new Set([1, 2, 3]))).toEqual([999]);
+    }
+  });
+
+  it("a superseded person id is missing from the ACTIVE set and rejects", () => {
+    // The active set is built with `superseded_by IS NULL`; person 2 was
+    // superseded, so it is absent even though the row exists.
+    const activeIds = new Set([1, 3]);
+    expect(missingPersonIds([2], activeIds)).toEqual([2]);
+  });
+
+  it("decimal, negative, zero, and missing person ids fail collection", () => {
+    for (const personId of [7.5, -1, 0, undefined, null] as const) {
+      const res = collectAssignedPersonIds([
+        { actionId: "act_a", state: "assigned", personId: personId as number | null | undefined },
+      ]);
+      expect(res.ok).toBe(false);
+    }
+  });
+
+  it("a valid ACTIVE person outside the candidate list passes (Everyone picks allowed)", () => {
+    const collected = collectAssignedPersonIds([
+      { actionId: "act_a", state: "assigned", personId: 42 },
+    ]);
+    expect(collected.ok).toBe(true);
+    if (collected.ok) {
+      // 42 is active; it was never in any candidate list, and that is fine.
+      expect(missingPersonIds(collected.ids, new Set([7, 42]))).toEqual([]);
+    }
+  });
+
+  it("non-assigned states collect no ids and cannot fail on personId", () => {
+    const res = collectAssignedPersonIds([
+      { actionId: "act_a", state: "rejected" },
+      { actionId: "act_b", state: "unassigned" },
+      { actionId: "act_c", state: "group" },
+    ]);
+    expect(res).toEqual({ ok: true, ids: [] });
   });
 
   it("unknown action ids are ignored", () => {

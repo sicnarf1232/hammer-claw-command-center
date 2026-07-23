@@ -3,7 +3,14 @@ import { getDb, dbConfigured } from "@/lib/db";
 import { aiProposals } from "@/lib/db/schema";
 import { ensureProposalsSchema } from "./schema";
 import { stageAction, stableStringify } from "./build";
-import { applyActionReviews, type ActionReviewPatch } from "./review";
+import {
+  applyActionReviews,
+  collectAssignedPersonIds,
+  missingPersonIds,
+  InvalidActionReviewError,
+  type ActionReviewPatch,
+} from "./review";
+import { activePersonIdSet } from "@/lib/peopleDb";
 import type {
   MeetingActionProposal,
   ProposalKind,
@@ -208,6 +215,20 @@ export async function updateMeetingProposal(
     // Legacy payloads (staged before Slice B) carry no structured actions;
     // there is nothing to review on them.
     if (actions) {
+      // Server-side validation: assigned person ids must be positive integers
+      // AND existing, active (not superseded) people. A crafted or stale
+      // client id rejects the whole update; nothing is partially applied.
+      const collected = collectAssignedPersonIds(edit.actionReviews);
+      if (!collected.ok) throw new InvalidActionReviewError(collected.error);
+      if (collected.ids.length) {
+        const active = await activePersonIdSet(collected.ids);
+        const missing = missingPersonIds(collected.ids, active);
+        if (missing.length) {
+          throw new InvalidActionReviewError(
+            `Person id(s) ${missing.join(", ")} do not exist or are superseded identities.`,
+          );
+        }
+      }
       payload.actions = applyActionReviews(actions, edit.actionReviews, "jordan");
     }
   }

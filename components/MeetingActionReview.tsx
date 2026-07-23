@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ReviewPanelState } from "@/lib/reviewGate";
 
 // Structured review of a pending meeting proposal's action links (Slice C).
 // Shows, per action: the extracted text, the owner as written, the resolver's
@@ -55,10 +56,14 @@ export default function MeetingActionReview({
   proposalId,
   actions,
   people,
+  onPanelState,
 }: {
   proposalId: number;
   actions: ReviewActionView[];
   people: ReviewPersonOption[];
+  // Reports unsaved/saving review state upward so the proposal card and the
+  // queue can gate their Approve buttons (lib/reviewGate.ts).
+  onPanelState?: (state: ReviewPanelState) => void;
 }) {
   const router = useRouter();
   const [choices, setChoices] = useState<Record<string, PendingChoice>>({});
@@ -70,9 +75,14 @@ export default function MeetingActionReview({
     return (id: number) => m.get(id) ?? `Person #${id}`;
   }, [people]);
 
-  if (!actions.length) return null;
-
   const dirty = Object.keys(choices).length > 0;
+
+  useEffect(() => {
+    onPanelState?.({ dirty, saving });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, saving]);
+
+  if (!actions.length) return null;
 
   function effectiveState(a: ReviewActionView): { state: string; personId: number | null } {
     const c = choices[a.actionId];

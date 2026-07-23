@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { dbConfigured } from "@/lib/db";
 import { updateMeetingProposal } from "@/lib/proposals/store";
+import { InvalidActionReviewError } from "@/lib/proposals/review";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +61,11 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
+    // Invalid review input (bad or inactive person id): the client's fault,
+    // reported as a 400 with the specific reason; nothing was applied.
+    if (err instanceof InvalidActionReviewError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     const message = err instanceof Error ? err.message : "Update failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
