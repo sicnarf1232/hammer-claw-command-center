@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   planMeetingTaskSync,
+  reconcileBlocker,
   ARCHIVED_STATUS,
   type SyncMdItem,
   type SyncTaskRow,
@@ -265,6 +266,70 @@ describe("planMeetingTaskSync: legacy rows and the editor path", () => {
     expect(byTask.get(2)).toBe(BASE_TEXTS[1]);
   });
 
+  it("REACTIVATION lifecycle: a removed-then-returned action reuses its task and leaves archived", () => {
+    // 1) Action exists (first save).
+    const first = planMeetingTaskSync({
+      namespace: NS,
+      contractActions: CONTRACT,
+      mdItems: BASE_MD,
+      existingRows: [],
+    });
+    expect(first.inserts).toHaveLength(3);
+
+    // 2) The middle action is removed: its row is archived.
+    const rows = rowsAfterFirstSave();
+    const removed = planMeetingTaskSync({
+      namespace: NS,
+      contractActions: CONTRACT,
+      mdItems: [md(BASE_TEXTS[0], 9), md(BASE_TEXTS[2], 10)],
+      existingRows: rows,
+    });
+    expect(removed.archiveTaskIds).toEqual([2]);
+
+    // 3) The identical action returns; row 2 is now archived in the DB.
+    const rowsWithArchived = rows.map((r) =>
+      r.id === 2 ? { ...r, status: ARCHIVED_STATUS } : r,
+    );
+    const returned = planMeetingTaskSync({
+      namespace: NS,
+      contractActions: CONTRACT,
+      mdItems: BASE_MD,
+      existingRows: rowsWithArchived,
+    });
+    // 4) Same task and action id are reused; 5) status restores from archived
+    // (reactivate) — and ONLY on that row; 6) no duplicate task is inserted.
+    expect(returned.inserts).toEqual([]);
+    expect(returned.archiveTaskIds).toEqual([]);
+    const revived = returned.updates.find((u) => u.taskId === 2);
+    expect(revived?.actionId).toBe(CONTRACT[1].actionId);
+    expect(revived?.reactivate).toBe(true);
+    for (const u of returned.updates.filter((x) => x.taskId !== 2)) {
+      expect(u.reactivate).toBe(false); // active rows' statuses untouched
+    }
+  });
+
+  it("a REJECTED action never reactivates its archived row", () => {
+    const reviewed = applyActionReviews(
+      CONTRACT,
+      [{ actionId: CONTRACT[1].actionId, state: "rejected" }],
+      "jordan",
+    );
+    const rowsWithArchived = rowsAfterFirstSave().map((r) =>
+      r.id === 2 ? { ...r, status: ARCHIVED_STATUS } : r,
+    );
+    const plan = planMeetingTaskSync({
+      namespace: NS,
+      contractActions: reviewed,
+      mdItems: BASE_MD, // the rejected line is still rendered in the note
+      existingRows: rowsWithArchived,
+    });
+    // The archived row is matched (not re-archived) but stays archived: no
+    // update touches it and no reactivation happens.
+    expect(plan.archiveTaskIds).toEqual([]);
+    expect(plan.updates.some((u) => u.taskId === 2)).toBe(false);
+    expect(plan.inserts).toEqual([]);
+  });
+
   it("already-archived rows are not re-archived", () => {
     const rows: SyncTaskRow[] = [
       ...rowsAfterFirstSave(),
@@ -277,5 +342,19 @@ describe("planMeetingTaskSync: legacy rows and the editor path", () => {
       existingRows: rows,
     });
     expect(plan.archiveTaskIds).toEqual([]);
+  });
+});
+
+describe("reconcileBlocker: reconcile-existing must fail loudly, never falsely succeed", () => {
+  it("no blocker when the meeting row and its content are present", () => {
+    expect(reconcileBlocker(true, true)).toBeNull();
+  });
+
+  it("blocks when the meeting row cannot be found", () => {
+    expect(reconcileBlocker(false, false)).toMatch(/not found/i);
+  });
+
+  it("blocks when the meeting has no stored content", () => {
+    expect(reconcileBlocker(true, false)).toMatch(/no stored content/i);
   });
 });

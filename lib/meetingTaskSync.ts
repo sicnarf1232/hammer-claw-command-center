@@ -58,8 +58,17 @@ interface WriteFields {
   ownerPersonId: number | null | undefined;
 }
 
+export interface TaskUpdate extends WriteFields {
+  taskId: number;
+  // True only when the matched row is currently ARCHIVED and a rendered,
+  // non-rejected action reclaimed it: the writer clears the archived status
+  // so the task returns to active views. Never set on normal active rows, so
+  // unrelated workflow statuses ("Waiting", ...) are never touched.
+  reactivate: boolean;
+}
+
 export interface TaskSyncPlan {
-  updates: Array<WriteFields & { taskId: number }>;
+  updates: TaskUpdate[];
   inserts: Array<WriteFields & { priority: string | null }>;
   archiveTaskIds: number[]; // rows to mark status='archived' (never deleted)
 }
@@ -166,7 +175,14 @@ export function planMeetingTaskSync(args: PlanArgs): TaskSyncPlan {
     };
     if (row) {
       matchedRowIds.add(row.id);
-      updates.push({ ...fields, taskId: row.id });
+      updates.push({
+        ...fields,
+        taskId: row.id,
+        // An archived row reclaimed by a live action comes back to active
+        // views (Codex D-review blocker 1). Rejection was handled above, so
+        // every update here is for a rendered, non-rejected action.
+        reactivate: row.status === ARCHIVED_STATUS,
+      });
     } else {
       inserts.push({
         ...fields,
@@ -237,6 +253,23 @@ function pseudoAction(actionId: string, text: string): MeetingActionProposal {
     due: null,
     dueText: null,
   };
+}
+
+// Why an approved proposal's reviewed links CANNOT be reconciled against an
+// already-existing meeting (Codex D-review blocker 2). Non-null means the
+// execution must FAIL (status 'error'), never approve with only a warning:
+// a false success would silently drop Jordan's confirmed links.
+export function reconcileBlocker(
+  meetingFound: boolean,
+  hasBody: boolean,
+): string | null {
+  if (!meetingFound) {
+    return "Meeting exists by basename but its row was not found; reviewed action links were NOT applied.";
+  }
+  if (!hasBody) {
+    return "Existing meeting has no stored content to reconcile against; reviewed action links were NOT applied.";
+  }
+  return null;
 }
 
 function assertUniqueIds(ids: string[]): void {

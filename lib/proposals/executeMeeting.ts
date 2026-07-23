@@ -5,6 +5,7 @@ import { cutoverActive } from "@/lib/dbSource";
 import { getDb, series as seriesT } from "@/lib/db";
 import {
   dbSaveMeetingContent,
+  dbReconcileMeetingActions,
   dbSaveSeriesContent,
   existingMeetingBasenamesFromDb,
 } from "@/lib/meetingsDb";
@@ -48,6 +49,25 @@ export async function executeProposal(row: ProposalRow): Promise<ExecuteOutcome>
   throw new Error(`Unknown proposal kind: ${row.kind}`);
 }
 
+// Pure decision for the post-cutover approval write (Codex D-review blocker 2,
+// tested in executeMeeting.test.ts):
+//  - save-new: meeting is new; save content and sync reviewed links.
+//  - reconcile-existing: meeting already exists; PRESERVE its stored content
+//    (never overwrite with the stale staged copy) but reconcile Jordan's
+//    reviewed action links against the current content. A reconcile failure
+//    throws and fails the execution; it must not approve with only a warning.
+//  - skip-legacy: meeting exists and the payload predates structured actions;
+//    there are no reviewed links to land, so skipping remains correct.
+export type MeetingApprovalPlan = "save-new" | "reconcile-existing" | "skip-legacy";
+
+export function meetingApprovalPlan(
+  alreadyExists: boolean,
+  hasStructuredActions: boolean,
+): MeetingApprovalPlan {
+  if (!alreadyExists) return "save-new";
+  return hasStructuredActions ? "reconcile-existing" : "skip-legacy";
+}
+
 async function executeMeetingFile(p: MeetingFilePayload): Promise<ExecuteOutcome> {
   const warnings: string[] = [];
 
@@ -56,15 +76,31 @@ async function executeMeetingFile(p: MeetingFilePayload): Promise<ExecuteOutcome
   if (await cutoverActive()) {
     const basenames = await existingMeetingBasenamesFromDb();
     const base = p.path.split("/").pop()!.replace(/\.md$/, "").toLowerCase();
-    if (basenames?.has(base)) {
-      warnings.push("Meeting already existed at execution time; write skipped.");
-    } else {
+    const plan = meetingApprovalPlan(
+      basenames?.has(base) ?? false,
+      !!p.actions?.length,
+    );
+    if (plan === "save-new") {
       // Slice D: the reviewed action contract rides along so tasks are
       // reconciled by stable action id and confirmed owner links persist.
       await dbSaveMeetingContent(p.path, p.content, "proposal", {
         actions: p.actions ?? null,
         granolaId: p.granolaId ?? null,
       });
+    } else if (plan === "reconcile-existing") {
+      // Throws on failure: the proposal then lands in status 'error', never
+      // a false success that silently dropped Jordan's confirmed links.
+      const { path } = await dbReconcileMeetingActions(base, {
+        actions: p.actions!,
+        granolaId: p.granolaId ?? null,
+      });
+      warnings.push(
+        `Meeting already existed at ${path}; content preserved, reviewed action links reconciled.`,
+      );
+    } else {
+      warnings.push(
+        "Meeting already existed at execution time; write skipped (legacy payload, no reviewed links to apply).",
+      );
     }
     if (p.contactsToAdd && p.contactsToAdd.names.length) {
       try {
