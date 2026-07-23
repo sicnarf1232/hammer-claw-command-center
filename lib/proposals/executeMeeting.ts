@@ -59,7 +59,12 @@ async function executeMeetingFile(p: MeetingFilePayload): Promise<ExecuteOutcome
     if (basenames?.has(base)) {
       warnings.push("Meeting already existed at execution time; write skipped.");
     } else {
-      await dbSaveMeetingContent(p.path, p.content, "proposal");
+      // Slice D: the reviewed action contract rides along so tasks are
+      // reconciled by stable action id and confirmed owner links persist.
+      await dbSaveMeetingContent(p.path, p.content, "proposal", {
+        actions: p.actions ?? null,
+        granolaId: p.granolaId ?? null,
+      });
     }
     if (p.contactsToAdd && p.contactsToAdd.names.length) {
       try {

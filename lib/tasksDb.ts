@@ -1,4 +1,5 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { ARCHIVED_STATUS } from "@/lib/meetingTaskSync";
 import {
   getDb,
   accounts as accountsT,
@@ -84,7 +85,14 @@ export async function tasksFromDb(): Promise<Task[] | null> {
     })
     .from(tasksT)
     .leftJoin(peopleT, eq(tasksT.ownerPersonId, peopleT.id))
-    .where(eq(tasksT.isJordans, true));
+    // Archived rows are meeting actions Jordan removed or rejected (Slice D);
+    // they keep their id and links for history but leave the active views.
+    .where(
+      and(
+        eq(tasksT.isJordans, true),
+        or(isNull(tasksT.status), ne(tasksT.status, ARCHIVED_STATUS)),
+      ),
+    );
   return rows.map((r) => rowToTask(r.task, r.delegateName, r.delegateEmail));
 }
 

@@ -7,6 +7,8 @@ import {
   tasks as tasksT,
 } from "@/lib/db";
 import { cutoverActive } from "@/lib/dbSource";
+import { planMeetingTaskSync, ARCHIVED_STATUS } from "@/lib/meetingTaskSync";
+import type { MeetingActionProposal } from "@/lib/proposals/types";
 import { parseMeetingNote } from "@/lib/vault/meetings";
 import { parseSeriesDoc, type Series } from "@/lib/vault/series";
 import { indexRowFromPath } from "@/lib/meetingFormat";
@@ -172,10 +174,18 @@ async function accountIdByName(name: string | null): Promise<number | null> {
 }
 
 // Re-derive the structured columns from (possibly edited) content and save.
+// `structured` rides along on the proposal-approval path (Slice D): the
+// reviewed action contract plus the granola id used as the identity namespace.
+// Without it (editor/manual paths) identity still holds: existing rows' own
+// action ids are carried by fingerprint, so reorders no longer corrupt tasks.
 export async function dbSaveMeetingContent(
   path: string,
   content: string,
   origin: "app" | "proposal" = "app",
+  structured?: {
+    actions: MeetingActionProposal[] | null;
+    granolaId: string | null;
+  },
 ): Promise<{ commitSha: string; path: string }> {
   const db = getDb();
   const note = parseMeetingNote(content, path);
@@ -204,9 +214,10 @@ export async function dbSaveMeetingContent(
     await db.insert(meetingsT).values({ ...values, sourcePath: path });
   }
 
-  // Keep this meeting's task rows in step with its (dual-capture) action
-  // items: update matched source lines, insert new ones. Never deletes (task
-  // ids are referenced by task_meta / task_emails).
+  // Keep this meeting's task rows in step with its action items, reconciled
+  // by STABLE ACTION ID (Slice D), not source line. The pure planner decides
+  // updates/inserts/archives; removed actions are archived (status only),
+  // never deleted (task ids are referenced by task_meta / task_emails).
   const meetingId =
     existing?.id ??
     (await db
@@ -217,34 +228,74 @@ export async function dbSaveMeetingContent(
       .then((r) => r[0]?.id));
   if (meetingId != null) {
     const taskRows = await db
-      .select({ id: tasksT.id, sourceLine: tasksT.sourceLine })
+      .select({
+        id: tasksT.id,
+        actionId: tasksT.actionId,
+        sourceLine: tasksT.sourceLine,
+        text: tasksT.text,
+        status: tasksT.status,
+      })
       .from(tasksT)
       .where(eq(tasksT.sourcePath, path));
-    const byLine = new Map(taskRows.map((t) => [t.sourceLine, t.id]));
-    for (const ai of note.actionItems) {
-      const base = {
+
+    const plan = planMeetingTaskSync({
+      namespace: structured?.granolaId ?? note.granolaId ?? path,
+      contractActions: structured?.actions ?? null,
+      mdItems: note.actionItems.map((ai) => ({
         text: ai.text,
+        owner: ai.owner ?? null,
         done: ai.done,
         due: ai.due ?? null,
         isJordans: ai.isJordans,
+        sourceLine: ai.sourceLine,
+        priority: ai.task?.priority ?? null,
+      })),
+      existingRows: taskRows,
+    });
+
+    for (const u of plan.updates) {
+      await db
+        .update(tasksT)
+        .set({
+          text: u.text,
+          done: u.done,
+          due: u.due,
+          isJordans: u.isJordans,
+          meetingId,
+          accountId,
+          actionId: u.actionId,
+          sourceLine: u.sourceLine,
+          // undefined = preserve the existing owner link (manual links survive
+          // reprocessing); a number = confirmed link; null = explicit clear.
+          ...(u.ownerPersonId !== undefined ? { ownerPersonId: u.ownerPersonId } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(tasksT.id, u.taskId));
+    }
+    for (const ins of plan.inserts) {
+      await db.insert(tasksT).values({
+        text: ins.text,
+        done: ins.done,
+        due: ins.due,
+        isJordans: ins.isJordans,
         meetingId,
         accountId,
+        actionId: ins.actionId,
+        sourcePath: path,
+        sourceLine: ins.sourceLine,
+        ownerPersonId: ins.ownerPersonId,
+        priority: ins.priority,
+        customer: note.customer?.display ?? null,
+        origin,
+        confirmedBy: "jordan",
         updatedAt: new Date(),
-      };
-      const hit = byLine.get(ai.sourceLine);
-      if (hit != null) {
-        await db.update(tasksT).set(base).where(eq(tasksT.id, hit));
-      } else {
-        await db.insert(tasksT).values({
-          ...base,
-          sourcePath: path,
-          sourceLine: ai.sourceLine,
-          priority: ai.task?.priority ?? null,
-          customer: note.customer?.display ?? null,
-          origin,
-          confirmedBy: "jordan",
-        });
-      }
+      });
+    }
+    if (plan.archiveTaskIds.length) {
+      await db
+        .update(tasksT)
+        .set({ status: ARCHIVED_STATUS, ...APP_EDIT, updatedAt: new Date() })
+        .where(inArray(tasksT.id, plan.archiveTaskIds));
     }
   }
 
