@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { cleanTaskTitle, quoteHrefForTask } from "./taskView";
+import { cleanTaskTitle, quoteHrefForTask, toTaskView } from "./taskView";
+import type { Task } from "./vault/types";
 
 describe("cleanTaskTitle", () => {
   it("strips inline field markers", () => {
@@ -49,5 +50,35 @@ describe("quoteHrefForTask", () => {
     const href = quoteHrefForTask({ customer: undefined, title: "", description: undefined, notes: undefined });
     const url = new URL(href, "http://x");
     expect(url.searchParams.has("parse")).toBe(false);
+  });
+});
+
+describe("toTaskView: source-meeting provenance pass-through", () => {
+  const base = {
+    done: false,
+    title: "Send the forecast",
+    fields: {},
+    description: "",
+    notes: "",
+    sourceFile: "300 Merit/Meetings/m.md",
+    sourceLine: 9,
+  };
+
+  it("carries sourceMeeting through to the view", () => {
+    const v = toTaskView({
+      ...base,
+      sourceMeeting: { id: 7, title: "Intuitive weekly sync", date: "2026-07-20", path: "300 Merit/Meetings/x.md" },
+    } as Task);
+    expect(v.sourceMeeting).toEqual({
+      id: 7,
+      title: "Intuitive weekly sync",
+      date: "2026-07-20",
+      path: "300 Merit/Meetings/x.md",
+    });
+  });
+
+  it("is absent for vault-born tasks (parser never sets it)", () => {
+    const v = toTaskView({ ...base } as Task);
+    expect(v.sourceMeeting).toBeUndefined();
   });
 });

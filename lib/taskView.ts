@@ -20,6 +20,10 @@ export interface TaskView {
   // Who this task is delegated to (dev-feedback #20), carried straight
   // through from Task.delegate. See lib/vault/types.ts for the rationale.
   delegatedTo?: { personId: number; name: string; email?: string | null };
+  // The meeting this task was created from (tasks.meeting_id provenance),
+  // carried straight through from Task.sourceMeeting. Absent for vault-born
+  // and app-created tasks; `path` deep-links via /meetings?note=<path>.
+  sourceMeeting?: { id: number; title: string | null; date: string | null; path: string | null };
   sourceFile: string;
   sourceLine: number;
 }
@@ -126,6 +130,7 @@ export function toTaskView(
     notes: t.notes || undefined,
     thread: t.thread,
     delegatedTo: t.delegate,
+    sourceMeeting: t.sourceMeeting,
     sourceFile: t.sourceFile,
     sourceLine: t.sourceLine,
   };

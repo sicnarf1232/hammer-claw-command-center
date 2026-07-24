@@ -3,6 +3,7 @@ import { ARCHIVED_STATUS } from "@/lib/meetingTaskSync";
 import {
   getDb,
   accounts as accountsT,
+  meetings as meetingsT,
   tasks as tasksT,
   taskEmails as taskEmailsT,
   people as peopleT,
@@ -37,7 +38,22 @@ type TaskRow = typeof tasksT.$inferSelect;
 // name here means every reader of Task (seeded rows included, since
 // ownerPersonId was already populated at cutover-seed time from the vault's
 // "Owner: <Name>" field) gets it for free, not just newly app-set delegates.
-function rowToTask(row: TaskRow, delegateName?: string | null, delegateEmail?: string | null): Task {
+// Source-meeting columns joined via tasks.meeting_id (left join, all null for
+// vault-born/app-created tasks).
+export interface SourceMeetingCols {
+  meetingRowId: number | null;
+  meetingTitle: string | null;
+  meetingDate: string | null;
+  meetingPath: string | null;
+}
+
+// Exported for the pure mapping test only (no behavior change).
+export function rowToTask(
+  row: TaskRow,
+  delegateName?: string | null,
+  delegateEmail?: string | null,
+  meeting?: SourceMeetingCols | null,
+): Task {
   const customer =
     row.customer === "internal"
       ? ("internal" as const)
@@ -67,6 +83,17 @@ function rowToTask(row: TaskRow, delegateName?: string | null, delegateEmail?: s
       row.ownerPersonId != null
         ? { personId: row.ownerPersonId, name: delegateName ?? "Unknown", email: delegateEmail ?? null }
         : undefined,
+    // Truthful provenance: present only when the meeting join actually hit
+    // (tasks.meeting_id set AND the meeting row still exists).
+    sourceMeeting:
+      meeting && meeting.meetingRowId != null
+        ? {
+            id: meeting.meetingRowId,
+            title: meeting.meetingTitle,
+            date: meeting.meetingDate,
+            path: meeting.meetingPath,
+          }
+        : undefined,
     sourceFile: row.sourcePath ?? DB_TASK_FILE,
     sourceLine: row.sourcePath != null ? row.sourceLine ?? 0 : row.id,
   };
@@ -82,9 +109,17 @@ export async function tasksFromDb(): Promise<Task[] | null> {
       task: tasksT,
       delegateName: peopleT.fullName,
       delegateEmail: peopleT.email,
+      meetingRowId: meetingsT.id,
+      meetingTitle: meetingsT.title,
+      meetingDate: meetingsT.date,
+      meetingPath: meetingsT.sourcePath,
     })
     .from(tasksT)
     .leftJoin(peopleT, eq(tasksT.ownerPersonId, peopleT.id))
+    // Source-meeting provenance: the meeting this task was created from
+    // (tasks.meeting_id, written at proposal approval). Left join; all-null
+    // for vault-born and app-created tasks.
+    .leftJoin(meetingsT, eq(tasksT.meetingId, meetingsT.id))
     // Archived rows are meeting actions Jordan removed or rejected (Slice D);
     // they keep their id and links for history but leave the active views.
     .where(
@@ -93,7 +128,14 @@ export async function tasksFromDb(): Promise<Task[] | null> {
         or(isNull(tasksT.status), ne(tasksT.status, ARCHIVED_STATUS)),
       ),
     );
-  return rows.map((r) => rowToTask(r.task, r.delegateName, r.delegateEmail));
+  return rows.map((r) =>
+    rowToTask(r.task, r.delegateName, r.delegateEmail, {
+      meetingRowId: r.meetingRowId,
+      meetingTitle: r.meetingTitle,
+      meetingDate: r.meetingDate,
+      meetingPath: r.meetingPath,
+    }),
+  );
 }
 
 async function findRow(sourceFile: string, sourceLine: number): Promise<TaskRow | null> {
