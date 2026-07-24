@@ -21,6 +21,7 @@ import TaskFieldEditor from "./TaskFieldEditor";
 import TaskMetaChips from "./TaskMetaChips";
 import TaskSuggestedAction from "./TaskSuggestedAction";
 import { TaskLinkedEmails, TaskLinkedMeetings, TaskEmailAction } from "./TaskEmailLink";
+import TaskProvenance from "./TaskProvenance";
 import TaskUpdateLog from "./TaskUpdateLog";
 import StepDueDate from "./StepDueDate";
 
@@ -813,9 +814,12 @@ function TaskCard({
               />
             </div>
             <TaskUpdateLog sourceFile={t.sourceFile} sourceLine={t.sourceLine} refreshToken={refreshToken} />
-            <div className="mt-3 grid gap-2 border-t border-line2 pt-2.5 sm:grid-cols-2">
-              <TaskLinkedEmails sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
-              <TaskLinkedMeetings sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
+            <div className="mt-3 grid gap-2 border-t border-line2 pt-2.5">
+              <TaskProvenance task={t} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <TaskLinkedEmails sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
+                <TaskLinkedMeetings sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
+              </div>
             </div>
           </div>
         </div>

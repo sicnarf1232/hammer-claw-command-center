@@ -1,7 +1,8 @@
-import { vaultConfigured } from "@/lib/vault";
-import { getTodayTasks } from "@/lib/today";
+import { vaultConfigured, getAllTasks } from "@/lib/vault";
 import { listAccounts } from "@/lib/accounts";
 import { buildAccountLookup, toTaskView, type TaskView } from "@/lib/taskView";
+import { classifyAttention } from "@/lib/attention";
+import { todayISO } from "@/lib/dates";
 import type { Task } from "@/lib/vault/types";
 import TodayTabs from "@/components/TodayTabs";
 import SetupNotice from "@/components/SetupNotice";
@@ -19,13 +20,13 @@ export default async function TodayPage() {
     );
   }
 
-  let today = "";
+  // Command lanes need ALL open tasks (Next/Watch include not-yet-due work),
+  // one fetch shared by every tab; the Focus queue narrows to due/overdue.
+  const today = todayISO();
   let tasks: Task[] = [];
   let error: string | null = null;
   try {
-    const res = await getTodayTasks();
-    today = res.today;
-    tasks = res.tasks;
+    tasks = (await getAllTasks()).filter((t) => !t.done);
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to read the vault.";
   }
@@ -39,8 +40,14 @@ export default async function TodayPage() {
     } catch {
       lookup = undefined;
     }
-    views = tasks.map((t) => toTaskView(t, lookup));
+    views = tasks
+      .map((t) => toTaskView(t, lookup))
+      .filter((t) => t.workstream !== "nextech");
   }
+
+  const lanes = classifyAttention(views, today);
+  // The Focus queue keeps its due-or-overdue framing over the same payload.
+  const dueViews = views.filter((t) => t.due && t.due <= today);
 
   return (
     <Page today={today}>
@@ -49,7 +56,7 @@ export default async function TodayPage() {
           Could not read the vault: {error}
         </div>
       ) : (
-        <TodayTabs tasks={views} today={today} />
+        <TodayTabs lanes={lanes} tasks={dueViews} today={today} />
       )}
     </Page>
   );

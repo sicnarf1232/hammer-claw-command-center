@@ -66,6 +66,16 @@ export interface Task {
   // this is "I'm accountable, I asked someone else to do it," not an
   // assignee in the multi-user sense.
   delegate?: { personId: number; name: string; email?: string | null };
+  // The meeting this task was created from (tasks.meeting_id, written by the
+  // proposal-approval writer). DB-only provenance: the vault parser never
+  // sets it. `path` is meetings.source_path for the /meetings?note= deep
+  // link; null when the meeting row has no vault counterpart.
+  sourceMeeting?: {
+    id: number;
+    title: string | null;
+    date: string | null;
+    path: string | null;
+  };
   // Write-back coordinates.
   sourceFile: string;
   sourceLine: number; // 0-based line index of the checkbox line

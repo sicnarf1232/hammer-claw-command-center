@@ -121,6 +121,28 @@ export default function TaskRow({
             {task.workstream && task.workstream !== "merit" && (
               <WorkstreamChip ws={task.workstream} />
             )}
+            {/* Owner: the current delegate, else Jordan himself. */}
+            <span className="text-muted/90">
+              {task.delegatedTo ? `Owner: ${task.delegatedTo.name}` : "Owner: You"}
+            </span>
+            {/* Source-meeting provenance (tasks.meeting_id): link when the
+                meeting has a vault path, plain text otherwise. */}
+            {task.sourceMeeting &&
+              (task.sourceMeeting.path ? (
+                <Link
+                  href={`/meetings?note=${encodeURIComponent(task.sourceMeeting.path)}`}
+                  className="text-muted hover:text-fg hover:underline"
+                  aria-label={`Open meeting: ${task.sourceMeeting.title ?? "meeting"}`}
+                >
+                  From: {task.sourceMeeting.title ?? "meeting"}
+                  {task.sourceMeeting.date ? ` (${task.sourceMeeting.date.slice(5)})` : ""}
+                </Link>
+              ) : (
+                <span>
+                  From: {task.sourceMeeting.title ?? "meeting"}
+                  {task.sourceMeeting.date ? ` (${task.sourceMeeting.date.slice(5)})` : ""}
+                </span>
+              ))}
             {hasDetail && (
               <button
                 type="button"

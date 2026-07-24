@@ -17,6 +17,12 @@ import {
 import { formatDateShort } from "@/lib/dates";
 import { SearchIcon, ActivityIcon } from "./icons";
 import { TaskLinkedEmails, TaskLinkedMeetings, TaskEmailAction } from "./TaskEmailLink";
+import TaskProvenance from "./TaskProvenance";
+import {
+  ATTENTION_FILTERS,
+  matchesAttentionFilter,
+  type AttentionFilter,
+} from "@/lib/attention";
 import TaskUpdateLog from "./TaskUpdateLog";
 import TaskFieldEditor from "./TaskFieldEditor";
 import DelegatePicker, { type DelegateCandidate } from "./DelegatePicker";
@@ -70,6 +76,7 @@ export default function TasksTable({
   const [account, setAccount] = useState("all");
   const [type, setType] = useState<"all" | TaskType>("all");
   const [status, setStatus] = useState("all");
+  const [attention, setAttention] = useState<AttentionFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("due");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -86,6 +93,7 @@ export default function TasksTable({
     const needle = q.trim().toLowerCase();
     const out = rows.filter((t) => {
       if (ws !== "all" && t.workstream !== ws) return false;
+      if (!matchesAttentionFilter(t, attention, today)) return false;
       if (account !== "all" && t.customer !== account) return false;
       if (type !== "all" && t.type !== type) return false;
       if (status !== "all" && (t.taskStatus ?? "open").toLowerCase() !== status) return false;
@@ -108,7 +116,7 @@ export default function TasksTable({
       }
     };
     return [...out].sort((a, b) => val(a) < val(b) ? -dir : val(a) > val(b) ? dir : 0);
-  }, [rows, q, ws, account, type, status, sortKey, sortDir]);
+  }, [rows, q, ws, account, type, status, attention, today, sortKey, sortDir]);
 
   function sortBy(key: SortKey) {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -266,6 +274,26 @@ export default function TasksTable({
           <option value="someday">Someday</option>
         </Select>
         <span className="ml-auto text-sm text-muted tabular-nums">{filtered.length} tasks</span>
+      </div>
+
+      {/* Attention chips (plan definitions table): truthful, field-derived
+          filters sharing the lane classifier's date semantics. */}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5 overflow-x-auto">
+        {ATTENTION_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            aria-pressed={attention === f.key}
+            onClick={() => setAttention(f.key)}
+            className={`chip cursor-pointer transition-colors ${
+              attention === f.key
+                ? "border-accent bg-accent/15 text-fg"
+                : "border-border text-muted hover:text-fg"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {/* table */}
@@ -752,6 +780,7 @@ function TaskDetail({
           <TaskUpdateLog sourceFile={t.sourceFile} sourceLine={t.sourceLine} refreshToken={refreshToken} />
 
           <div className="mt-4 grid gap-2.5 border-t border-line2 pt-3.5">
+            <TaskProvenance task={t} />
             <TaskLinkedEmails sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
             <TaskLinkedMeetings sourceFile={t.sourceFile} sourceLine={t.sourceLine} onLinked={bumpRefresh} />
           </div>
