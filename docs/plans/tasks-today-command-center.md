@@ -60,7 +60,7 @@ Changed:
 | `app/today/page.tsx` | Loads ALL open tasks (not just due) + accounts + task meta; renders lanes tab first; error card unchanged pattern |
 | `components/TodayTabs.tsx` | Three tabs: Command lanes (default) · Focus queue · Build your day |
 | `components/TaskList.tsx` / `components/TaskRow.tsx` | Context sub-line: account · type · owner · source meeting; due+priority right-aligned |
-| `components/TasksTable.tsx` | Detail panel gains `TaskProvenance`; source-meeting chip in rows; attention filter chips (All / Mine / Waiting / At risk / Due today) alongside the existing workstream filter |
+| `components/TasksTable.tsx` | Detail panel gains `TaskProvenance`; source-meeting chip in rows; attention filter chips (All / With me / Waiting / At risk / Due today) alongside the existing workstream filter |
 | `components/TasksGrouped.tsx` | Same provenance block on `TaskCard`; same chips |
 | `app/tasks/page.tsx` | No structural change; passes the enriched views through |
 
@@ -109,9 +109,14 @@ view) gains one block at the top, `TaskProvenance`:
 ```
 CREATED FROM
 Meeting: Intuitive Surgical weekly sync — 2026-07-20   [Open meeting →]
-Owner as extracted: Nick Patel        Status: waiting
+Delegated to: Nick Patel              Status: waiting
 ```
 
+- The owner line is the CURRENT owner (`Task.delegate`, from the existing
+  `owner_person_id` join), labeled "Delegated to" (or omitted when the task is
+  Jordan's own). The tasks → meetings JOIN does not carry the originally
+  extracted owner text, and the UI must not imply provenance it does not have;
+  the original extraction lives in the proposal payload audit trail, not here.
 - Data comes free with the page payload (the JOIN), zero extra API calls.
 - Below it, the existing linked-meetings/emails panels stay as "Related links".
 
@@ -129,6 +134,7 @@ Precedence per task (first match wins):
 | Now | overdue (`due < today`) AND NOT waiting/blocked | "Overdue N days" |
 | Now | `due == today` AND NOT waiting/blocked | "Due today" |
 | Now | overdue AND waiting/blocked | "Overdue while waiting — chase it" |
+| Now | `due == today` AND waiting/blocked | "Due today while waiting — chase it" |
 | Now | `priority == high` AND due within 2 days | "High priority, due <date>" |
 | Watch | `taskStatus` waiting/blocked | "Waiting" / "Blocked" (+ owner name if delegated) |
 | Watch | `delegatedTo` set (not overdue) | "With <name>" |
@@ -140,10 +146,30 @@ Precedence per task (first match wins):
 - `someday` status is never Now/Next; it lands in Watch only if delegated,
   else rest.
 - Lane sort: due asc (missing due last), then priority (high > med > low).
-- Lane cap: 7 visible per lane + "N more on the board →" link to /tasks with
-  the matching filter; caps keep the lanes scannable like the reference.
+- Lane cap: 7 visible per lane + a plain "View all tasks →" link to /tasks
+  (no matching-filter claim: /tasks does not accept URL filter state, and this
+  slice deliberately does not add it). Caps keep the lanes scannable like the
+  reference.
+
+Tasks filter chips, defined ONLY over existing fields (pure predicates in
+`lib/attention.ts`, tested):
+
+| Chip | Definition |
+|---|---|
+| All | every open task (the current default) |
+| With me | `delegatedTo` unset — Jordan is the actor (truthful rename of "Mine") |
+| Waiting | `taskStatus` is `waiting` or `blocked` |
+| At risk | overdue (`due < today`) OR `taskStatus == "blocked"` |
+| Due today | `due == today` |
+
+Chips are independent of the lane classifier but share its date helpers, so
+"overdue" means the same thing everywhere.
+- A waiting/blocked task that is due today or overdue is therefore ALWAYS Now
+  (the clock beats the waiting state); only waiting/blocked tasks with a
+  future or absent due date land in Watch.
 - Edge cases tested: no due date, malformed due string (non-ISO → treated as
-  no due, never NaN), delegated+overdue (Now, chase), waiting+due-today (Now).
+  no due, never NaN), delegated+overdue (Now, chase), waiting+due-today (Now,
+  "Due today while waiting — chase it").
 
 ## 5. Responsive behavior
 
@@ -200,7 +226,10 @@ All pure, no DB, matching the repo's testing convention:
   test that a row+meeting-join tuple maps `sourceMeeting` correctly and that
   null meeting columns map to undefined. (Export-for-test only; no behavior
   change.)
-- Component logic that is pure (lane cap + "N more" math) lives in
+- Filter chip predicates (`With me`, `Waiting`, `At risk`, `Due today`): one
+  test per chip over the definitions table, including the overdue/blocked
+  overlap in At risk and the shared overdue semantics with the lane rules.
+- Component logic that is pure (lane cap + overflow count math) lives in
   `lib/attention.ts`, not JSX, so it is testable without a component harness.
 
 ## 9. Screenshot verification
